@@ -29,6 +29,7 @@ function Shell() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                end={item.to === '/'}
                 className={({ isActive }) =>
                   `rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                     isActive ? 'bg-card text-accent' : 'text-slate-400 hover:bg-card hover:text-slate-200'
