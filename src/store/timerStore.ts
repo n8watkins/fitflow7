@@ -156,6 +156,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       secondsLeft: seconds,
       totalSeconds: seconds,
       isPaused: false,
+      isMuted: !settings.audioCuesEnabled,
       startedAt: new Date().toISOString(),
       exercisesCompleted: 0,
       cueEvent: nextCue('start'),
@@ -335,7 +336,20 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       return
     }
 
-    // Go to previous exercise's work phase
+    // During rest, currentIndex is the exercise that just finished its work phase.
+    // "Previous" should restart that same exercise (not go one further back).
+    if (phase === 'rest') {
+      set({
+        phase: 'work',
+        currentIndex,
+        secondsLeft: workSecs,
+        totalSeconds: workSecs,
+        cueEvent: nextCue('work'),
+      })
+      return
+    }
+
+    // During work, go to the previous exercise's work phase.
     const prevIndex = currentIndex - 1
     set({
       phase: 'work',
