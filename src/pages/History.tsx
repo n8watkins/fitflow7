@@ -1,27 +1,9 @@
+import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { getSessions } from '../lib/storage'
 import { computeStats } from '../lib/stats'
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatDateTime(isoString: string): string {
-  const d = new Date(isoString)
-  return d.toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return `${m}:${String(s).padStart(2, '0')}`
-}
+import { fmtDuration, formatDateTime } from '../lib/format'
+import type { WorkoutSession, Stats } from '../types'
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -41,8 +23,15 @@ function SummaryTile({ label, value }: { label: string; value: string | number }
 // ---------------------------------------------------------------------------
 
 export default function History() {
-  const sessions = getSessions()
-  const stats = computeStats(sessions)
+  const location = useLocation()
+  const [sessions, setSessions] = useState<WorkoutSession[]>([])
+  const [stats, setStats] = useState<Stats>(() => computeStats([]))
+
+  useEffect(() => {
+    const s = getSessions()
+    setSessions(s)
+    setStats(computeStats(s))
+  }, [location])
 
   return (
     <div className="space-y-10">
@@ -85,7 +74,7 @@ export default function History() {
               {/* Stats */}
               <div className="flex shrink-0 flex-wrap items-center gap-4 text-sm text-slate-400">
                 <span className="tabular-nums text-slate-200 font-medium">
-                  {formatDuration(session.durationSeconds)}
+                  {fmtDuration(session.durationSeconds)}
                 </span>
                 <span>
                   {session.exercisesCompleted}/{session.totalExercises} exercises

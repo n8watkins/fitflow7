@@ -625,7 +625,7 @@ export const EXERCISES: Exercise[] = [
     harderVariationId: undefined,
     easierVariationId: undefined,
     commonMistake: 'Rounding your back instead of hinging from the hips, which can strain your lower back',
-    icon: '🔄'
+    icon: '🔁'
   }
 ]
 

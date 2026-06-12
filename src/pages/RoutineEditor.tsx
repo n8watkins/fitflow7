@@ -3,17 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { EXERCISES, EXERCISE_MAP } from '../data/exercises'
 import { CLASSIC_7 } from '../data/routines'
 import { getRoutine, saveRoutine, deleteRoutine, newId } from '../lib/storage'
+import { fmtDuration } from '../lib/format'
 import type { Routine, Category } from '../types'
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
 
 function estimateDuration(routine: Pick<Routine, 'exerciseIds' | 'workSeconds' | 'restSeconds' | 'rounds'>): number {
   const count = routine.exerciseIds.length
@@ -140,7 +131,7 @@ function ExerciseRow({ exId, index, total, onMoveUp, onMoveDown, onRemove }: Exe
           aria-label="Move up"
           disabled={index === 0}
           onClick={onMoveUp}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-sm text-slate-400 transition hover:bg-card hover:text-slate-200 disabled:opacity-30"
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-sm text-slate-400 transition hover:bg-card hover:text-slate-200 disabled:opacity-30"
         >
           ↑
         </button>
@@ -149,7 +140,7 @@ function ExerciseRow({ exId, index, total, onMoveUp, onMoveDown, onRemove }: Exe
           aria-label="Move down"
           disabled={index === total - 1}
           onClick={onMoveDown}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-sm text-slate-400 transition hover:bg-card hover:text-slate-200 disabled:opacity-30"
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-sm text-slate-400 transition hover:bg-card hover:text-slate-200 disabled:opacity-30"
         >
           ↓
         </button>
@@ -157,7 +148,7 @@ function ExerciseRow({ exId, index, total, onMoveUp, onMoveDown, onRemove }: Exe
           type="button"
           aria-label="Remove exercise"
           onClick={onRemove}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-sm text-slate-400 transition hover:bg-red-900/40 hover:text-red-400"
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-sm text-slate-400 transition hover:bg-red-900/40 hover:text-red-400"
         >
           ×
         </button>
@@ -404,7 +395,7 @@ export default function RoutineEditor() {
         {/* Estimated duration badge */}
         <div className="flex-shrink-0 rounded-2xl border border-edge bg-card px-5 py-3 text-center">
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Est. duration</p>
-          <p className="mt-0.5 text-2xl font-bold tabular-nums text-accent">{formatDuration(totalSeconds)}</p>
+          <p className="mt-0.5 text-2xl font-bold tabular-nums text-accent">{fmtDuration(totalSeconds)}</p>
         </div>
       </div>
 

@@ -1,24 +1,10 @@
-import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { CLASSIC_7 } from '../data/routines'
 import { getLastRoutineId, getRoutine, getRoutines, getSessions } from '../lib/storage'
 import { computeStats } from '../lib/stats'
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatRelativeDate(isoString: string): string {
-  const date = new Date(isoString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-  if (diffDays === 0) return 'today'
-  if (diffDays === 1) return 'yesterday'
-  if (diffDays < 7) return `${diffDays} days ago`
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`
-  return `${Math.floor(diffDays / 30)} month${Math.floor(diffDays / 30) > 1 ? 's' : ''} ago`
-}
+import { formatRelativeDay } from '../lib/format'
+import type { Routine, WorkoutSession, Stats } from '../types'
 
 function routineSubtitle(r: { exerciseIds: string[]; workSeconds: number; restSeconds: number; rounds: number }): string {
   return `${r.exerciseIds.length} exercises · ${r.workSeconds}s work / ${r.restSeconds}s rest · ${r.rounds} round${r.rounds > 1 ? 's' : ''}`
@@ -44,17 +30,26 @@ function StatTile({ label, value, hero }: { label: string; value: string | numbe
 // ---------------------------------------------------------------------------
 
 export default function Dashboard() {
-  const sessions = getSessions()
-  const stats = computeStats(sessions)
-  const userRoutines = getRoutines()
-  const allRoutines = [CLASSIC_7, ...userRoutines]
+  const location = useLocation()
 
-  // Hero: last-routine button
-  const lastRoutineId = getLastRoutineId()
-  const lastRoutine =
-    lastRoutineId && lastRoutineId !== 'classic-7'
-      ? getRoutine(lastRoutineId)
-      : undefined
+  const [sessions, setSessions] = useState<WorkoutSession[]>([])
+  const [stats, setStats] = useState<Stats>(() => computeStats([]))
+  const [allRoutines, setAllRoutines] = useState<Routine[]>([CLASSIC_7])
+  const [lastRoutine, setLastRoutine] = useState<Routine | undefined>(undefined)
+
+  useEffect(() => {
+    const s = getSessions()
+    const userRoutines = getRoutines()
+    const lastRoutineId = getLastRoutineId()
+    setSessions(s)
+    setStats(computeStats(s))
+    setAllRoutines([CLASSIC_7, ...userRoutines])
+    setLastRoutine(
+      lastRoutineId && lastRoutineId !== 'classic-7'
+        ? getRoutine(lastRoutineId)
+        : undefined
+    )
+  }, [location])
 
   // Last workout info
   const lastSession = sessions.find((s) => s.completed)
@@ -122,7 +117,7 @@ export default function Dashboard() {
               Last workout:{' '}
               <span className="text-slate-300">{lastSession.routineName}</span>
               {' · '}
-              {formatRelativeDate(lastSession.startedAt)}
+              {formatRelativeDay(lastSession.startedAt)}
             </p>
           )}
         </section>

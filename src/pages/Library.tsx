@@ -278,8 +278,11 @@ export default function Library() {
     setExpandedId((prev) => (prev === id ? null : id))
   }, [])
 
-  // Jump to a variation card: collapse current, expand target (and ensure it's visible)
+  // Jump to a variation card: reset filters so target card is visible, expand it, and scroll
   const handleJump = useCallback((id: string) => {
+    setSearch('')
+    setCategory('all')
+    setDifficulty('all')
     setExpandedId(id)
     // Scroll card into view on next tick
     requestAnimationFrame(() => {
