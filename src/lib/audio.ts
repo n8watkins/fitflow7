@@ -13,6 +13,11 @@ function getCtx(): AudioContext {
   return ctx
 }
 
+// Finding 19: close the AudioContext on page unload to avoid hitting the browser limit
+window.addEventListener('beforeunload', () => {
+  ctx?.close().catch(() => {})
+})
+
 async function ensureResumed(): Promise<AudioContext> {
   const ac = getCtx()
   if (ac.state === 'suspended') {

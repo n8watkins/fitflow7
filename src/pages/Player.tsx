@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useTimerStore } from '../store/timerStore'
 import { getRoutine, getSettings } from '../lib/storage'
 import { EXERCISE_MAP } from '../data/exercises'
@@ -11,7 +11,7 @@ import {
   cueCountdownTick,
   cueComplete,
 } from '../lib/audio'
-import type { WorkoutPhase } from '../types'
+import type { Exercise, WorkoutPhase } from '../types'
 
 // ---------------------------------------------------------------------------
 // Phase display helpers
@@ -89,7 +89,6 @@ function ProgressBar({
 // ---------------------------------------------------------------------------
 export default function Player() {
   const { routineId } = useParams<{ routineId: string }>()
-  const navigate = useNavigate()
 
   const {
     routine,
@@ -114,13 +113,16 @@ export default function Player() {
   const [focusMode, setFocusMode] = useState(false)
   const [isFsNative, setIsFsNative] = useState(false)
 
+  // Finding 5: Screen Wake Lock ref
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null)
+
   // ---------------------------------------------------------------------------
-  // Mount: resolve routine + start timer
+  // Finding 16: Extract buildAndStart helper to avoid duplicated loop
   // ---------------------------------------------------------------------------
-  useEffect(() => {
+  const buildAndStart = useCallback((rId: string) => {
     const settings = getSettings()
-    const resolved = getRoutine(routineId ?? '') ?? CLASSIC_7
-    const repeated: typeof exercises = []
+    const resolved = getRoutine(rId) ?? CLASSIC_7
+    const repeated: Exercise[] = []
     for (let r = 0; r < resolved.rounds; r++) {
       for (const id of resolved.exerciseIds) {
         const ex = EXERCISE_MAP[id]
@@ -128,12 +130,55 @@ export default function Player() {
       }
     }
     start(resolved, repeated, settings)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [start])
+
+  // ---------------------------------------------------------------------------
+  // Mount: resolve routine + start timer
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    buildAndStart(routineId ?? '')
 
     return () => {
       reset()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routineId])
+
+  // ---------------------------------------------------------------------------
+  // Finding 5: Screen Wake Lock — acquire on mount, release on complete/unmount
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!('wakeLock' in navigator)) return
+
+    const acquireWakeLock = async () => {
+      try {
+        wakeLockRef.current = await navigator.wakeLock.request('screen')
+      } catch {
+        // Ignore — wake lock is a best-effort feature
+      }
+    }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && phase !== 'complete') {
+        void acquireWakeLock()
+      }
+    }
+
+    if (phase !== 'complete') {
+      void acquireWakeLock()
+    } else {
+      wakeLockRef.current?.release().catch(() => {})
+      wakeLockRef.current = null
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      wakeLockRef.current?.release().catch(() => {})
+      wakeLockRef.current = null
+    }
+  }, [phase])
 
   // ---------------------------------------------------------------------------
   // Audio cue subscription
@@ -240,16 +285,26 @@ export default function Player() {
   }, [])
 
   // ---------------------------------------------------------------------------
+  // Finding 20: Update document title during workout
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const exercise = exercises[currentIndex]
+    if (phase !== 'idle' && exercise) {
+      document.title = `${PHASE_LABEL[phase]} — ${exercise.name} | FitFlow 7`
+    } else if (phase === 'complete') {
+      document.title = 'Done | FitFlow 7'
+    }
+    return () => {
+      document.title = 'FitFlow 7'
+    }
+  }, [phase, currentIndex, exercises])
+
+  // ---------------------------------------------------------------------------
   // Derived values
   // ---------------------------------------------------------------------------
   const currentExercise = exercises[currentIndex] ?? null
   const nextExercise = exercises[currentIndex + 1] ?? null
   const totalExercises = exercises.length
-
-  // Elapsed seconds from startedAt
-  const elapsedSeconds = startedAt
-    ? Math.round((Date.now() - new Date(startedAt).getTime()) / 1000)
-    : 0
 
   // currentPhase keeps the full WorkoutPhase union type after the complete early-return below
   // so later JSX comparisons against it remain valid to the type checker.
@@ -259,17 +314,28 @@ export default function Player() {
   // Complete phase
   // ---------------------------------------------------------------------------
   if (currentPhase === 'complete') {
+    // Finding 3: compute elapsedSeconds fresh at render time of the complete screen
+    const completedElapsed = startedAt
+      ? Math.round((Date.now() - new Date(startedAt).getTime()) / 1000)
+      : 0
+    const endedEarly = exercisesCompleted < totalExercises
     return (
       <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
         <div className="w-full max-w-lg rounded-2xl border border-violet-500/30 bg-violet-950/40 p-8 text-center">
           <div className="mb-3 text-6xl">🎉</div>
-          <h1 className="mb-1 text-3xl font-bold text-violet-300">Workout Complete!</h1>
-          <p className="mb-6 text-slate-400">{routine?.name ?? 'Workout'}</p>
+          <h1 className="mb-1 text-3xl font-bold text-violet-300">
+            {endedEarly ? 'Workout Ended' : 'Workout Complete!'}
+          </h1>
+          <p className="mb-1 text-slate-400">{routine?.name ?? 'Workout'}</p>
+          {endedEarly && (
+            <p className="mb-5 text-xs text-amber-400">Ended early</p>
+          )}
+          {!endedEarly && <div className="mb-5" />}
 
           <div className="mb-8 grid grid-cols-2 gap-4">
             <div className="rounded-xl bg-card p-4">
               <p className="text-2xl font-bold tabular-nums text-slate-100">
-                {fmtDuration(elapsedSeconds)}
+                {fmtDuration(completedElapsed)}
               </p>
               <p className="mt-1 text-xs text-slate-400">Duration</p>
             </div>
@@ -289,18 +355,7 @@ export default function Player() {
               Back to Dashboard
             </Link>
             <button
-              onClick={() => {
-                const settings = getSettings()
-                const resolved = getRoutine(routineId ?? '') ?? CLASSIC_7
-                const repeated: typeof exercises = []
-                for (let r = 0; r < resolved.rounds; r++) {
-                  for (const id of resolved.exerciseIds) {
-                    const ex = EXERCISE_MAP[id]
-                    if (ex) repeated.push(ex)
-                  }
-                }
-                start(resolved, repeated, settings)
-              }}
+              onClick={() => buildAndStart(routineId ?? '')}
               className="rounded-xl bg-accent px-6 py-3 text-sm font-bold text-slate-900 transition-opacity hover:opacity-90"
             >
               Go Again
@@ -379,10 +434,7 @@ export default function Player() {
           )}
         </div>
         <button
-          onClick={() => {
-            endWorkout()
-            navigate('/')
-          }}
+          onClick={endWorkout}
           className="shrink-0 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-900/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
         >
           End Workout
@@ -440,8 +492,8 @@ export default function Player() {
         </div>
       )}
 
-      {/* ---- Up next (prominent during REST and PREPARE) ---- */}
-      {(phase === 'rest' || phase === 'prepare') && nextExercise && (
+      {/* ---- Up next (prominent during REST) ---- */}
+      {phase === 'rest' && nextExercise && (
         <div className="mx-auto mt-4 w-full max-w-sm">
           <div className="rounded-2xl border border-edge bg-card p-4 text-center">
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
@@ -545,7 +597,7 @@ export default function Player() {
 
       {/* ---- Keyboard hints (desktop only) ---- */}
       <div className="mx-auto mt-6 hidden w-full max-w-sm sm:block">
-        <p className="text-center text-[10px] text-slate-600">
+        <p className="text-center text-[10px] text-slate-400">
           Space: pause &nbsp;·&nbsp; ← → navigate &nbsp;·&nbsp; M: mute &nbsp;·&nbsp; F: focus
         </p>
       </div>

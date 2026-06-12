@@ -26,6 +26,13 @@ export type TimerState = {
   isMuted: boolean
   startedAt?: string
   exercisesCompleted: number
+  sessionSaved: boolean
+
+  /** Wall-clock timestamp (ms) when the current phase ends — for drift correction. */
+  phaseEndsAt: number
+
+  /** Initial prepare countdown seconds — stored so previous() can restart it. */
+  countdownSeconds: number
 
   /** Audio cue — updated on phase transitions and on last-3-second countdown ticks. */
   cueEvent: CueEvent | null
@@ -102,16 +109,15 @@ function buildSession(
 }
 
 // ---------------------------------------------------------------------------
-// Guard against double-saving.
+// Guard against double-saving — now uses store state (see Finding 2).
 // ---------------------------------------------------------------------------
-let sessionSaved = false
-
 function maybeSaveSession(
   state: TimerState,
   naturalFinish: boolean,
+  markSaved: () => void,
 ): void {
-  if (sessionSaved) return
-  sessionSaved = true
+  if (state.sessionSaved) return
+  markSaved()
   const nowIso = new Date().toISOString()
   const session = buildSession(state, naturalFinish, nowIso)
   saveSession(session)
@@ -135,6 +141,9 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   isMuted: false,
   startedAt: undefined,
   exercisesCompleted: 0,
+  sessionSaved: false,
+  phaseEndsAt: 0,
+  countdownSeconds: 0,
   cueEvent: null,
 
   // -------------------------------------------------------------------------
@@ -142,7 +151,6 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   // -------------------------------------------------------------------------
   start(routine, exercises, settings) {
     clearTick()
-    sessionSaved = false
 
     const hasPrepare = settings.countdownSeconds > 0
     const phase: WorkoutPhase = hasPrepare ? 'prepare' : 'work'
@@ -159,10 +167,76 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       isMuted: !settings.audioCuesEnabled,
       startedAt: new Date().toISOString(),
       exercisesCompleted: 0,
+      sessionSaved: false,
+      phaseEndsAt: Date.now() + seconds * 1000,
+      countdownSeconds: settings.countdownSeconds,
       cueEvent: nextCue('start'),
     })
 
     startTick(() => get().tick())
+
+    // Finding 4: visibility-change drift correction
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return
+      const s = get()
+      if (s.isPaused || s.phase === 'idle' || s.phase === 'complete') return
+
+      let currentPhase = s.phase as WorkoutPhase
+      let { phaseEndsAt, currentIndex, exercisesCompleted } = s
+      const nowMs = Date.now()
+
+      // Fast-forward through any overdue phases
+      while (phaseEndsAt <= nowMs && currentPhase !== 'complete' && s.routine) {
+        if (currentPhase === 'prepare') {
+          currentPhase = 'work'
+          phaseEndsAt = nowMs + s.routine.workSeconds * 1000
+        } else if (currentPhase === 'work') {
+          exercisesCompleted += 1
+          if (isLastExercise(s.exercises, currentIndex)) {
+            currentPhase = 'complete'
+            break
+          }
+          currentIndex += 1
+          currentPhase = 'rest'
+          phaseEndsAt = nowMs + s.routine.restSeconds * 1000
+        } else if (currentPhase === 'rest') {
+          currentPhase = 'work'
+          phaseEndsAt = nowMs + s.routine.workSeconds * 1000
+        } else {
+          break
+        }
+      }
+
+      if (currentPhase === 'complete') {
+        clearTick()
+        set({ phase: 'complete', secondsLeft: 0, exercisesCompleted, cueEvent: nextCue('complete') })
+        maybeSaveSession(
+          { ...get(), exercisesCompleted },
+          false,
+          () => set({ sessionSaved: true }),
+        )
+        return
+      }
+
+      const newSecondsLeft = Math.max(0, Math.round((phaseEndsAt - nowMs) / 1000))
+      set({
+        phase: currentPhase,
+        currentIndex,
+        exercisesCompleted,
+        secondsLeft: newSecondsLeft,
+        phaseEndsAt,
+        cueEvent: currentPhase !== s.phase
+          ? nextCue((currentPhase === 'work' || currentPhase === 'rest' ? currentPhase : 'work') as CueEventType)
+          : s.cueEvent,
+      })
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    // Store cleanup fn so we can remove it on reset/start
+    ;(useTimerStore as unknown as { _visCleanup?: () => void })._visCleanup?.()
+    ;(useTimerStore as unknown as { _visCleanup?: () => void })._visCleanup = () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   },
 
   // -------------------------------------------------------------------------
@@ -172,10 +246,11 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     const state = get()
     if (state.isPaused) return
 
-    const { phase, secondsLeft, currentIndex, exercises, routine } = state
+    const { phase, currentIndex, exercises, routine, phaseEndsAt } = state
     if (phase === 'idle' || phase === 'complete' || !routine) return
 
-    const newSecondsLeft = secondsLeft - 1
+    // Finding 4: re-derive from wall clock to avoid drift
+    const newSecondsLeft = Math.max(0, Math.round((phaseEndsAt - Date.now()) / 1000))
 
     // Last 3 seconds of work or rest — emit countdown cue
     const isCountdownTick =
@@ -193,11 +268,13 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     if (phase === 'prepare') {
       // Prepare → first work phase
       const workSecs = routine.workSeconds
+      const newPhaseEndsAt = Date.now() + workSecs * 1000
       set({
         phase: 'work',
         currentIndex: 0,
         secondsLeft: workSecs,
         totalSeconds: workSecs,
+        phaseEndsAt: newPhaseEndsAt,
         cueEvent: nextCue('work'),
       })
       return
@@ -216,17 +293,23 @@ export const useTimerStore = create<TimerState>((set, get) => ({
           secondsLeft: 0,
           cueEvent: nextCue('complete'),
         })
-        maybeSaveSession({ ...state, exercisesCompleted: newCompleted }, true)
+        maybeSaveSession(
+          { ...state, exercisesCompleted: newCompleted },
+          true,
+          () => set({ sessionSaved: true }),
+        )
         return
       }
 
       // Not the last exercise — go to rest
       const restSecs = routine.restSeconds
+      const newPhaseEndsAt = Date.now() + restSecs * 1000
       set({
         phase: 'rest',
         exercisesCompleted: newCompleted,
         secondsLeft: restSecs,
         totalSeconds: restSecs,
+        phaseEndsAt: newPhaseEndsAt,
         cueEvent: nextCue('rest'),
       })
       return
@@ -236,11 +319,13 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       // Rest → next work
       const nextIndex = currentIndex + 1
       const workSecs = routine.workSeconds
+      const newPhaseEndsAt = Date.now() + workSecs * 1000
       set({
         phase: 'work',
         currentIndex: nextIndex,
         secondsLeft: workSecs,
         totalSeconds: workSecs,
+        phaseEndsAt: newPhaseEndsAt,
         cueEvent: nextCue('work'),
       })
       return
@@ -258,7 +343,9 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   resume() {
     const state = get()
     if (!state.isPaused) return
-    set({ isPaused: false })
+    // Finding 4: re-anchor phaseEndsAt from the remaining secondsLeft
+    const newPhaseEndsAt = Date.now() + state.secondsLeft * 1000
+    set({ isPaused: false, phaseEndsAt: newPhaseEndsAt })
     startTick(() => get().tick())
   },
 
@@ -294,7 +381,11 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         secondsLeft: 0,
         cueEvent: nextCue('complete'),
       })
-      maybeSaveSession({ ...state, exercisesCompleted: newCompleted }, false)
+      maybeSaveSession(
+        { ...state, exercisesCompleted: newCompleted },
+        false,
+        () => set({ sessionSaved: true }),
+      )
       return
     }
 
@@ -304,12 +395,14 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     const newCompleted = wasInWork
       ? state.exercisesCompleted + 1
       : state.exercisesCompleted
+    const newPhaseEndsAt = Date.now() + workSecs * 1000
     set({
       phase: 'work',
       currentIndex: nextIndex,
       secondsLeft: workSecs,
       totalSeconds: workSecs,
       exercisesCompleted: newCompleted,
+      phaseEndsAt: newPhaseEndsAt,
       cueEvent: nextCue('work'),
     })
   },
@@ -319,18 +412,34 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   // -------------------------------------------------------------------------
   previous() {
     const state = get()
-    const { phase, currentIndex, routine } = state
+    const { phase, currentIndex, routine, countdownSeconds } = state
     if (!routine || phase === 'idle' || phase === 'complete') return
 
     const workSecs = routine.workSeconds
 
-    if (currentIndex === 0 || phase === 'prepare') {
-      // Already at first — restart current work (or re-enter prepare if applicable)
+    // Finding 10: during prepare, restart the prepare countdown
+    if (phase === 'prepare') {
+      const secs = countdownSeconds > 0 ? countdownSeconds : workSecs
+      set({
+        phase: 'prepare',
+        currentIndex: 0,
+        secondsLeft: secs,
+        totalSeconds: secs,
+        phaseEndsAt: Date.now() + secs * 1000,
+        cueEvent: nextCue('start'),
+      })
+      return
+    }
+
+    if (currentIndex === 0) {
+      // Already at first exercise — restart current work
+      const newPhaseEndsAt = Date.now() + workSecs * 1000
       set({
         phase: 'work',
         currentIndex: 0,
         secondsLeft: workSecs,
         totalSeconds: workSecs,
+        phaseEndsAt: newPhaseEndsAt,
         cueEvent: nextCue('work'),
       })
       return
@@ -339,11 +448,13 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     // During rest, currentIndex is the exercise that just finished its work phase.
     // "Previous" should restart that same exercise (not go one further back).
     if (phase === 'rest') {
+      const newPhaseEndsAt = Date.now() + workSecs * 1000
       set({
         phase: 'work',
         currentIndex,
         secondsLeft: workSecs,
         totalSeconds: workSecs,
+        phaseEndsAt: newPhaseEndsAt,
         cueEvent: nextCue('work'),
       })
       return
@@ -351,11 +462,13 @@ export const useTimerStore = create<TimerState>((set, get) => ({
 
     // During work, go to the previous exercise's work phase.
     const prevIndex = currentIndex - 1
+    const newPhaseEndsAt = Date.now() + workSecs * 1000
     set({
       phase: 'work',
       currentIndex: prevIndex,
       secondsLeft: workSecs,
       totalSeconds: workSecs,
+      phaseEndsAt: newPhaseEndsAt,
       cueEvent: nextCue('work'),
     })
   },
@@ -365,12 +478,14 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   // -------------------------------------------------------------------------
   endWorkout() {
     const state = get()
+    // Finding 14: guard against idle/complete
+    if (state.phase === 'idle' || state.phase === 'complete') return
     clearTick()
     set({
       phase: 'complete',
       cueEvent: nextCue('complete'),
     })
-    maybeSaveSession(state, false)
+    maybeSaveSession(state, false, () => set({ sessionSaved: true }))
   },
 
   // -------------------------------------------------------------------------
@@ -385,7 +500,8 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   // -------------------------------------------------------------------------
   reset() {
     clearTick()
-    sessionSaved = false
+    ;(useTimerStore as unknown as { _visCleanup?: () => void })._visCleanup?.()
+    ;(useTimerStore as unknown as { _visCleanup?: () => void })._visCleanup = undefined
     set({
       routine: undefined,
       exercises: [],
@@ -396,6 +512,9 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       isPaused: false,
       startedAt: undefined,
       exercisesCompleted: 0,
+      sessionSaved: false,
+      phaseEndsAt: 0,
+      countdownSeconds: 0,
       cueEvent: null,
     })
   },
