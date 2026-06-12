@@ -1,4 +1,4 @@
-# FitFlow 7 — Session Handoff (2026-06-11)
+# FitFlow 7 — Session Handoff (2026-06-12)
 
 Zero-context handoff. Read this file and `PLAN.md` in full before doing anything.
 
@@ -8,7 +8,7 @@ FitFlow 7 is a desktop-first, mobile-responsive 7-minute workout web app (per a 
 
 - **Stack:** Vite + React 19 + TypeScript + Tailwind v4 (`@tailwindcss/vite` plugin, theme tokens in `src/index.css`) + Zustand + react-router-dom v7. No other deps — **do not add dependencies.**
 - **Deployed:** https://fitflow7.vercel.app (public). Deploy with `vercel --prod --yes` from this directory (CLI authed as natkins23). The longer `*-projects.vercel.app` URLs 401 behind Vercel deployment protection — that's expected; only the short alias is public. `vercel.json` has the SPA rewrite.
-- **Repo:** local only, **no git remote**. Branch `main`. Commit after every logical change with trailer `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
+- **Repo:** https://github.com/n8watkins/fitflow7 (public). Branch `main`. Push after every session. Commit after every logical change with trailer `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`.
 - **Verify:** `npx tsc -b` (must be clean) and `npm run build` (must succeed). Dev: `npm run dev`. No test framework (intentional for MVP).
 
 ## How this project is built (user's standing instruction)
@@ -24,6 +24,8 @@ All MVP acceptance criteria shipped, deployed, and committed:
 - `1c10bd4` all six pages (Player, Dashboard, History, Settings, RoutineEditor, Library)
 - `375d178` QA fixes (audio setting init, `previous()` during rest) + Vercel SPA rewrites
 - `35431c9` shared `src/lib/format.ts` helpers; NavLink `end` fix (= review **finding 6 done**, **finding 17 partially done** — the lib exists but pages still use their local copies)
+- `fa9c3f7` Replace boilerplate README with proper project overview (features, setup, keyboard shortcuts, stack table, what's next)
+- Repo now on GitHub: https://github.com/n8watkins/fitflow7 (public, branch `main` tracking `origin/main`)
 
 A fresh-eyes Sonnet review audit produced 20 prioritized findings (below). **The user has approved fixing ALL of them (P0 through P3).** That work has NOT been done yet (except 6 and partial 17). Nothing else is in flight.
 
