@@ -25,6 +25,8 @@ export type TimerState = {
   isPaused: boolean
   isMuted: boolean
   startedAt?: string
+  /** ISO timestamp captured when the workout reaches the complete phase. */
+  completedAt?: string
   exercisesCompleted: number
   sessionSaved: boolean
 
@@ -114,11 +116,11 @@ function buildSession(
 function maybeSaveSession(
   state: TimerState,
   naturalFinish: boolean,
-  markSaved: () => void,
+  markSaved: (completedAt: string) => void,
 ): void {
   if (state.sessionSaved) return
-  markSaved()
   const nowIso = new Date().toISOString()
+  markSaved(nowIso)
   const session = buildSession(state, naturalFinish, nowIso)
   saveSession(session)
   if (state.routine?.id) {
@@ -166,6 +168,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       isPaused: false,
       isMuted: !settings.audioCuesEnabled,
       startedAt: new Date().toISOString(),
+      completedAt: undefined,
       exercisesCompleted: 0,
       sessionSaved: false,
       phaseEndsAt: Date.now() + seconds * 1000,
@@ -213,7 +216,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         maybeSaveSession(
           { ...get(), exercisesCompleted },
           false,
-          () => set({ sessionSaved: true }),
+          (completedAt) => set({ sessionSaved: true, completedAt }),
         )
         return
       }
@@ -296,7 +299,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         maybeSaveSession(
           { ...state, exercisesCompleted: newCompleted },
           true,
-          () => set({ sessionSaved: true }),
+          (completedAt) => set({ sessionSaved: true, completedAt }),
         )
         return
       }
@@ -384,7 +387,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       maybeSaveSession(
         { ...state, exercisesCompleted: newCompleted },
         false,
-        () => set({ sessionSaved: true }),
+        (completedAt) => set({ sessionSaved: true, completedAt }),
       )
       return
     }
@@ -485,7 +488,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       phase: 'complete',
       cueEvent: nextCue('complete'),
     })
-    maybeSaveSession(state, false, () => set({ sessionSaved: true }))
+    maybeSaveSession(state, false, (completedAt) => set({ sessionSaved: true, completedAt }))
   },
 
   // -------------------------------------------------------------------------
@@ -511,6 +514,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       totalSeconds: 0,
       isPaused: false,
       startedAt: undefined,
+      completedAt: undefined,
       exercisesCompleted: 0,
       sessionSaved: false,
       phaseEndsAt: 0,

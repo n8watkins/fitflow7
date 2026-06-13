@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { CLASSIC_7 } from '../data/routines'
 import { getLastRoutineId, getRoutine, getRoutines, getSessions } from '../lib/storage'
 import { computeStats } from '../lib/stats'
 import { formatRelativeDay } from '../lib/format'
-import type { Routine, WorkoutSession, Stats } from '../types'
 
 function routineSubtitle(r: { exerciseIds: string[]; workSeconds: number; restSeconds: number; rounds: number }): string {
   return `${r.exerciseIds.length} exercises · ${r.workSeconds}s work / ${r.restSeconds}s rest · ${r.rounds} round${r.rounds > 1 ? 's' : ''}`
@@ -32,24 +31,19 @@ function StatTile({ label, value, hero }: { label: string; value: string | numbe
 export default function Dashboard() {
   const location = useLocation()
 
-  const [sessions, setSessions] = useState<WorkoutSession[]>([])
-  const [stats, setStats] = useState<Stats>(() => computeStats([]))
-  const [allRoutines, setAllRoutines] = useState<Routine[]>([CLASSIC_7])
-  const [lastRoutine, setLastRoutine] = useState<Routine | undefined>(undefined)
-
-  useEffect(() => {
-    const s = getSessions()
-    const userRoutines = getRoutines()
+  // Re-read localStorage on every navigation (location.key changes per visit)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const sessions = useMemo(() => getSessions(), [location.key])
+  const stats = useMemo(() => computeStats(sessions), [sessions])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const allRoutines = useMemo(() => [CLASSIC_7, ...getRoutines()], [location.key])
+  const lastRoutine = useMemo(() => {
     const lastRoutineId = getLastRoutineId()
-    setSessions(s)
-    setStats(computeStats(s))
-    setAllRoutines([CLASSIC_7, ...userRoutines])
-    setLastRoutine(
-      lastRoutineId && lastRoutineId !== 'classic-7'
-        ? getRoutine(lastRoutineId)
-        : undefined
-    )
-  }, [location])
+    return lastRoutineId && lastRoutineId !== 'classic-7'
+      ? getRoutine(lastRoutineId)
+      : undefined
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key])
 
   // Last workout info
   const lastSession = sessions.find((s) => s.completed)

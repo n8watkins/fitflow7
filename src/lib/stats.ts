@@ -81,7 +81,7 @@ export function computeStats(sessions: WorkoutSession[]): Stats {
   const today = todayKey()
   const yesterday = yesterdayKey()
 
-  let streakStart = workoutDays.has(today)
+  const streakStart = workoutDays.has(today)
     ? today
     : workoutDays.has(yesterday)
       ? yesterday

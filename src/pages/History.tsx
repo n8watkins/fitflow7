@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { getSessions } from '../lib/storage'
 import { computeStats } from '../lib/stats'
 import { fmtDuration, formatDateTime } from '../lib/format'
-import type { WorkoutSession, Stats } from '../types'
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -24,14 +23,10 @@ function SummaryTile({ label, value }: { label: string; value: string | number }
 
 export default function History() {
   const location = useLocation()
-  const [sessions, setSessions] = useState<WorkoutSession[]>([])
-  const [stats, setStats] = useState<Stats>(() => computeStats([]))
-
-  useEffect(() => {
-    const s = getSessions()
-    setSessions(s)
-    setStats(computeStats(s))
-  }, [location])
+  // Re-read localStorage on every navigation (location.key changes per visit)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const sessions = useMemo(() => getSessions(), [location.key])
+  const stats = useMemo(() => computeStats(sessions), [sessions])
 
   return (
     <div className="space-y-10">

@@ -11,6 +11,7 @@ import {
   cueCountdownTick,
   cueComplete,
 } from '../lib/audio'
+import { fmtDuration } from '../lib/format'
 import type { Exercise, WorkoutPhase } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -38,15 +39,6 @@ const PHASE_BG: Record<WorkoutPhase, string> = {
   work: 'bg-cyan-950/40 border-cyan-500/30',
   rest: 'bg-emerald-950/40 border-emerald-500/30',
   complete: 'bg-violet-950/40 border-violet-500/30',
-}
-
-// ---------------------------------------------------------------------------
-// Format seconds as m:ss
-// ---------------------------------------------------------------------------
-function fmtDuration(secs: number): string {
-  const m = Math.floor(secs / 60)
-  const s = secs % 60
-  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 // ---------------------------------------------------------------------------
@@ -100,6 +92,7 @@ export default function Player() {
     isMuted,
     exercisesCompleted,
     startedAt,
+    completedAt,
     cueEvent,
     start,
     reset,
@@ -130,7 +123,6 @@ export default function Player() {
       }
     }
     start(resolved, repeated, settings)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start])
 
   // ---------------------------------------------------------------------------
@@ -314,9 +306,9 @@ export default function Player() {
   // Complete phase
   // ---------------------------------------------------------------------------
   if (currentPhase === 'complete') {
-    // Finding 3: compute elapsedSeconds fresh at render time of the complete screen
-    const completedElapsed = startedAt
-      ? Math.round((Date.now() - new Date(startedAt).getTime()) / 1000)
+    // Finding 3: elapsed from the timestamps captured at completion (pure during render)
+    const completedElapsed = startedAt && completedAt
+      ? Math.round((new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000)
       : 0
     const endedEarly = exercisesCompleted < totalExercises
     return (
