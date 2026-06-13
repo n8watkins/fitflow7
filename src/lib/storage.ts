@@ -88,6 +88,15 @@ export function saveSession(s: WorkoutSession): void {
   writeJSON(KEY.sessions, sessions)
 }
 
+/** Permanently removes all stored workout sessions. */
+export function clearSessions(): void {
+  try {
+    localStorage.removeItem(KEY.sessions)
+  } catch {
+    // ignore
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------

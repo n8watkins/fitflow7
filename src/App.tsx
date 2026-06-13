@@ -1,4 +1,4 @@
-import { BrowserRouter, NavLink, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Link, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Player from './pages/Player'
 import RoutineEditor from './pages/RoutineEditor'
@@ -50,8 +50,25 @@ function Shell() {
           <Route path="/library" element={<Library />} />
           <Route path="/history" element={<History />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
+    </div>
+  )
+}
+
+function NotFound() {
+  return (
+    <div className="flex flex-col items-center gap-6 py-24 text-center">
+      <span className="text-6xl">🧭</span>
+      <h1 className="text-2xl font-bold text-slate-100">Page not found</h1>
+      <p className="text-slate-400">That page doesn't exist.</p>
+      <Link
+        to="/"
+        className="rounded-xl bg-accent px-5 py-2.5 font-semibold text-slate-900 transition hover:opacity-90"
+      >
+        Back to Dashboard
+      </Link>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { type UserSettings, DEFAULT_SETTINGS } from '../types'
-import { getSettings, saveSettings } from '../lib/storage'
+import { getSettings, saveSettings, clearSessions } from '../lib/storage'
 
 // ---------------------------------------------------------------------------
 // Stepper input
@@ -100,11 +100,7 @@ export default function Settings() {
 
   function handleClearHistory() {
     if (confirm('This will permanently delete all your workout history. This cannot be undone. Continue?')) {
-      try {
-        localStorage.removeItem('fitflow.sessions')
-      } catch {
-        // ignore
-      }
+      clearSessions()
     }
   }
 
