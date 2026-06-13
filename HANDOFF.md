@@ -118,15 +118,25 @@ event to avoid a sync loop.
 - **Lint must stay clean:** `npm run lint` is now green and part of verification. `.claude` is in eslint's ignore list — do not remove it, or stray agent worktrees will crash the parser again.
 - **Deploy:** `vercel --prod --yes` (not `vercel deploy`). The `*-projects.vercel.app` preview URLs 401 — only `fitflow7.vercel.app` is public.
 - **Parallel agents:** use `isolation: "worktree"` for disjoint file sets. After both return, `cp` their files into the main working directory, run `npx tsc -b && npm run build`, then commit and push in the main working directory. Agents must NOT run git commands.
-- **Commit trailer:** `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` on every commit.
+- **Commit trailer:** session 4 used `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`. Earlier sessions used Sonnet 4.6 — match whichever model is running.
+- **`/api` build/lint:** functions are type-checked via `tsconfig.api.json` (referenced from root `tsconfig.json`, so `npx tsc -b` covers them) and linted with Node globals (`api/**` block in `eslint.config.js`). Shared code lives in `api/_lib/` (underscore = not a route). Vercel bundles each non-`_` `.ts` under `/api` as a function.
+- **SW + API:** `sw.js` must never cache `/api` (auth/sync stale otherwise) — there's an early return for it; bump `CACHE` when changing the SW. `vercel.json` rewrite excludes `/api` so functions aren't swallowed.
+- **Sync is dormant until configured:** no env vars => API returns "not configured" and the signed-out app is byte-identical to the MVP. Enable via `SETUP_SYNC.md`. Never commit `.env` (gitignored; `.env.example` is the template).
+- **Sync gotchas:** LWW by `updatedAt`; `applyRemote*` writes bypass `emitWrite()` to avoid a loop; sign-out keeps local data.
 - **timerStore phaseEndsAt:** wall-clock ms timestamp set on every phase transition and on `resume()`. `tick()` re-derives `secondsLeft` from it. `visibilitychange` handler fast-forwards overdue phases. `_visCleanup` stored on the store and called at `start()`/`reset()`.
 
 ## File map
 
 - `PLAN.md` — agent contracts: file ownership, module APIs, routes, design language. Read before dispatching agents.
-- `ROADMAP.md` — post-MVP plan: readiness assessment + phased outline (Phase 0 groundwork → V1 sync/auth → V1.5 MCP → V2 Android). Read before any roadmap work.
-- `public/sw.js` — hand-rolled service worker (offline). `public/manifest.webmanifest` + `public/icon.svg` — PWA install.
-- `src/types.ts` — shared type contract (orchestrator-owned; don't change shapes).
+- `ROADMAP.md` — post-MVP plan; Phase 0 + Phase 1 now marked done. Read before any roadmap work.
+- `SETUP_SYNC.md` — **the to-do list to make sync live** (Turso, OAuth, env vars, verify). Read first if enabling sync.
+- `.env.example` — every sync env var + how to generate it.
+- `api/_lib/db.ts` — Turso client + auto schema bootstrap. `api/_lib/auth.ts` — OAuth providers + signed-cookie sessions.
+- `api/auth/{login,callback,logout}.ts`, `api/me.ts` — auth endpoints. `api/sync.ts` — bidirectional LWW/tombstone sync.
+- `src/lib/sync.ts` — client sync engine (push/pull, triggers, login/logout). `src/store/syncStore.ts` — auth/sync zustand state.
+- `tsconfig.api.json` — type-checks `/api`. `vercel.json` — SPA rewrite (excludes `/api`).
+- `public/sw.js` — hand-rolled service worker (offline, skips `/api`). `public/manifest.webmanifest` + `public/icon.svg` — PWA install.
+- `src/types.ts` — shared type contract (orchestrator-owned; don't change shapes). Now carries `deletedAt`/`updatedAt`/`dirty` sync fields.
 - `src/store/timerStore.ts` — Zustand workout engine (phase machine, interval, session save, cueEvent, drift correction).
 - `src/lib/storage.ts` — localStorage CRUD (`fitflow.*` keys).
 - `src/lib/stats.ts` — streaks/stats.
