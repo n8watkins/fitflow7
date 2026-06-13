@@ -31,7 +31,7 @@ FitFlow 7 is a desktop-first, mobile-responsive 7-minute workout web app. MVP sc
 - **Stack:** Vite + React 19 + TypeScript + Tailwind v4 (`@tailwindcss/vite` plugin, theme tokens in `src/index.css`) + Zustand + react-router-dom v7. No other deps — **do not add dependencies.**
 - **Deployed:** https://fitflow7.vercel.app (public). Deploy with `vercel --prod --yes` from this directory (CLI authed as natkins23). The longer `*-projects.vercel.app` URLs 401 behind Vercel deployment protection — that's expected; only the short alias is public. `vercel.json` has the SPA rewrite.
 - **Repo:** https://github.com/n8watkins/fitflow7 (public). Branch `main`. Push after every session. Commit after every logical change with trailer `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`.
-- **Verify:** `npx tsc -b` (must be clean), `npm run lint` (must be clean — now green), and `npm run build` (must succeed). Dev: `npm run dev`. No test framework (intentional for MVP).
+- **Verify:** `npx tsc -b` (must be clean), `npm run lint` (must be clean — now green), `npm run test` (Vitest; pure-logic unit tests in `test/`), and `npm run build` (must succeed). Dev: `npm run dev`.
 
 ## How this project is built (user's standing instruction)
 

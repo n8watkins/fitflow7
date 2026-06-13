@@ -66,8 +66,11 @@ Built across commits in session 4. Enable via `SETUP_SYNC.md`.
 
 ## Cross-cutting (any phase)
 
-- Add a test framework once a backend exists — sync logic is where bugs hide and
-  the "no tests" MVP stance stops paying off there.
+- ✅ Test framework added (Vitest). Pure-logic unit tests in `test/` cover the
+  sync-critical paths: storage tombstone/LWW `applyRemote*`, the migration runner,
+  the dirty queue (incl. the mid-sync concurrent-edit guard), and stats/format.
+  Run with `npm run test`. Next: add coverage for the client sync engine
+  (`lib/sync.ts`) and the `/api` handlers (would need a request harness).
 - API rate limiting / abuse protection.
 - JSON data export/import — cheap, useful, a migration safety net before sync ships.
 
