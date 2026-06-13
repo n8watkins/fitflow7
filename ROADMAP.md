@@ -1,13 +1,14 @@
 # FitFlow 7 — Roadmap
 
-Status doc for post-MVP work. The MVP is feature-complete, deployed, and being
-dogfooded. **Nothing below is built yet.** The user's standing decision: dogfood
-daily for ~a week before starting V1, and let real use pick the first feature.
-The one exception that is safe to start anytime is **Phase 0** (pure local
-groundwork, no backend).
+Status doc for post-MVP work. The MVP is feature-complete and deployed.
 
-See `HANDOFF.md` for current session state and `PLAN.md` for the agent/build
-contract.
+**Status (2026-06-12, session 4): Phase 0 and Phase 1 are built.** Phase 1
+(accounts + cloud sync) ships dormant — the backend exists but does nothing
+until env vars are provided (see `SETUP_SYNC.md`). The signed-out app is
+unchanged. Phases 1.5 and 2 remain not started.
+
+See `HANDOFF.md` for current session state, `SETUP_SYNC.md` to enable sync, and
+`PLAN.md` for the agent/build contract.
 
 ## Readiness assessment (as of 2026-06-12)
 
@@ -27,24 +28,29 @@ contract.
 4. Storage is synchronous — fine for offline-first (local write + background
    push), but the seam doesn't reconcile remote changes yet.
 
-## Phase 0 — Sync foundations (safe to start now; no backend)
+## Phase 0 — Sync foundations ✅ DONE (commit 5bc9781)
 
-- Add `schemaVersion` + a small migration runner in `src/lib/storage.ts`.
-- Add soft-delete tombstones (`deletedAt`) to routines; add `updatedAt` to sessions.
-- Introduce a local "dirty/pending" marker per record (a sync queue concept) so
-  writes can later be replayed to a server. No behavior change yet.
-- Acceptance: existing app behaves identically; stored data gains version +
-  tombstone + dirty fields; `tsc`/`lint`/`build` clean.
+- `schemaVersion` key + idempotent migration runner in `src/lib/storage.ts`
+  (runs at startup in `main.tsx`).
+- Soft-delete tombstones (`deletedAt`) on routines; `updatedAt` on sessions.
+- Per-record `dirty` marker + `getPendingSync()`/`markSynced()` queue seam.
+- No behavior change; `tsc`/`lint`/`build` clean.
 
-## Phase 1 — Accounts + Cloud Sync (the deferred "V1")
+## Phase 1 — Accounts + Cloud Sync ✅ BUILT (dormant until configured)
 
-- Backend: Turso (libSQL) + thin API: auth + `GET/PUT /routines`, `/sessions`,
-  `/settings` with `updatedAt` cursors.
-- Auth: passwordless magic link or OAuth — no password storage.
-- Sync engine: offline-first, last-write-wins by `updatedAt`, tombstone-aware.
-  Background push of the dirty queue + pull on app focus.
-- UI: optional sign-in (app fully usable signed-out), sync status indicator.
-- Adds the first dependency(ies) — revisit PLAN.md's "no new deps" rule here.
+Built across commits in session 4. Enable via `SETUP_SYNC.md`.
+- Backend: Turso (libSQL) via `@libsql/client`; Vercel serverless functions in
+  `/api` (auto-created schema). `api/sync.ts` is one bidirectional endpoint.
+- Auth: hand-rolled OAuth (GitHub + Google), HMAC-signed session cookie. No
+  password storage, no auth SDK. `/api/auth/login|callback|logout`, `/api/me`.
+- Sync engine (`src/lib/sync.ts`): offline-first, last-write-wins by `updatedAt`,
+  tombstone-aware. Push dirty queue + pull on load/focus/visibility/local-write.
+- UI: optional sign-in in Settings (app fully usable signed-out), sync status
+  pill in the nav.
+- Deps added (PLAN.md "no new deps" relaxed here): `@libsql/client`,
+  `@vercel/node` (types).
+- **Remaining to go live:** provision Turso + OAuth app, set env vars, redeploy.
+  Then real-device verification of cross-device sync + tombstones.
 
 ## Phase 1.5 — Private MCP layer (user calls this the highest-value item)
 
