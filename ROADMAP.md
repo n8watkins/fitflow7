@@ -65,12 +65,19 @@ Built across commits in session 4. Enable via `SETUP_SYNC.md`.
   minted PAT): all four tools, read + write round-trip. Lights up for real data
   once Phase 1 sync is configured. See `mcp/README.md`.
 
-## Phase 2 — Android + Health Connect
+## Phase 2 — Android + Health Connect 🟡 SCAFFOLDED (native build is user-run)
 
-- PWA is already installable (service worker + manifest shipped). Decide: TWA
-  (wrap the PWA, fastest) vs. native shell.
-- Health Connect: write completed workouts (duration, calorie estimate) to the
-  device health store.
+Decision (user): Capacitor native shell + **Health Connect write**, sideloaded —
+no Play Store. The PWA is also already installable as-is.
+
+- In the repo: `capacitor.config.json`; `src/lib/healthConnect.ts` — a build-safe
+  seam (no native deps; web stays clean) already called from the workout-complete
+  path in `timerStore.ts`; full `ANDROID.md` build/sideload guide.
+- Run on the user's machine (can't be built/tested from CI here): `npm i
+  @capacitor/* capacitor-health-connect`, add `src/native-health.ts` (registers
+  `window.fitflowNativeHealth`), `npx cap add android`, manifest permissions,
+  build APK in Android Studio, sideload. All steps in `ANDROID.md`.
+- Future: also read other apps' workouts back; calorie estimate.
 
 ## Cross-cutting (any phase)
 

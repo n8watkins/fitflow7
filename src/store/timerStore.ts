@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Exercise, Routine, UserSettings, WorkoutPhase, WorkoutSession } from '../types'
 import { newId, saveSession, setLastRoutineId } from '../lib/storage'
+import { writeWorkoutToHealth } from '../lib/healthConnect'
 
 // ---------------------------------------------------------------------------
 // Audio cue event shape exposed to the Player for audio hooks.
@@ -123,6 +124,8 @@ function maybeSaveSession(
   markSaved(nowIso)
   const session = buildSession(state, naturalFinish, nowIso)
   saveSession(session)
+  // Best-effort mirror to Android Health Connect (no-op on web). See healthConnect.ts.
+  writeWorkoutToHealth(session)
   if (state.routine?.id) {
     setLastRoutineId(state.routine.id)
   }
