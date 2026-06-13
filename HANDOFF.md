@@ -1,6 +1,28 @@
-# FitFlow 7 — Session Handoff (2026-06-12, session 2)
+# FitFlow 7 — Session Handoff (2026-06-12, session 4)
 
 Zero-context handoff. Read this file and `PLAN.md` in full before doing anything.
+
+## Session 4 update (2026-06-12): Phase 0 + Phase 1 built
+
+The user directed building ROADMAP Phases 0 and 1. Both are done and committed
+on `main` (not yet pushed/deployed at time of writing — verify with `git log`).
+
+- **Phase 0** (`5bc9781`): schema version + migration runner, routine tombstones,
+  session `updatedAt`, per-record `dirty` queue. No behavior change.
+- **Phase 1** (5 commits): accounts + cloud sync, shipped **dormant**.
+  - Backend in `/api` (Vercel functions) + Turso (`@libsql/client`). Schema
+    auto-creates. `api/sync.ts` = bidirectional LWW/tombstone-aware sync.
+  - Hand-rolled OAuth (GitHub + Google), HMAC-signed session cookie. No auth SDK.
+  - Client engine `src/lib/sync.ts` + `src/store/syncStore.ts`; sign-in UI in
+    Settings; sync pill in nav.
+  - **Deps added** (PLAN's "no new deps" relaxed for Phase 1): `@libsql/client`,
+    `@vercel/node`.
+- **To go live:** follow `SETUP_SYNC.md` — provision Turso + an OAuth app, set
+  env vars in Vercel, redeploy, then verify cross-device sync on real devices.
+  Until env vars are set the API is inert and the signed-out app is unchanged.
+- **Commit trailer is now `Claude Opus 4.8`** (this session), not Sonnet 4.6.
+- `tsc -b`, `npm run lint`, `npm run build` all clean. `/api` is type-checked via
+  `tsconfig.api.json` (referenced from root tsconfig) and linted with Node globals.
 
 ## Project summary
 
@@ -68,15 +90,23 @@ A full post-MVP plan now lives in `ROADMAP.md` (readiness assessment + phased ou
 
 ## Next steps
 
-**The user's agreed next action: dogfood daily for a week.** Do NOT start V1 (auth/Turso/sync) until daily use reveals which feature is missed first. The agreed product call: the highest-value later item is V1.5 private MCP layer (requires V1 API foundation first). Do not build any of this speculatively.
+Phase 0 and Phase 1 are built (see Session 4 update above). The immediate
+open items:
 
-If a new session is started before the dogfood period, the acceptable work is:
-1. **Bug fixes** discovered during real use — address with the same parallel-agent pattern.
-2. **UX micro-polish** the user explicitly requests.
-3. **README / docs** updates.
-4. **Phase 0 of `ROADMAP.md`** — local-only sync groundwork (schema version + migration runner, soft-delete tombstones on routines, `updatedAt` on sessions, a per-record dirty/pending marker). No backend, no behavior change. This is the one roadmap-adjacent item the user is OK starting early. Acceptance: app behaves identically; `tsc -b`, `npm run lint`, `npm run build` all clean.
+1. **Turn sync on (user task + verify):** follow `SETUP_SYNC.md` to provision
+   Turso + an OAuth app and set Vercel env vars. Then do a **real-device check**:
+   sign in on two browsers, confirm a routine/session created on one appears on
+   the other after focus, and that delete/clear-history tombstones propagate.
+   This is the main untested path — there is no test framework yet.
+2. **Push + deploy:** commits are local only. `git push` then `vercel --prod --yes`.
+3. **Then resume dogfooding.** Phase 1.5 (private MCP, needs the live Phase 1
+   API) and Phase 2 (Android/Health Connect) remain not started — don't build
+   speculatively. See `ROADMAP.md`.
 
-Do NOT start Phase 1+ (auth/Turso/sync, MCP, Android, Health Connect) until daily use reveals which feature is missed first. See `ROADMAP.md` for the full plan and rationale.
+Sync-engine caveats worth knowing before changing it: LWW by `updatedAt`;
+sign-out keeps local data (multi-account-per-browser merges sets); merge writes
+in `storage.ts` (`applyRemote*`) intentionally bypass the `fitflow:localwrite`
+event to avoid a sync loop.
 
 ## Conventions & gotchas
 
