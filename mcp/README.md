@@ -1,0 +1,78 @@
+# FitFlow 7 — Private MCP Server
+
+Exposes **your own** FitFlow workout data to an MCP-capable AI client (Claude
+Desktop, Claude Code, etc.). It is a thin client of the Phase 1 sync API: every
+tool calls `POST /api/sync` authenticated with a personal access token, so there
+is no second database and no extra trust boundary.
+
+## Tools
+
+| Tool | What it does |
+|------|--------------|
+| `get_workout_history` | Recent sessions, newest first (`limit`, default 20) |
+| `get_stats` | Totals, current/longest streak, workouts this month |
+| `list_routines` | Your saved (non-system) routines |
+| `log_session` | Record a completed workout done outside the app |
+
+## Prerequisites
+
+Cloud sync must be **turned on** (see `../SETUP_SYNC.md`) and you must be signed
+in — the server reads *your* account's data. Until sync is configured the tools
+return a clear "cloud sync is not configured yet" error.
+
+## Setup
+
+```bash
+cd mcp
+npm install
+```
+
+1. In the app: **Settings → Account & Sync → Generate access token**. Copy it.
+2. Add the server to your MCP client config (examples below), setting:
+   - `FITFLOW_TOKEN` — the token you just generated (treat it like a password)
+   - `FITFLOW_API_URL` — optional, defaults to `https://fitflow7.vercel.app`
+
+### Claude Desktop (`claude_desktop_config.json`)
+
+```json
+{
+  "mcpServers": {
+    "fitflow7": {
+      "command": "npx",
+      "args": ["tsx", "/absolute/path/to/fitflow7/mcp/src/server.ts"],
+      "env": { "FITFLOW_TOKEN": "paste-your-token-here" }
+    }
+  }
+}
+```
+
+### Claude Code
+
+```bash
+claude mcp add fitflow7 \
+  --env FITFLOW_TOKEN=paste-your-token-here \
+  -- npx tsx /absolute/path/to/fitflow7/mcp/src/server.ts
+```
+
+Then ask things like *"How many workouts have I done this month?"*, *"What's my
+current streak?"*, or *"Log the 7-minute workout I just finished."*
+
+## Local development / verification
+
+The server can be exercised without the production backend, against
+`vercel dev` + a local file DB (how it was validated):
+
+```bash
+# from the repo root, with a local .env (TURSO_DATABASE_URL=file:..., SESSION_SECRET=...)
+vercel dev
+# mint a PAT signed with the same SESSION_SECRET, then:
+FITFLOW_API_URL=http://localhost:3001 FITFLOW_TOKEN=<pat> npm start
+```
+
+`npm run typecheck` type-checks the server.
+
+## Notes
+
+- stdout is the MCP transport; all logging goes to stderr.
+- The token is a stateless signed token (1-year expiry). There is no server-side
+  revocation list yet — rotate `SESSION_SECRET` to invalidate all tokens.

@@ -134,7 +134,8 @@ event to avoid a sync loop.
 - `.env.example` — every sync env var + how to generate it.
 - `api/_lib/db.ts` — Turso client + auto schema bootstrap. `api/_lib/auth.ts` — OAuth providers + signed-cookie sessions.
 - `api/auth/{login,callback,logout}.ts`, `api/me.ts` — auth endpoints. `api/sync.ts` — bidirectional LWW/tombstone sync.
-- `src/lib/sync.ts` — client sync engine (push/pull, triggers, login/logout). `src/store/syncStore.ts` — auth/sync zustand state.
+- `src/lib/sync.ts` — client sync engine (push/pull, triggers, login/logout, `requestAccessToken`). `src/store/syncStore.ts` — auth/sync zustand state.
+- `mcp/` — Phase 1.5 private MCP server (self-contained package, own deps, eslint-ignored). `mcp/src/server.ts` + `mcp/README.md`. Auth via PAT: `api/token.ts` + `getAuthedUserId`/`createAccessToken` in `api/_lib/auth.ts`. Dormant until Phase 1 is configured; verify locally with `vercel dev` + a minted PAT.
 - `tsconfig.api.json` — type-checks `/api`. `vercel.json` — SPA rewrite (excludes `/api`).
 - `public/sw.js` — hand-rolled service worker (offline, skips `/api`). `public/manifest.webmanifest` + `public/icon.svg` — PWA install.
 - `src/types.ts` — shared type contract (orchestrator-owned; don't change shapes). Now carries `deletedAt`/`updatedAt`/`dirty` sync fields.

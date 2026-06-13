@@ -52,10 +52,18 @@ Built across commits in session 4. Enable via `SETUP_SYNC.md`.
 - **Remaining to go live:** provision Turso + OAuth app, set env vars, redeploy.
   Then real-device verification of cross-device sync + tombstones.
 
-## Phase 1.5 — Private MCP layer (user calls this the highest-value item)
+## Phase 1.5 — Private MCP layer ✅ BUILT (dormant until Phase 1 is configured)
 
-- Requires the Phase 1 API. Expose own data over MCP: `get_workout_history`,
-  `get_stats`, `start_routine`, `log_session`. Auth-scoped to the user.
+- Lives in `mcp/` (self-contained package). Stdio MCP server
+  (`@modelcontextprotocol/sdk`) with tools `get_workout_history`, `get_stats`,
+  `list_routines`, `log_session`. (`start_routine` dropped — a data server can't
+  press play on a device.)
+- Auth-scoped to the user via a **personal access token**: `createAccessToken`
+  in `api/_lib/auth.ts`, issued by `POST /api/token` (generated in Settings),
+  accepted by `getAuthedUserId` on `/api/sync` as `Authorization: Bearer`.
+- Verified end-to-end locally (real MCP stdio client + `vercel dev` + file DB +
+  minted PAT): all four tools, read + write round-trip. Lights up for real data
+  once Phase 1 sync is configured. See `mcp/README.md`.
 
 ## Phase 2 — Android + Health Connect
 
