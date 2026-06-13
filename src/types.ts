@@ -47,6 +47,10 @@ export type Routine = {
   isSystem: boolean
   createdAt: string
   updatedAt: string
+  /** Sync groundwork (Phase 0): soft-delete tombstone. Set => record is deleted. */
+  deletedAt?: string
+  /** Sync groundwork (Phase 0): true when local changes await push to a server. */
+  dirty?: boolean
 }
 
 export type WorkoutSession = {
@@ -59,6 +63,10 @@ export type WorkoutSession = {
   completed: boolean
   exercisesCompleted: number
   totalExercises: number
+  /** Sync groundwork (Phase 0): last-write timestamp for LWW reconciliation. */
+  updatedAt?: string
+  /** Sync groundwork (Phase 0): true when local changes await push to a server. */
+  dirty?: boolean
 }
 
 export type UserSettings = {
