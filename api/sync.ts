@@ -178,13 +178,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ])
 
     const settingsRow = settingsRes.rows[0]
-    const settings: UserSettings | null = settingsRow
+    const settings: { value: UserSettings; updatedAt: string } | null = settingsRow
       ? {
-          defaultWorkSeconds: Number(settingsRow.default_work_seconds),
-          defaultRestSeconds: Number(settingsRow.default_rest_seconds),
-          defaultRounds: Number(settingsRow.default_rounds),
-          countdownSeconds: Number(settingsRow.countdown_seconds),
-          audioCuesEnabled: Boolean(settingsRow.audio_cues_enabled),
+          value: {
+            defaultWorkSeconds: Number(settingsRow.default_work_seconds),
+            defaultRestSeconds: Number(settingsRow.default_rest_seconds),
+            defaultRounds: Number(settingsRow.default_rounds),
+            countdownSeconds: Number(settingsRow.countdown_seconds),
+            audioCuesEnabled: Boolean(settingsRow.audio_cues_enabled),
+          },
+          updatedAt: settingsRow.updated_at as string,
         }
       : null
 
