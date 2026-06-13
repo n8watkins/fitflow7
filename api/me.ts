@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getUserId } from './_lib/auth'
-import { ensureSchema, getDb } from './_lib/db'
+import { getUserId } from './_lib/auth.js'
+import { ensureSchema, getDb } from './_lib/db.js'
 
 // GET /api/me — returns the signed-in user (or { user: null }).
 export default async function handler(req: VercelRequest, res: VercelResponse) {

@@ -6,8 +6,8 @@ import {
   getRedirectUri,
   readOAuthState,
   setSession,
-} from '../_lib/auth'
-import { ensureSchema, getDb } from '../_lib/db'
+} from '../_lib/auth.js'
+import { ensureSchema, getDb } from '../_lib/db.js'
 
 // GET /api/auth/callback?code=...&state=...
 // Verifies state, exchanges the code for an access token, fetches the profile,

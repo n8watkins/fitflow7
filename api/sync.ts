@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import type { Routine, UserSettings, WorkoutSession } from '../src/types'
-import { getUserId } from './_lib/auth'
-import { ensureSchema, getDb } from './_lib/db'
+import { getUserId } from './_lib/auth.js'
+import { ensureSchema, getDb } from './_lib/db.js'
 import type { InStatement } from '@libsql/client'
 
 // POST /api/sync — authenticated bidirectional sync.

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { PROVIDERS, getRedirectUri, isProvider, setOAuthState } from '../_lib/auth'
+import { PROVIDERS, getRedirectUri, isProvider, setOAuthState } from '../_lib/auth.js'
 
 // GET /api/auth/login?provider=github&returnTo=/settings
 // Starts the OAuth authorization-code flow: sets a signed state cookie and
