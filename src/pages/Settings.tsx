@@ -1,6 +1,71 @@
 import { useEffect, useRef, useState } from 'react'
 import { type UserSettings, DEFAULT_SETTINGS } from '../types'
 import { getSettings, saveSettings, clearSessions } from '../lib/storage'
+import { useSyncStore } from '../store/syncStore'
+import { loginWith, logout } from '../lib/sync'
+
+// ---------------------------------------------------------------------------
+// Account / cloud sync
+// ---------------------------------------------------------------------------
+
+function AccountSection() {
+  const user = useSyncStore((s) => s.user)
+  const authLoaded = useSyncStore((s) => s.authLoaded)
+  const lastSyncedAt = useSyncStore((s) => s.lastSyncedAt)
+
+  return (
+    <section>
+      <div className="rounded-2xl border border-edge bg-card">
+        <div className="border-b border-edge px-5 py-4">
+          <h2 className="font-semibold text-slate-200">Account &amp; Sync</h2>
+          <p className="mt-0.5 text-sm text-slate-500">
+            Optional. Sign in to back up routines, history, and settings and sync across devices.
+            The app works fully without an account.
+          </p>
+        </div>
+        <div className="px-5 py-4">
+          {!authLoaded ? (
+            <div className="text-sm text-slate-500">Checking sign-in…</div>
+          ) : user ? (
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="truncate font-medium text-slate-200">
+                  {user.name ?? user.email ?? 'Signed in'}
+                </div>
+                <div className="mt-0.5 text-sm text-slate-500">
+                  {lastSyncedAt
+                    ? `Last synced ${new Date(lastSyncedAt).toLocaleTimeString()}`
+                    : 'Syncing…'}
+                </div>
+              </div>
+              <button
+                onClick={() => void logout()}
+                className="rounded-lg border border-edge bg-card px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-card-hover"
+              >
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => loginWith('github')}
+                className="rounded-lg border border-edge bg-card px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-card-hover"
+              >
+                Sign in with GitHub
+              </button>
+              <button
+                onClick={() => loginWith('google')}
+                className="rounded-lg border border-edge bg-card px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-card-hover"
+              >
+                Sign in with Google
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Stepper input
@@ -125,6 +190,9 @@ export default function Settings() {
           Saved
         </span>
       </div>
+
+      {/* Account & sync */}
+      <AccountSection />
 
       {/* Workout defaults */}
       <section>

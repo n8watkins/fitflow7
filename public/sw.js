@@ -10,7 +10,7 @@
  *
  * Bump CACHE when you want every client to drop the old cached build.
  */
-const CACHE = 'fitflow7-v1'
+const CACHE = 'fitflow7-v2'
 const APP_SHELL = ['/', '/index.html', '/favicon.svg', '/icon.svg', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
@@ -37,6 +37,9 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url)
   if (url.origin !== self.location.origin) return
+
+  // Never cache the API — auth/sync responses must always hit the network.
+  if (url.pathname.startsWith('/api/')) return
 
   // SPA navigations: try the network, fall back to the cached shell offline.
   if (req.mode === 'navigate') {

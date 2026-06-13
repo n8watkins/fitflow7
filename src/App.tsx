@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Link, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Player from './pages/Player'
@@ -5,6 +6,8 @@ import RoutineEditor from './pages/RoutineEditor'
 import Library from './pages/Library'
 import History from './pages/History'
 import Settings from './pages/Settings'
+import { bootstrapAuth, startSyncListeners } from './lib/sync'
+import { useSyncStore } from './store/syncStore'
 
 const NAV = [
   { to: '/', label: 'Dashboard' },
@@ -39,6 +42,7 @@ function Shell() {
                 {item.label}
               </NavLink>
             ))}
+            <SyncBadge />
           </nav>
         </header>
       )}
@@ -54,6 +58,33 @@ function Shell() {
         </Routes>
       </main>
     </div>
+  )
+}
+
+// Small signed-in/sync status pill, right-aligned in the nav. Signed-out users
+// see nothing here — sign-in lives in Settings.
+function SyncBadge() {
+  const user = useSyncStore((s) => s.user)
+  const status = useSyncStore((s) => s.status)
+  if (!user) return null
+
+  const dot =
+    status === 'syncing'
+      ? 'bg-amber-400'
+      : status === 'error'
+        ? 'bg-red-400'
+        : 'bg-emerald-400'
+  const label =
+    status === 'syncing' ? 'Syncing…' : status === 'error' ? 'Sync error' : 'Synced'
+
+  return (
+    <span
+      className="ml-auto flex items-center gap-1.5 rounded-full border border-edge bg-card px-3 py-1 text-xs font-medium text-slate-400"
+      title={user.email ?? user.name ?? 'Signed in'}
+    >
+      <span className={`h-2 w-2 rounded-full ${dot}`} />
+      {label}
+    </span>
   )
 }
 
@@ -74,6 +105,11 @@ function NotFound() {
 }
 
 export default function App() {
+  useEffect(() => {
+    startSyncListeners()
+    void bootstrapAuth()
+  }, [])
+
   return (
     <BrowserRouter>
       <Shell />

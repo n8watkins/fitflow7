@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { useSyncStore } from '../store/syncStore'
 import { CLASSIC_7 } from '../data/routines'
 import { getLastRoutineId, getRoutine, getRoutines, getSessions } from '../lib/storage'
 import { computeStats } from '../lib/stats'
@@ -30,20 +31,21 @@ function StatTile({ label, value, hero }: { label: string; value: string | numbe
 
 export default function Dashboard() {
   const location = useLocation()
+  // Re-read on navigation (location.key) and after a background sync (dataVersion).
+  const dataVersion = useSyncStore((s) => s.dataVersion)
 
-  // Re-read localStorage on every navigation (location.key changes per visit)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sessions = useMemo(() => getSessions(), [location.key])
+  const sessions = useMemo(() => getSessions(), [location.key, dataVersion])
   const stats = useMemo(() => computeStats(sessions), [sessions])
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const allRoutines = useMemo(() => [CLASSIC_7, ...getRoutines()], [location.key])
+  const allRoutines = useMemo(() => [CLASSIC_7, ...getRoutines()], [location.key, dataVersion])
   const lastRoutine = useMemo(() => {
     const lastRoutineId = getLastRoutineId()
     return lastRoutineId && lastRoutineId !== 'classic-7'
       ? getRoutine(lastRoutineId)
       : undefined
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.key])
+  }, [location.key, dataVersion])
 
   // Last workout info
   const lastSession = sessions.find((s) => s.completed)
