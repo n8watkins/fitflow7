@@ -79,23 +79,31 @@ npm run build
 | Styling | Tailwind CSS v4 |
 | Audio | Web Audio API (no assets) |
 | Storage | localStorage |
+| Offline | Service worker + web app manifest (installable PWA) |
 | Deploy | Vercel |
 
 No backend. No database. No API keys. It all lives in the browser.
 
 ---
 
+## Install it
+
+FitFlow 7 is an installable PWA. Open it in a browser and choose **Install app** /
+**Add to Home Screen** — it runs full-screen and works offline after the first load,
+since the service worker caches the app shell.
+
+---
+
 ## What's Next
 
-A few rough edges are being smoothed out before V1:
+The MVP is feature-complete and being dogfooded daily. Deferred for later:
 
-- **Tab backgrounding fix** — timer drifts when you switch tabs; moving to wall-clock timestamps
-- **Screen wake lock** — keep the screen on during workouts on mobile
-- **"End Workout" flow** — show the summary card instead of jumping straight to dashboard
-- **Dashboard refresh** — stats update live after a workout without needing a reload
-- **Accessibility** — larger touch targets, better contrast on keyboard hints
+- **Cloud sync & accounts** — optional sign-in so history follows you across devices
+- **Native Android app** + Health Connect integration
+- **Sharing** — export or share a finished workout
 
-After that: cloud sync, accounts, and maybe an Android app.
+These are intentionally not built yet — the next feature is chosen by what daily use
+actually misses first.
 
 ---
 

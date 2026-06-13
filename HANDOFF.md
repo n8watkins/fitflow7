@@ -9,7 +9,7 @@ FitFlow 7 is a desktop-first, mobile-responsive 7-minute workout web app. MVP sc
 - **Stack:** Vite + React 19 + TypeScript + Tailwind v4 (`@tailwindcss/vite` plugin, theme tokens in `src/index.css`) + Zustand + react-router-dom v7. No other deps — **do not add dependencies.**
 - **Deployed:** https://fitflow7.vercel.app (public). Deploy with `vercel --prod --yes` from this directory (CLI authed as natkins23). The longer `*-projects.vercel.app` URLs 401 behind Vercel deployment protection — that's expected; only the short alias is public. `vercel.json` has the SPA rewrite.
 - **Repo:** https://github.com/n8watkins/fitflow7 (public). Branch `main`. Push after every session. Commit after every logical change with trailer `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`.
-- **Verify:** `npx tsc -b` (must be clean) and `npm run build` (must succeed). Dev: `npm run dev`. No test framework (intentional for MVP).
+- **Verify:** `npx tsc -b` (must be clean), `npm run lint` (must be clean — now green), and `npm run build` (must succeed). Dev: `npm run dev`. No test framework (intentional for MVP).
 
 ## How this project is built (user's standing instruction)
 
@@ -17,7 +17,15 @@ The user wants Claude to act as an **orchestrator**: plan, define contracts, the
 
 ## State
 
-**All 20 code-review findings are fixed, committed, pushed, and deployed.**
+**All 20 code-review findings are fixed. Session 3 (2026-06-12) added a deep-dive cleanup + offline support — all committed (not yet pushed/deployed at time of writing).**
+
+### Session 3 commits (2026-06-12)
+- `29bf060` — Fix lint pipeline + React 19 purity bug: pruned stale agent worktrees that crashed ESLint, ignored `.claude` in eslint config; Player complete-screen elapsed now derives from a `completedAt` timestamp in the store (no `Date.now()` during render); Dashboard/History reactive reads moved to `useMemo` keyed on `location.key`; misc lint nits. `tsc`/`lint`/`build` all clean.
+- `4831bab` — Catch-all `*` 404 route; richer `index.html` meta (theme-color, description, OG); `clearSessions()` helper replaces the hardcoded key in Settings.
+- `5599e5e` — **Offline support (no deps):** `public/sw.js` + `public/manifest.webmanifest` + `public/icon.svg`; SW registered prod-only in `main.tsx`. Makes the README's offline claim real + enables Add to Home Screen.
+- Docs: README "What's Next" rewritten (old list was all-done items); added Install section. This handoff updated.
+
+**Not yet done this session:** `git push` and `vercel --prod --yes`. The SW should be verified in a real browser (DevTools → Application → Service Workers, then offline reload) after deploy.
 
 ### This session's commits (2026-06-12)
 - `04258af` — Fix P0-P1 engine/player findings (1-5, 9, 10, 14, 15): End Workout complete screen, sessionSaved in store, wall-clock drift correction, Screen Wake Lock, "Up Next" during prepare, previous() restart, endWorkout() guard, keyboard hint contrast.
@@ -71,7 +79,9 @@ Nothing from the deferred roadmap (sync, auth, MCP, Android, Health Connect).
 - **Tailwind v4:** theme tokens live in `src/index.css` under `@theme` (no tailwind.config). Custom tokens: `bg-surface`, `bg-card`, `bg-card-hover`, `border-edge`, `text-accent`, `bg-accent`, `accent-dim` (cyan accent).
 - **`verbatimModuleSyntax` is on** — use `import type` for type-only imports or `tsc` fails.
 - **StrictMode double-mount in dev:** Player mount effect runs twice; store `start()` must stay idempotent.
-- **Settings "Clear history"** intentionally hardcodes `'fitflow.sessions'` key — must match `KEY.sessions` in `storage.ts` if either changes.
+- **Settings "Clear history"** calls `clearSessions()` in `storage.ts` (no longer hardcodes the key).
+- **PWA/offline:** `public/sw.js` (hand-rolled service worker) + `public/manifest.webmanifest` + `public/icon.svg`. SW registered in `main.tsx` **production-only** (`import.meta.env.PROD`). To force all clients onto a new build, bump the `CACHE` constant in `sw.js`. Vercel serves these static files before the SPA rewrite, so they aren't swallowed.
+- **Lint must stay clean:** `npm run lint` is now green and part of verification. `.claude` is in eslint's ignore list — do not remove it, or stray agent worktrees will crash the parser again.
 - **Deploy:** `vercel --prod --yes` (not `vercel deploy`). The `*-projects.vercel.app` preview URLs 401 — only `fitflow7.vercel.app` is public.
 - **Parallel agents:** use `isolation: "worktree"` for disjoint file sets. After both return, `cp` their files into the main working directory, run `npx tsc -b && npm run build`, then commit and push in the main working directory. Agents must NOT run git commands.
 - **Commit trailer:** `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` on every commit.
