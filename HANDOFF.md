@@ -25,7 +25,10 @@ The user wants Claude to act as an **orchestrator**: plan, define contracts, the
 - `5599e5e` — **Offline support (no deps):** `public/sw.js` + `public/manifest.webmanifest` + `public/icon.svg`; SW registered prod-only in `main.tsx`. Makes the README's offline claim real + enables Add to Home Screen.
 - Docs: README "What's Next" rewritten (old list was all-done items); added Install section. This handoff updated.
 
-**Not yet done this session:** `git push` and `vercel --prod --yes`. The SW should be verified in a real browser (DevTools → Application → Service Workers, then offline reload) after deploy.
+**Pushed and deployed.** `c5b167f` is on `origin/main`; production deployed via `vercel --prod --yes` and `fitflow7.vercel.app` confirmed serving `/sw.js`, `/manifest.webmanifest`, `/icon.svg` (200, correct content-types). **Still worth a real-browser check:** DevTools → Application → Service Workers, then toggle Offline and reload to confirm the offline shell works on a real device.
+
+### Roadmap
+A full post-MVP plan now lives in `ROADMAP.md` (readiness assessment + phased outline). Highlights: the persistence seam (`lib/storage.ts`) and UUIDs make sync viable, but V1 is blocked on no backend/auth, no delete tombstones, and no schema versioning. **Phase 0** (local groundwork — schema version, tombstones, dirty-queue marker) is the only roadmap work safe to start before the dogfood week ends.
 
 ### This session's commits (2026-06-12)
 - `04258af` — Fix P0-P1 engine/player findings (1-5, 9, 10, 14, 15): End Workout complete screen, sessionSaved in store, wall-clock drift correction, Screen Wake Lock, "Up Next" during prepare, previous() restart, endWorkout() guard, keyboard hint contrast.
@@ -67,12 +70,13 @@ The user wants Claude to act as an **orchestrator**: plan, define contracts, the
 
 **The user's agreed next action: dogfood daily for a week.** Do NOT start V1 (auth/Turso/sync) until daily use reveals which feature is missed first. The agreed product call: the highest-value later item is V1.5 private MCP layer (requires V1 API foundation first). Do not build any of this speculatively.
 
-If a new session is started before the dogfood period, the only acceptable work is:
+If a new session is started before the dogfood period, the acceptable work is:
 1. **Bug fixes** discovered during real use — address with the same parallel-agent pattern.
 2. **UX micro-polish** the user explicitly requests.
 3. **README / docs** updates.
+4. **Phase 0 of `ROADMAP.md`** — local-only sync groundwork (schema version + migration runner, soft-delete tombstones on routines, `updatedAt` on sessions, a per-record dirty/pending marker). No backend, no behavior change. This is the one roadmap-adjacent item the user is OK starting early. Acceptance: app behaves identically; `tsc -b`, `npm run lint`, `npm run build` all clean.
 
-Nothing from the deferred roadmap (sync, auth, MCP, Android, Health Connect).
+Do NOT start Phase 1+ (auth/Turso/sync, MCP, Android, Health Connect) until daily use reveals which feature is missed first. See `ROADMAP.md` for the full plan and rationale.
 
 ## Conventions & gotchas
 
@@ -90,6 +94,8 @@ Nothing from the deferred roadmap (sync, auth, MCP, Android, Health Connect).
 ## File map
 
 - `PLAN.md` — agent contracts: file ownership, module APIs, routes, design language. Read before dispatching agents.
+- `ROADMAP.md` — post-MVP plan: readiness assessment + phased outline (Phase 0 groundwork → V1 sync/auth → V1.5 MCP → V2 Android). Read before any roadmap work.
+- `public/sw.js` — hand-rolled service worker (offline). `public/manifest.webmanifest` + `public/icon.svg` — PWA install.
 - `src/types.ts` — shared type contract (orchestrator-owned; don't change shapes).
 - `src/store/timerStore.ts` — Zustand workout engine (phase machine, interval, session save, cueEvent, drift correction).
 - `src/lib/storage.ts` — localStorage CRUD (`fitflow.*` keys).
