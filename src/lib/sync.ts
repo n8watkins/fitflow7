@@ -125,6 +125,18 @@ export function loginWith(provider: 'github' | 'google'): void {
   window.location.href = `/api/auth/login?provider=${provider}&returnTo=${returnTo}`
 }
 
+/** Requests a personal access token for the MCP server (signed-in users only). */
+export async function requestAccessToken(): Promise<string | null> {
+  try {
+    const res = await fetch('/api/token', { method: 'POST', credentials: 'include' })
+    if (!res.ok) return null
+    const data = (await res.json()) as { token: string }
+    return data.token
+  } catch {
+    return null
+  }
+}
+
 export async function logout(): Promise<void> {
   try {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })

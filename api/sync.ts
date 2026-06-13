@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import type { Routine, UserSettings, WorkoutSession } from '../src/types'
-import { getUserId } from './_lib/auth.js'
+import { getAuthedUserId } from './_lib/auth.js'
 import { ensureSchema, getDb } from './_lib/db.js'
 import type { InStatement } from '@libsql/client'
 
@@ -115,7 +115,7 @@ function sessionUpsert(userId: string, s: WorkoutSession): InStatement {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' })
-  const userId = getUserId(req)
+  const userId = getAuthedUserId(req)
   if (!userId) return res.status(401).json({ error: 'not signed in' })
 
   const body = (req.body ?? {}) as SyncBody

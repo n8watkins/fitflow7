@@ -1,0 +1,23 @@
+{
+  "name": "fitflow7-mcp",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Private MCP server exposing your FitFlow 7 workout data to AI assistants.",
+  "bin": {
+    "fitflow7-mcp": "src/server.ts"
+  },
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.3",
+    "tsx": "^4.19.0",
+    "typescript": "~6.0.2"
+  }
+}

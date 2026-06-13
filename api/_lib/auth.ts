@@ -195,6 +195,26 @@ export function getUserId(req: VercelRequest): string | null {
   return payload?.uid ?? null
 }
 
+const PAT_TTL_SECONDS = 60 * 60 * 24 * 365 // 1 year
+
+/** Mints a long-lived personal access token (PAT) for headless clients (the MCP
+ *  server). Same signed-token scheme as the session cookie; `pat: true` marks it
+ *  so it can only arrive via the Authorization header, never as a cookie. */
+export function createAccessToken(userId: string): string {
+  return encodeToken({ uid: userId, pat: true, exp: Math.floor(Date.now() / 1000) + PAT_TTL_SECONDS })
+}
+
+/** Resolves the user id from either a session cookie or a `Bearer <pat>` header.
+ *  Use for endpoints reachable by both the browser and the MCP server. */
+export function getAuthedUserId(req: VercelRequest): string | null {
+  const header = req.headers.authorization
+  if (header && header.startsWith('Bearer ')) {
+    const payload = decodeToken<{ uid: string; pat?: boolean }>(header.slice(7).trim())
+    if (payload?.pat && payload.uid) return payload.uid
+  }
+  return getUserId(req)
+}
+
 // ---------------------------------------------------------------------------
 // OAuth state (CSRF) — signed, short-lived cookie carrying state + provider
 // ---------------------------------------------------------------------------

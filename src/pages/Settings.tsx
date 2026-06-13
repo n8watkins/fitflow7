@@ -10,7 +10,7 @@ import {
 } from '../lib/storage'
 import { dayKey } from '../lib/format'
 import { useSyncStore } from '../store/syncStore'
-import { loginWith, logout } from '../lib/sync'
+import { loginWith, logout, requestAccessToken } from '../lib/sync'
 
 // ---------------------------------------------------------------------------
 // Account / cloud sync
@@ -20,6 +20,15 @@ function AccountSection() {
   const user = useSyncStore((s) => s.user)
   const authLoaded = useSyncStore((s) => s.authLoaded)
   const lastSyncedAt = useSyncStore((s) => s.lastSyncedAt)
+  const [token, setToken] = useState<string | null>(null)
+  const [tokenBusy, setTokenBusy] = useState(false)
+
+  async function handleGenerateToken() {
+    setTokenBusy(true)
+    const t = await requestAccessToken()
+    setTokenBusy(false)
+    setToken(t ?? 'Could not create a token — try signing in again.')
+  }
 
   return (
     <section>
@@ -35,23 +44,51 @@ function AccountSection() {
           {!authLoaded ? (
             <div className="text-sm text-slate-500">Checking sign-in…</div>
           ) : user ? (
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="min-w-0">
-                <div className="truncate font-medium text-slate-200">
-                  {user.name ?? user.email ?? 'Signed in'}
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="truncate font-medium text-slate-200">
+                    {user.name ?? user.email ?? 'Signed in'}
+                  </div>
+                  <div className="mt-0.5 text-sm text-slate-500">
+                    {lastSyncedAt
+                      ? `Last synced ${new Date(lastSyncedAt).toLocaleTimeString()}`
+                      : 'Syncing…'}
+                  </div>
                 </div>
-                <div className="mt-0.5 text-sm text-slate-500">
-                  {lastSyncedAt
-                    ? `Last synced ${new Date(lastSyncedAt).toLocaleTimeString()}`
-                    : 'Syncing…'}
-                </div>
+                <button
+                  onClick={() => void logout()}
+                  className="rounded-lg border border-edge bg-card px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-card-hover"
+                >
+                  Sign out
+                </button>
               </div>
-              <button
-                onClick={() => void logout()}
-                className="rounded-lg border border-edge bg-card px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-card-hover"
-              >
-                Sign out
-              </button>
+
+              {/* MCP access token */}
+              <div className="border-t border-edge pt-4">
+                <div className="font-medium text-slate-200">AI access token</div>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  For the private MCP server, so an AI assistant can read your stats and log
+                  workouts. Treat it like a password.
+                </p>
+                {token ? (
+                  <textarea
+                    readOnly
+                    value={token}
+                    onFocus={(e) => e.currentTarget.select()}
+                    rows={3}
+                    className="mt-3 w-full resize-none rounded-lg border border-edge bg-surface px-3 py-2 font-mono text-xs break-all text-slate-300 focus:border-accent focus:outline-none"
+                  />
+                ) : (
+                  <button
+                    onClick={() => void handleGenerateToken()}
+                    disabled={tokenBusy}
+                    className="mt-3 rounded-lg border border-edge bg-card px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-card-hover disabled:opacity-50"
+                  >
+                    {tokenBusy ? 'Generating…' : 'Generate access token'}
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="flex flex-wrap gap-3">
