@@ -65,6 +65,8 @@ export type WorkoutSession = {
   totalExercises: number
   /** Sync groundwork (Phase 0): last-write timestamp for LWW reconciliation. */
   updatedAt?: string
+  /** Sync groundwork: soft-delete tombstone so deletes propagate across devices. */
+  deletedAt?: string
   /** Sync groundwork (Phase 0): true when local changes await push to a server. */
   dirty?: boolean
 }
