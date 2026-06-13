@@ -2,6 +2,7 @@ import {
   applyRemoteRoutines,
   applyRemoteSessions,
   applyRemoteSettings,
+  clearSyncCursor,
   getPendingSettings,
   getPendingSync,
   getSyncCursor,
@@ -70,10 +71,7 @@ export async function sync(): Promise<void> {
     const data = (await res.json()) as SyncResponse
 
     // The push succeeded — clear dirty flags on what we sent.
-    markSynced({
-      routineIds: pending.routines.map((r) => r.id),
-      sessionIds: pending.sessions.map((s) => s.id),
-    })
+    markSynced({ routines: pending.routines, sessions: pending.sessions })
     if (pendingSettings) markSettingsSynced()
 
     // Merge what the server sent back (last-write-wins, tombstones included).
@@ -131,6 +129,7 @@ export async function logout(): Promise<void> {
   try {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
   } finally {
+    clearSyncCursor()
     useSyncStore.getState().setUser(null)
     useSyncStore.getState().setStatus('idle')
   }

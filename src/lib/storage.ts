@@ -225,21 +225,29 @@ export function getPendingSync(): { routines: Routine[]; sessions: WorkoutSessio
   }
 }
 
-/** Clears the dirty flag on the given record ids after a successful push. */
-export function markSynced(ids: { routineIds?: string[]; sessionIds?: string[] }): void {
-  if (ids.routineIds?.length) {
-    const set = new Set(ids.routineIds)
+/** Clears the dirty flag on pushed records after a successful push — but only if
+ *  the local `updatedAt` is unchanged since we snapshotted them. An edit made
+ *  during the sync round-trip bumps `updatedAt`, so it stays dirty and re-pushes
+ *  on the next sync instead of being silently dropped. */
+export function markSynced(pushed: {
+  routines?: { id: string; updatedAt?: string }[]
+  sessions?: { id: string; updatedAt?: string }[]
+}): void {
+  if (pushed.routines?.length) {
+    const m = new Map(pushed.routines.map((r) => [r.id, r.updatedAt]))
     writeJSON(
       KEY.routines,
-      getRoutinesRaw().map((r) => (set.has(r.id) ? { ...r, dirty: false } : r)),
+      getRoutinesRaw().map((r) =>
+        m.has(r.id) && r.updatedAt === m.get(r.id) ? { ...r, dirty: false } : r,
+      ),
     )
   }
-  if (ids.sessionIds?.length) {
-    const set = new Set(ids.sessionIds)
+  if (pushed.sessions?.length) {
+    const m = new Map(pushed.sessions.map((s) => [s.id, s.updatedAt]))
     writeJSON(
       KEY.sessions,
       readJSON<WorkoutSession[]>(KEY.sessions, []).map((s) =>
-        set.has(s.id) ? { ...s, dirty: false } : s,
+        m.has(s.id) && s.updatedAt === m.get(s.id) ? { ...s, dirty: false } : s,
       ),
     )
   }
@@ -266,6 +274,16 @@ export function getSyncCursor(): string | undefined {
 
 export function setSyncCursor(cursor: string): void {
   writeJSON(KEY.syncCursor, cursor)
+}
+
+/** Drops the pull cursor (call on sign-out) so the next sign-in re-pulls the full
+ *  account from scratch rather than starting from a different account's cursor. */
+export function clearSyncCursor(): void {
+  try {
+    localStorage.removeItem(KEY.syncCursor)
+  } catch {
+    // ignore
+  }
 }
 
 /** Merges server routines into local storage, last-write-wins by updatedAt.
