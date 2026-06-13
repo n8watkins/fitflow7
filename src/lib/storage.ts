@@ -320,6 +320,95 @@ export function applyRemoteSettings(value: UserSettings, updatedAt: string): voi
 }
 
 // ---------------------------------------------------------------------------
+// JSON export / import (offline backup + migration safety net)
+// ---------------------------------------------------------------------------
+
+export interface ExportBundle {
+  app: 'fitflow7'
+  version: 1
+  exportedAt: string
+  schemaVersion: number
+  routines: Routine[]
+  sessions: WorkoutSession[]
+  settings: UserSettings
+  settingsUpdatedAt: string
+}
+
+export interface ImportResult {
+  routines: number
+  sessions: number
+  settings: boolean
+}
+
+/** Snapshots all local data (tombstones included) into a portable JSON bundle. */
+export function exportData(): ExportBundle {
+  return {
+    app: 'fitflow7',
+    version: 1,
+    exportedAt: now(),
+    schemaVersion: getSchemaVersion(),
+    routines: getRoutinesRaw(),
+    sessions: readJSON<WorkoutSession[]>(KEY.sessions, []),
+    settings: getSettings(),
+    settingsUpdatedAt: getSettingsMeta().updatedAt || now(),
+  }
+}
+
+/** Structural check that an unknown value is a FitFlow export bundle. */
+export function isExportBundle(value: unknown): value is ExportBundle {
+  if (typeof value !== 'object' || value === null) return false
+  const v = value as Record<string, unknown>
+  return v.app === 'fitflow7' && Array.isArray(v.routines) && Array.isArray(v.sessions)
+}
+
+/** Merges an export bundle into local storage, last-write-wins by updatedAt.
+ *  Imported records are marked dirty so a signed-in user pushes them on the next
+ *  sync. Records older than the local copy are skipped, so re-importing a stale
+ *  backup never clobbers newer data. System routines are ignored. */
+export function importData(bundle: ExportBundle): ImportResult {
+  let routines = 0
+  let sessions = 0
+  let settings = false
+
+  if (Array.isArray(bundle.routines) && bundle.routines.length > 0) {
+    const byId = new Map(getRoutinesRaw().map((r) => [r.id, r]))
+    for (const r of bundle.routines) {
+      if (r.isSystem) continue
+      const existing = byId.get(r.id)
+      if (!existing || (r.updatedAt ?? '') >= (existing.updatedAt ?? '')) {
+        byId.set(r.id, { ...r, isSystem: false, dirty: true })
+        routines++
+      }
+    }
+    writeJSON(KEY.routines, [...byId.values()])
+  }
+
+  if (Array.isArray(bundle.sessions) && bundle.sessions.length > 0) {
+    const byId = new Map(readJSON<WorkoutSession[]>(KEY.sessions, []).map((s) => [s.id, s]))
+    for (const s of bundle.sessions) {
+      const existing = byId.get(s.id)
+      if (!existing || (s.updatedAt ?? '') >= (existing.updatedAt ?? '')) {
+        byId.set(s.id, { ...s, dirty: true })
+        sessions++
+      }
+    }
+    writeJSON(KEY.sessions, [...byId.values()])
+  }
+
+  if (bundle.settings) {
+    const incoming = bundle.settingsUpdatedAt ?? ''
+    if (incoming >= getSettingsMeta().updatedAt) {
+      writeJSON(KEY.settings, { ...DEFAULT_SETTINGS, ...bundle.settings })
+      writeJSON(KEY.settingsMeta, { updatedAt: incoming || now(), dirty: true })
+      settings = true
+    }
+  }
+
+  emitWrite()
+  return { routines, sessions, settings }
+}
+
+// ---------------------------------------------------------------------------
 // Last routine id
 // ---------------------------------------------------------------------------
 

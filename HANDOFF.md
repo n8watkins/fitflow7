@@ -139,7 +139,7 @@ event to avoid a sync loop.
 - `public/sw.js` — hand-rolled service worker (offline, skips `/api`). `public/manifest.webmanifest` + `public/icon.svg` — PWA install.
 - `src/types.ts` — shared type contract (orchestrator-owned; don't change shapes). Now carries `deletedAt`/`updatedAt`/`dirty` sync fields.
 - `src/store/timerStore.ts` — Zustand workout engine (phase machine, interval, session save, cueEvent, drift correction).
-- `src/lib/storage.ts` — localStorage CRUD (`fitflow.*` keys).
+- `src/lib/storage.ts` — localStorage CRUD (`fitflow.*` keys); also sync merge (`applyRemote*`), the dirty queue, and JSON `exportData`/`importData`/`isExportBundle` (Settings → "Data").
 - `src/lib/stats.ts` — streaks/stats.
 - `src/lib/format.ts` — shared formatters: `fmtDuration`, `dayKey`, `formatDateTime`, `formatRelativeDay`.
 - `src/lib/audio.ts` — WebAudio cues (singleton AudioContext, closes on beforeunload).

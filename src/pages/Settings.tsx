@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { type UserSettings, DEFAULT_SETTINGS } from '../types'
-import { getSettings, saveSettings, clearSessions } from '../lib/storage'
+import {
+  getSettings,
+  saveSettings,
+  clearSessions,
+  exportData,
+  importData,
+  isExportBundle,
+} from '../lib/storage'
+import { dayKey } from '../lib/format'
 import { useSyncStore } from '../store/syncStore'
 import { loginWith, logout } from '../lib/sync'
 
@@ -143,6 +151,9 @@ export default function Settings() {
   const [settings, setSettings] = useState<UserSettings>(() => getSettings())
   const [savedVisible, setSavedVisible] = useState(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [importMsg, setImportMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  const bumpData = useSyncStore((s) => s.bumpData)
 
   // Auto-save whenever settings change (after initial mount)
   const isFirstRender = useRef(true)
@@ -171,6 +182,42 @@ export default function Settings() {
 
   function handleResetDefaults() {
     setSettings(DEFAULT_SETTINGS)
+  }
+
+  function handleExport() {
+    const blob = new Blob([JSON.stringify(exportData(), null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `fitflow-backup-${dayKey(new Date())}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // let the same file be re-selected later
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const parsed: unknown = JSON.parse(String(reader.result))
+        if (!isExportBundle(parsed)) {
+          setImportMsg({ text: 'That file is not a FitFlow backup.', ok: false })
+          return
+        }
+        const result = importData(parsed)
+        if (result.settings) setSettings(getSettings())
+        bumpData() // refresh Dashboard/History reads
+        setImportMsg({
+          text: `Imported ${result.routines} routine${result.routines === 1 ? '' : 's'} and ${result.sessions} session${result.sessions === 1 ? '' : 's'}.`,
+          ok: true,
+        })
+      } catch {
+        setImportMsg({ text: 'Could not read that file.', ok: false })
+      }
+    }
+    reader.readAsText(file)
   }
 
   return (
@@ -275,6 +322,50 @@ export default function Settings() {
                 />
               </button>
             </label>
+          </div>
+        </div>
+      </section>
+
+      {/* Data backup */}
+      <section>
+        <div className="rounded-2xl border border-edge bg-card">
+          <div className="border-b border-edge px-5 py-4">
+            <h2 className="font-semibold text-slate-200">Data</h2>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Export a JSON backup of your routines, history, and settings, or restore one.
+              Importing merges by most-recent edit and never overwrites newer data.
+            </p>
+          </div>
+          <div className="px-5 py-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleExport}
+                className="rounded-lg border border-edge bg-card px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-card-hover"
+              >
+                Export backup
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-lg border border-edge bg-card px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-card-hover"
+              >
+                Import backup
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json,.json"
+                onChange={handleImportFile}
+                className="hidden"
+              />
+              {importMsg && (
+                <span
+                  className={`text-sm ${importMsg.ok ? 'text-emerald-400' : 'text-red-400'}`}
+                  aria-live="polite"
+                >
+                  {importMsg.text}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </section>

@@ -151,6 +151,53 @@ describe('settings sync', () => {
   })
 })
 
+describe('export / import', () => {
+  it('round-trips routines, sessions and settings; imports stay dirty', () => {
+    storage.saveRoutine(makeRoutine({ id: 'a', name: 'Keep', updatedAt: '2026-05-01T00:00:00.000Z' }))
+    storage.saveSession(makeSession({ id: 's' }))
+    storage.saveSettings({ ...DEFAULT_SETTINGS, defaultWorkSeconds: 50 })
+
+    const bundle = storage.exportData()
+    expect(bundle.app).toBe('fitflow7')
+    expect(bundle.routines.some((r) => r.id === 'a')).toBe(true)
+    expect(bundle.sessions.some((s) => s.id === 's')).toBe(true)
+    expect(bundle.settings.defaultWorkSeconds).toBe(50)
+
+    localStorage.clear() // simulate a fresh browser / wiped storage
+    const res = storage.importData(bundle)
+    expect(res.routines).toBe(1)
+    expect(res.sessions).toBe(1)
+    expect(storage.getRoutines().find((r) => r.id === 'a')?.name).toBe('Keep')
+    expect(storage.getSessions().map((s) => s.id)).toContain('s')
+    expect(storage.getSettings().defaultWorkSeconds).toBe(50)
+    // imported records must push on next sign-in
+    expect(storage.getPendingSync().routines.some((r) => r.id === 'a')).toBe(true)
+  })
+
+  it('skips records older than the local copy (no clobber)', () => {
+    storage.saveRoutine(makeRoutine({ id: 'a', name: 'newer', updatedAt: '2026-06-01T00:00:00.000Z' }))
+    const stale: storage.ExportBundle = {
+      app: 'fitflow7', version: 1, exportedAt: 'x', schemaVersion: 1,
+      routines: [makeRoutine({ id: 'a', name: 'older', updatedAt: '2026-01-01T00:00:00.000Z' })],
+      sessions: [], settings: DEFAULT_SETTINGS, settingsUpdatedAt: '2000-01-01T00:00:00.000Z',
+    }
+    expect(storage.importData(stale).routines).toBe(0)
+    expect(storage.getRoutines().find((r) => r.id === 'a')?.name).toBe('newer')
+  })
+
+  it('ignores system routines and validates the bundle shape', () => {
+    const bundle: storage.ExportBundle = {
+      app: 'fitflow7', version: 1, exportedAt: 'x', schemaVersion: 1,
+      routines: [makeRoutine({ id: 'sys', isSystem: true })],
+      sessions: [], settings: DEFAULT_SETTINGS, settingsUpdatedAt: '2026-01-01T00:00:00.000Z',
+    }
+    expect(storage.importData(bundle).routines).toBe(0)
+    expect(storage.isExportBundle({ foo: 1 })).toBe(false)
+    expect(storage.isExportBundle(null)).toBe(false)
+    expect(storage.isExportBundle(bundle)).toBe(true)
+  })
+})
+
 describe('sync cursor', () => {
   it('round-trips and clears', () => {
     expect(storage.getSyncCursor()).toBeUndefined()

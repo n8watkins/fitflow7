@@ -72,7 +72,11 @@ Built across commits in session 4. Enable via `SETUP_SYNC.md`.
   Run with `npm run test`. Next: add coverage for the client sync engine
   (`lib/sync.ts`) and the `/api` handlers (would need a request harness).
 - API rate limiting / abuse protection.
-- JSON data export/import — cheap, useful, a migration safety net before sync ships.
+- ✅ JSON data export/import — done. Settings → "Data": exports a versioned
+  bundle (routines incl. tombstones, sessions, settings); import merges
+  last-write-wins, marks records dirty so they push on next sign-in, and skips
+  records older than local. Logic in `storage.ts` (`exportData`/`importData`/
+  `isExportBundle`), covered by unit tests.
 
 ## Recommended sequencing
 
