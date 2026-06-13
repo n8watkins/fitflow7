@@ -19,4 +19,11 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // Serverless API functions run on Node, not in the browser.
+    files: ['api/**/*.ts'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ])
