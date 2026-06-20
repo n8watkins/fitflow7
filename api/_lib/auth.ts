@@ -131,11 +131,13 @@ function decodeToken<T>(token: string | undefined): T | null {
   if (!token) return null
   const [body, sig] = token.split('.')
   if (!body || !sig) return null
-  const expected = sign(body)
-  // Constant-time compare; lengths must match first or timingSafeEqual throws.
-  if (sig.length !== expected.length) return null
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null
   try {
+    // sign() throws if SESSION_SECRET is unset — in the dormant (unconfigured)
+    // state a stray token must read as "unauthenticated", not crash the function.
+    const expected = sign(body)
+    // Constant-time compare; lengths must match first or timingSafeEqual throws.
+    if (sig.length !== expected.length) return null
+    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString()) as { exp?: number }
     if (payload.exp && Date.now() / 1000 > payload.exp) return null
     return payload as T
