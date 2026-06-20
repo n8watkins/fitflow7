@@ -103,6 +103,14 @@ export function isProvider(value: string | undefined): value is Provider {
   return value === 'github' || value === 'google'
 }
 
+/** Providers that are actually configured (both client id + secret present). The
+ *  client uses this so the sign-in UI only shows buttons that will work. */
+export function getConfiguredProviders(): Provider[] {
+  return (Object.keys(PROVIDERS) as Provider[]).filter((p) =>
+    Boolean(PROVIDERS[p].clientId && PROVIDERS[p].clientSecret),
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Base URL + redirect URI
 // ---------------------------------------------------------------------------

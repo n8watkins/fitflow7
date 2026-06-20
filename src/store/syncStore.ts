@@ -18,7 +18,10 @@ interface SyncState {
   lastSyncedAt: number | null
   /** Bumped after a pull merges remote data so data-display pages re-read storage. */
   dataVersion: number
+  /** OAuth providers the backend has configured (from /api/me); UI shows only these. */
+  providers: string[]
   setUser: (user: AuthUser | null) => void
+  setProviders: (providers: string[]) => void
   setAuthLoaded: () => void
   setStatus: (status: SyncStatus) => void
   markSynced: () => void
@@ -31,7 +34,9 @@ export const useSyncStore = create<SyncState>((set) => ({
   status: 'idle',
   lastSyncedAt: null,
   dataVersion: 0,
+  providers: [],
   setUser: (user) => set({ user }),
+  setProviders: (providers) => set({ providers }),
   setAuthLoaded: () => set({ authLoaded: true }),
   setStatus: (status) => set({ status }),
   markSynced: () => set({ status: 'synced', lastSyncedAt: Date.now() }),

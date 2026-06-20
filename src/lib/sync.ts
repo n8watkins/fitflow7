@@ -109,8 +109,9 @@ function scheduleSync(delayMs = 1200): void {
 export async function bootstrapAuth(): Promise<void> {
   try {
     const res = await fetch('/api/me', { credentials: 'include' })
-    const data = (await res.json()) as { user: AuthUser | null }
+    const data = (await res.json()) as { user: AuthUser | null; providers?: string[] }
     useSyncStore.getState().setUser(data.user ?? null)
+    useSyncStore.getState().setProviders(data.providers ?? [])
     if (data.user) void sync()
   } catch {
     // Offline or no backend — stay signed out, app works locally.

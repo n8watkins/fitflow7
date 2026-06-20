@@ -20,6 +20,7 @@ function AccountSection() {
   const user = useSyncStore((s) => s.user)
   const authLoaded = useSyncStore((s) => s.authLoaded)
   const lastSyncedAt = useSyncStore((s) => s.lastSyncedAt)
+  const providers = useSyncStore((s) => s.providers)
   const [token, setToken] = useState<string | null>(null)
   const [tokenBusy, setTokenBusy] = useState(false)
 
@@ -90,20 +91,19 @@ function AccountSection() {
                 )}
               </div>
             </div>
+          ) : providers.length === 0 ? (
+            <div className="text-sm text-slate-500">Sign-in isn’t available right now.</div>
           ) : (
             <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => loginWith('github')}
-                className="rounded-lg border border-edge bg-card px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-card-hover"
-              >
-                Sign in with GitHub
-              </button>
-              <button
-                onClick={() => loginWith('google')}
-                className="rounded-lg border border-edge bg-card px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-card-hover"
-              >
-                Sign in with Google
-              </button>
+              {providers.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => loginWith(p as 'github' | 'google')}
+                  className="rounded-lg border border-edge bg-card px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-card-hover"
+                >
+                  Sign in with {p === 'github' ? 'GitHub' : p === 'google' ? 'Google' : p}
+                </button>
+              ))}
             </div>
           )}
         </div>
