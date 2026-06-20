@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeStats } from '../src/lib/stats'
+import { computeStats, computeInsights } from '../src/lib/stats'
 import type { WorkoutSession } from '../src/types'
 
 // Sessions are built relative to "now" so streak assertions are date-agnostic.
@@ -65,5 +65,48 @@ describe('computeStats', () => {
     expect(s.currentStreak).toBe(0)
     expect(s.longestStreak).toBe(0)
     expect(s.lastWorkoutDate).toBeUndefined()
+  })
+})
+
+function todayKeyLocal(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+describe('computeInsights', () => {
+  it('weekly has 12 buckets oldest->newest, counting the current week last', () => {
+    const ins = computeInsights([sessionOn(0), sessionOn(0)])
+    expect(ins.weekly).toHaveLength(12)
+    expect(ins.weekly[11].workouts).toBe(2)
+  })
+
+  it('weekday distribution has 7 entries summing to completed count', () => {
+    const ins = computeInsights([sessionOn(0), sessionOn(1), sessionOn(2), sessionOn(0, false)])
+    expect(ins.weekdayCounts).toHaveLength(7)
+    expect(ins.weekdayCounts.reduce((a, b) => a + b, 0)).toBe(3) // abandoned excluded
+  })
+
+  it('completion rate is completed / all sessions', () => {
+    const ins = computeInsights([sessionOn(0), sessionOn(1, false)])
+    expect(ins.completionRate).toBe(0.5)
+    expect(ins.totalSessions).toBe(2)
+  })
+
+  it('heatmap is week-aligned and ends on today', () => {
+    const ins = computeInsights([sessionOn(0)], { heatmapWeeks: 4 })
+    const last = ins.heatmap[ins.heatmap.length - 1]
+    expect(last.date).toBe(todayKeyLocal())
+    expect(last.count).toBe(1)
+    expect(ins.heatmap.length).toBeGreaterThanOrEqual(7)
+  })
+
+  it('top routines are ranked by completed count', () => {
+    const named = (name: string): WorkoutSession => ({ ...sessionOn(0), routineName: name })
+    const ins = computeInsights(
+      [named('A'), named('A'), named('A'), named('B'), named('B'), named('C')],
+      { topN: 2 },
+    )
+    expect(ins.topRoutines.map((r) => r.name)).toEqual(['A', 'B'])
+    expect(ins.topRoutines[0].count).toBe(3)
   })
 })

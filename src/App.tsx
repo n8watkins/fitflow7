@@ -5,6 +5,7 @@ import Player from './pages/Player'
 import RoutineEditor from './pages/RoutineEditor'
 import Library from './pages/Library'
 import History from './pages/History'
+import Insights from './pages/Insights'
 import Settings from './pages/Settings'
 import { bootstrapAuth, startSyncListeners } from './lib/sync'
 import { useSyncStore } from './store/syncStore'
@@ -13,6 +14,7 @@ const NAV = [
   { to: '/', label: 'Dashboard' },
   { to: '/library', label: 'Exercises' },
   { to: '/history', label: 'History' },
+  { to: '/insights', label: 'Insights' },
   { to: '/settings', label: 'Settings' },
 ]
 
@@ -53,6 +55,7 @@ function Shell() {
           <Route path="/routines/:routineId/edit" element={<RoutineEditor />} />
           <Route path="/library" element={<Library />} />
           <Route path="/history" element={<History />} />
+          <Route path="/insights" element={<Insights />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

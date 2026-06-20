@@ -1,6 +1,38 @@
 import type { Stats, WorkoutSession } from '../types'
 
 // ---------------------------------------------------------------------------
+// Insights (Phase 3a) — richer aggregations for the /insights page. Derived
+// types live here (not in the shared contract) since they are view-model only.
+// ---------------------------------------------------------------------------
+
+export interface WeeklyPoint {
+  /** Monday (local) of the week, 'YYYY-MM-DD'. */
+  weekStart: string
+  workouts: number
+  minutes: number
+}
+export interface HeatmapDay {
+  date: string
+  count: number
+}
+export interface RoutineCount {
+  name: string
+  count: number
+}
+export interface Insights {
+  /** Oldest → newest, exactly `weeks` buckets (Monday-started). */
+  weekly: WeeklyPoint[]
+  /** 7 entries, Monday → Sunday. */
+  weekdayCounts: number[]
+  /** Week-aligned (starts on a Monday); index i → row i%7 (Mon..Sun), col ⌊i/7⌋. */
+  heatmap: HeatmapDay[]
+  topRoutines: RoutineCount[]
+  /** completed / all sessions, 0..1. */
+  completionRate: number
+  totalSessions: number
+}
+
+// ---------------------------------------------------------------------------
 // Date helpers (local time, not UTC)
 // ---------------------------------------------------------------------------
 
@@ -163,5 +195,98 @@ export function computeStats(sessions: WorkoutSession[]): Stats {
     workoutsThisWeek,
     workoutsThisMonth,
     lastWorkoutDate,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// computeInsights
+// ---------------------------------------------------------------------------
+
+/** The last `count` Monday date-keys, oldest → newest (this week's Monday last). */
+function weekStarts(count: number): string[] {
+  const monday = parseKey(isoWeekKey(new Date()))
+  const out: string[] = []
+  for (let i = count - 1; i >= 0; i--) {
+    const d = new Date(monday)
+    d.setDate(monday.getDate() - i * 7)
+    out.push(dayKey(d))
+  }
+  return out
+}
+
+/** Day-keys from the Monday `weeks-1` weeks ago through today (week-aligned). */
+function heatmapDayKeys(weeks: number): string[] {
+  const today = new Date()
+  const start = parseKey(isoWeekKey(today))
+  start.setDate(start.getDate() - (weeks - 1) * 7)
+  const out: string[] = []
+  const cursor = new Date(start)
+  while (cursor <= today) {
+    out.push(dayKey(cursor))
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return out
+}
+
+export function computeInsights(
+  sessions: WorkoutSession[],
+  opts: { weeks?: number; heatmapWeeks?: number; topN?: number } = {},
+): Insights {
+  const weeks = opts.weeks ?? 12
+  const heatmapWeeks = opts.heatmapWeeks ?? 17
+  const topN = opts.topN ?? 5
+  const completed = sessions.filter((s) => s.completed)
+
+  // Weekly workouts + minutes, bucketed by ISO week (Monday-started).
+  const weekBuckets = new Map<string, { workouts: number; minutes: number }>()
+  for (const key of weekStarts(weeks)) weekBuckets.set(key, { workouts: 0, minutes: 0 })
+  for (const s of completed) {
+    const bucket = weekBuckets.get(isoWeekKey(new Date(s.startedAt)))
+    if (bucket) {
+      bucket.workouts++
+      bucket.minutes += s.durationSeconds / 60
+    }
+  }
+  const weekly: WeeklyPoint[] = [...weekBuckets.entries()].map(([weekStart, b]) => ({
+    weekStart,
+    workouts: b.workouts,
+    minutes: Math.round(b.minutes),
+  }))
+
+  // Weekday distribution, Monday → Sunday.
+  const weekdayCounts = [0, 0, 0, 0, 0, 0, 0]
+  for (const s of completed) {
+    const day = new Date(s.startedAt).getDay() // 0 = Sun .. 6 = Sat
+    weekdayCounts[(day + 6) % 7]++
+  }
+
+  // Per-day counts for the heatmap.
+  const dayCounts = new Map<string, number>()
+  for (const s of completed) {
+    const k = dayKey(new Date(s.startedAt))
+    dayCounts.set(k, (dayCounts.get(k) ?? 0) + 1)
+  }
+  const heatmap: HeatmapDay[] = heatmapDayKeys(heatmapWeeks).map((date) => ({
+    date,
+    count: dayCounts.get(date) ?? 0,
+  }))
+
+  // Top routines by completed count.
+  const routineCounts = new Map<string, number>()
+  for (const s of completed) {
+    routineCounts.set(s.routineName, (routineCounts.get(s.routineName) ?? 0) + 1)
+  }
+  const topRoutines: RoutineCount[] = [...routineCounts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, topN)
+
+  return {
+    weekly,
+    weekdayCounts,
+    heatmap,
+    topRoutines,
+    completionRate: sessions.length ? completed.length / sessions.length : 0,
+    totalSessions: sessions.length,
   }
 }
