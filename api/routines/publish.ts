@@ -59,6 +59,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const ownerName = typeof body.ownerName === 'string' ? body.ownerName.trim() || null : null
+
+  // Length caps — keep stored/served payloads bounded (abuse / DoS guard).
+  if (
+    name.length > 100 ||
+    (description !== null && description.length > 1000) ||
+    (ownerName !== null && ownerName.length > 60) ||
+    exerciseIds.length > 60 ||
+    exerciseIds.some((id) => id.length > 64)
+  ) {
+    return res.status(400).json({ error: 'routine too large' })
+  }
+
   const slug = crypto.randomUUID()
   const createdAt = new Date().toISOString()
 

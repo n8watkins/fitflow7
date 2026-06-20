@@ -110,7 +110,7 @@ export async function bootstrapAuth(): Promise<void> {
   try {
     const res = await fetch('/api/me', { credentials: 'include' })
     const data = (await res.json()) as { user: AuthUser | null }
-    useSyncStore.getState().setUser(data.user)
+    useSyncStore.getState().setUser(data.user ?? null)
     if (data.user) void sync()
   } catch {
     // Offline or no backend — stay signed out, app works locally.

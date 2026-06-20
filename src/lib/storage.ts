@@ -293,7 +293,7 @@ export function applyRemoteRoutines(remote: Routine[]): void {
   const byId = new Map(getRoutinesRaw().map((r) => [r.id, r]))
   for (const r of remote) {
     const existing = byId.get(r.id)
-    if (!existing || (r.updatedAt ?? '') >= (existing.updatedAt ?? '')) {
+    if (!existing || (r.updatedAt ?? '') > (existing.updatedAt ?? '')) {
       byId.set(r.id, { ...r, isSystem: false, dirty: false })
     }
   }
@@ -305,7 +305,7 @@ export function applyRemoteSessions(remote: WorkoutSession[]): void {
   const byId = new Map(readJSON<WorkoutSession[]>(KEY.sessions, []).map((s) => [s.id, s]))
   for (const s of remote) {
     const existing = byId.get(s.id)
-    if (!existing || (s.updatedAt ?? '') >= (existing.updatedAt ?? '')) {
+    if (!existing || (s.updatedAt ?? '') > (existing.updatedAt ?? '')) {
       byId.set(s.id, { ...s, dirty: false })
     }
   }

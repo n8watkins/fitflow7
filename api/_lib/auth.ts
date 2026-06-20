@@ -48,7 +48,9 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
         Accept: 'application/vnd.github+json',
         'User-Agent': 'fitflow7',
       }
-      const user = (await (await fetch('https://api.github.com/user', { headers })).json()) as {
+      const userRes = await fetch('https://api.github.com/user', { headers })
+      if (!userRes.ok) throw new Error(`GitHub profile fetch failed: ${userRes.status}`)
+      const user = (await userRes.json()) as {
         id: number
         name: string | null
         login: string
@@ -57,10 +59,15 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
       }
       let email = user.email
       if (!email) {
-        const emails = (await (
-          await fetch('https://api.github.com/user/emails', { headers })
-        ).json()) as Array<{ email: string; primary: boolean; verified: boolean }>
-        email = emails.find((e) => e.primary && e.verified)?.email ?? emails[0]?.email ?? null
+        const emailsRes = await fetch('https://api.github.com/user/emails', { headers })
+        if (emailsRes.ok) {
+          const emails = (await emailsRes.json()) as Array<{
+            email: string
+            primary: boolean
+            verified: boolean
+          }>
+          email = emails.find((e) => e.primary && e.verified)?.email ?? emails[0]?.email ?? null
+        }
       }
       return {
         providerId: String(user.id),
@@ -77,11 +84,16 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     tokenUrl: 'https://oauth2.googleapis.com/token',
     scope: 'openid email profile',
     async fetchProfile(accessToken) {
-      const u = (await (
-        await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        })
-      ).json()) as { id: string; email: string | null; name: string | null; picture: string | null }
+      const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!res.ok) throw new Error(`Google profile fetch failed: ${res.status}`)
+      const u = (await res.json()) as {
+        id: string
+        email: string | null
+        name: string | null
+        picture: string | null
+      }
       return { providerId: u.id, email: u.email, name: u.name, avatarUrl: u.picture }
     },
   },
@@ -110,7 +122,15 @@ export function getRedirectUri(req: VercelRequest): string {
  *  browsers treat as cross-origin — i.e. prevents an open redirect. */
 export function sanitizeReturnTo(raw: string | undefined): string {
   if (!raw || !raw.startsWith('/')) return '/'
-  if (raw.startsWith('//') || raw.startsWith('/\\')) return '/'
+  // Reject control chars / whitespace (browsers may strip them mid-parse) and
+  // backslashes, then any protocol-relative form — leaving only a same-origin
+  // absolute path. Blocks open redirects like "//evil.com" and "/\evil.com".
+  if (raw.includes('\\')) return '/'
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw.charCodeAt(i)
+    if (c <= 0x20 || c === 0x7f) return '/'
+  }
+  if (raw.startsWith('//')) return '/'
   return raw
 }
 

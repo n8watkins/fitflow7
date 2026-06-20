@@ -1,6 +1,7 @@
 #!/usr/bin/env -S npx tsx
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 
 // ---------------------------------------------------------------------------
@@ -222,7 +223,7 @@ server.registerTool(
     const startedAt = args.startedAt ?? new Date().toISOString()
     const completedAt = new Date().toISOString()
     const session: Session = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       routineName: args.routineName,
       startedAt,
       completedAt,

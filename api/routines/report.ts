@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       sql: `UPDATE public_routines
             SET reports = reports + 1,
                 blocked = CASE WHEN reports + 1 >= ? THEN 1 ELSE blocked END
-            WHERE slug = ?`,
+            WHERE slug = ? AND blocked = 0`,
       args: [BLOCK_THRESHOLD, slug],
     })
     res.status(200).json({ ok: true })

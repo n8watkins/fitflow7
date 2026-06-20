@@ -67,7 +67,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         new Date().toISOString(),
       ],
     })
-    const userId = result.rows[0]?.id as string
+    const userId = result.rows[0]?.id as string | undefined
+    if (!userId) return res.status(500).send('Sign-in failed. Please try again.')
 
     setSession(res, userId)
     res.redirect(302, sanitizeReturnTo(saved.returnTo))

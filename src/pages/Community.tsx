@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useSyncStore } from '../store/syncStore'
 import { getRoutines, newId, saveRoutine } from '../lib/storage'
+import { EXERCISE_MAP } from '../data/exercises'
 import {
   listPublicRoutines,
   publishRoutine,
@@ -72,14 +73,22 @@ function PublishableRow({ routine, ownerName }: { routine: Routine; ownerName?: 
 function PublicRow({ routine }: { routine: PublicRoutine }) {
   const [added, setAdded] = useState(false)
   const [reported, setReported] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   function handleClone() {
+    // Keep only exercises this app version knows, so the cloned routine is
+    // actually playable (a community routine could reference unknown ids).
+    const known = routine.exerciseIds.filter((id) => EXERCISE_MAP[id])
+    if (known.length === 0) {
+      setError('Uses exercises not in your version')
+      return
+    }
     const stamp = new Date().toISOString()
     const cloned: Routine = {
       id: newId(),
       name: `${routine.name} (copy)`,
       description: routine.description,
-      exerciseIds: [...routine.exerciseIds],
+      exerciseIds: known,
       workSeconds: routine.workSeconds,
       restSeconds: routine.restSeconds,
       rounds: routine.rounds,
@@ -110,6 +119,7 @@ function PublicRow({ routine }: { routine: PublicRoutine }) {
         <div className="mt-0.5 text-sm text-slate-400">{subtitle(routine)}</div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        {error && <span className="text-xs text-red-400">{error}</span>}
         <button
           type="button"
           onClick={handleClone}
