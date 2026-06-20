@@ -214,3 +214,29 @@ The exception that proves the rule is sign-in, which needs neither.
 **Google Sheets / Google Tasks — Founder-toys, skip.** Each needs a sensitive scope → verification *and* server-side tokens (Phase 1), for value already covered by cheaper, built paths: CSV/JSON export and the MCP server (Sheets), and `.ics`/local PWA notifications (Tasks).
 
 **Recommendation.** Do, in order: (1) **Sign in with Google** — bundle into B1 (zero code, no verification); (2) **".ics / Add to Calendar"** — highest value-per-effort, no Google project; (3) **Google Drive appData backup** — only if wanted. **Skip** Google Fit (permanent), and Calendar-API/Sheets/Tasks (sensitive-scope verification + Phase 1 for value cheaper paths already cover). The through-line: except sign-in and the no-API `.ics` link, every Google integration costs a **verification review** and **depends on Phase 1 being live (B1)**.
+
+## Real exercise visuals — licensed-source survey + integration plan
+
+*Status: not started, proposed. Effort: S–M. License facts verified against primary sources (license files/APIs), not memory.* The app ships an emoji per exercise (`Exercise.icon`); this is about optional real-movement visuals with the emoji kept as a guaranteed fallback.
+
+**The constraint:** FitFlow's 24 exercises are almost all bodyweight/no-equipment, while most "exercise databases" are gym-equipment-heavy — so coverage of *our specific movements* matters more than database size. Honest reality: **no single free set cleanly covers all 24** — about **13–15** get an accurate image; the cardio/isometric/stability moves (jumping jacks, wall sit, high knees, dead bug, bird dog, shoulder taps, plank up-downs, knee push-up, march in place, push-up rotation) have no clean match and keep the emoji.
+
+| Source | License — commercial? redistribute/bundle? | Format | Covers 24? | Notes |
+|---|---|---|---|---|
+| **yuhonas/free-exercise-db** | **Unlicense (public domain)** — commercial ✅, bundle ✅, **no attribution, no ShareAlike** | Photos (start/end), ~40 KB | ~13–15 | **The clean choice.** CDN-verified; hand-pick matches (don't fuzzy-map — it's equipment-heavy) |
+| **Everkinetic** (upstream of wger) | **CC-BY-SA-4.0** — commercial ✅, bundle ✅ **but attribution + ShareAlike** | Illustrations: PNG + scalable SVG, multi-frame | good for strength moves | Real obligation; fine for personal, decide before a store/closed-source launch |
+| **wger** media | per-image **CC-BY-SA 3.0/4.0** (verified via its license API) | mostly illustrations | decent | attribution + ShareAlike, **per-image** — verify each |
+| **Pexels / Unsplash** | commercial ✅, attribution optional, **no re-publishing the library** | stock photos | hit-or-miss | unreliable for *named* movements; runtime nicety only |
+| **MuscleWiki** | **proprietary, no redistribution license** | animated GIFs | high (technically) | **Do not use — infringement.** (Nice GIFs, but unlicensed.) |
+| Feeel / Open Workout | **unconfirmed** (repo host blocked) | illustrations | bodyweight-focused | verify per-asset before use |
+
+**Recommendation:** **yuhonas/free-exercise-db (Unlicense)**, bundled — public domain, no attribution/ShareAlike, tiny files. Hand-pick the ~13–15 images that genuinely match; leave the rest on the emoji. Optionally add **Everkinetic SVGs** for gaps *only* if accepting CC-BY-SA attribution + ShareAlike. **Skip** MuscleWiki (illegal), Pexels/Unsplash as primary, Feeel (license unconfirmed).
+
+**Integration (grounded in the code):**
+1. `src/types.ts`: add optional `imageUrl?: string` (+ `imageCredit?: string` for CC-BY-SA attribution) to `Exercise` — backward-compatible; keep `icon` as fallback (update PLAN.md per its contract note).
+2. Bundle hand-picked JPGs in `public/exercises/<slug>.jpg` (offline-safe; survives PWA/Capacitor). ~15 × ~40 KB ≈ <1 MB, lazy-loaded.
+3. `src/data/exercises.ts`: set `imageUrl` only on exercises with a verified-correct image.
+4. Render: where `icon` shows large (player + cards), use `<img loading="lazy" onError={→ emoji}>` when present, else the emoji.
+5. Attribution: **none** with free-exercise-db; if any CC-BY-SA asset is used, add a Settings "Credits" line and honor ShareAlike.
+
+**Effort:** S for the free-exercise-db photos (optional field + ~15 curated files + render-with-fallback). M if adding Everkinetic illustrations (attribution/ShareAlike bookkeeping) or a runtime Pexels fallback. **Obligations:** none if it sticks to free-exercise-db; CC-BY-SA sources add attribution + ShareAlike (decide deliberately before any store/closed-source launch).
