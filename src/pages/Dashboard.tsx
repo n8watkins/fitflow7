@@ -5,6 +5,7 @@ import { CLASSIC_7 } from '../data/routines'
 import { getLastRoutineId, getRoutine, getRoutines, getSessions } from '../lib/storage'
 import { computeStats } from '../lib/stats'
 import { formatRelativeDay } from '../lib/format'
+import ScheduleWorkout from '../components/ScheduleWorkout'
 
 function routineSubtitle(r: { exerciseIds: string[]; workSeconds: number; restSeconds: number; rounds: number }): string {
   return `${r.exerciseIds.length} exercises · ${r.workSeconds}s work / ${r.restSeconds}s rest · ${r.rounds} round${r.rounds > 1 ? 's' : ''}`
@@ -164,6 +165,7 @@ export default function Dashboard() {
                 >
                   Edit
                 </Link>
+                <ScheduleWorkout routine={routine} />
               </div>
             </div>
           ))}
