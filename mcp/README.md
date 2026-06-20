@@ -13,6 +13,9 @@ is no second database and no extra trust boundary.
 | `get_stats` | Totals, current/longest streak, workouts this month |
 | `list_routines` | Your saved (non-system) routines |
 | `log_session` | Record a completed workout done outside the app |
+| `compare_periods` | This week vs last week and this month vs last month (counts, minutes, deltas) |
+| `get_personal_records` | Personal bests: total workouts, longest streak, longest session, best week |
+| `get_routine_detail` | Timing, exercise count, and estimated active time for one routine (`name`) |
 
 ## Prerequisites
 
