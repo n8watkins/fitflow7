@@ -74,6 +74,25 @@ const SCHEMA = [
      audio_cues_enabled   INTEGER NOT NULL,
      updated_at           TEXT NOT NULL
    )`,
+  // Phase 3c: bounded, content-only community routine library. Each row is an
+  // immutable published snapshot of a routine. `reports` accumulates abuse flags;
+  // a row auto-hides (blocked = 1) once it reaches the threshold. No PII beyond a
+  // display name is stored here (owner_id is for ownership/abuse caps only).
+  `CREATE TABLE IF NOT EXISTS public_routines (
+     slug          TEXT PRIMARY KEY,
+     owner_id      TEXT NOT NULL,
+     owner_name    TEXT,
+     name          TEXT NOT NULL,
+     description   TEXT,
+     exercise_ids  TEXT NOT NULL,
+     work_seconds  INTEGER NOT NULL,
+     rest_seconds  INTEGER NOT NULL,
+     rounds        INTEGER NOT NULL,
+     created_at    TEXT NOT NULL,
+     reports       INTEGER NOT NULL DEFAULT 0,
+     blocked       INTEGER NOT NULL DEFAULT 0
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_public_routines_blocked_created ON public_routines (blocked, created_at)`,
 ]
 
 /** Ensures the schema exists. Memoized so concurrent requests share one bootstrap. */
