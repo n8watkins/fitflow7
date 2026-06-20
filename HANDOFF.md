@@ -142,7 +142,7 @@ event to avoid a sync loop.
 - `src/store/timerStore.ts` — Zustand workout engine (phase machine, interval, session save, cueEvent, drift correction).
 - `src/lib/storage.ts` — localStorage CRUD (`fitflow.*` keys); also sync merge (`applyRemote*`), the dirty queue, and JSON `exportData`/`importData`/`isExportBundle` (Settings → "Data").
 - `src/lib/stats.ts` — streaks/stats.
-- `src/lib/healthConnect.ts` — Phase 2 seam: `writeWorkoutToHealth()` (no-op on web; native build registers `window.fitflowNativeHealth`). Called from `timerStore` on complete. `capacitor.config.json` + `ANDROID.md` cover the native sideload build (user-run).
+- `src/lib/healthConnect.ts` — Phase 2 seam: `writeWorkoutToHealth()` (no-op on web; native build registers `window.fitflowNativeHealth`). Called from `timerStore` on complete. `src/native-health.ts` — real Health Connect writer (ActiveCaloriesBurned), loaded only when `VITE_NATIVE=true` (gated in `main.tsx`), so it stays out of the web bundle. `capacitor.config.json` + `ANDROID.md` cover the native sideload build (user-run: `cap add android` + APK in Android Studio).
 - `src/lib/format.ts` — shared formatters: `fmtDuration`, `dayKey`, `formatDateTime`, `formatRelativeDay`.
 - `src/lib/audio.ts` — WebAudio cues (singleton AudioContext, closes on beforeunload).
 - `src/data/exercises.ts` — 24 exercises + EXERCISE_MAP.

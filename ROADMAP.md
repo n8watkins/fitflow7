@@ -65,19 +65,23 @@ Built across commits in session 4. Enable via `SETUP_SYNC.md`.
   minted PAT): all four tools, read + write round-trip. Lights up for real data
   once Phase 1 sync is configured. See `mcp/README.md`.
 
-## Phase 2 — Android + Health Connect 🟡 SCAFFOLDED (native build is user-run)
+## Phase 2 — Android + Health Connect 🟢 CODE COMPLETE (APK build is user-run)
 
 Decision (user): Capacitor native shell + **Health Connect write**, sideloaded —
 no Play Store. The PWA is also already installable as-is.
 
-- In the repo: `capacitor.config.json`; `src/lib/healthConnect.ts` — a build-safe
-  seam (no native deps; web stays clean) already called from the workout-complete
-  path in `timerStore.ts`; full `ANDROID.md` build/sideload guide.
-- Run on the user's machine (can't be built/tested from CI here): `npm i
-  @capacitor/* capacitor-health-connect`, add `src/native-health.ts` (registers
-  `window.fitflowNativeHealth`), `npx cap add android`, manifest permissions,
-  build APK in Android Studio, sideload. All steps in `ANDROID.md`.
-- Future: also read other apps' workouts back; calorie estimate.
+- **In the repo, verified:** Capacitor 5 + `capacitor-health-connect` deps
+  installed; `capacitor.config.json`; `src/lib/healthConnect.ts` seam called from
+  `timerStore` on complete; `src/native-health.ts` (real writer) gated by
+  `VITE_NATIVE` in `main.tsx`. Both builds verified — web bundle excludes the
+  plugin (byte-identical), `VITE_NATIVE=true` build bundles it cleanly.
+- **Record type:** plugin v0.7 has no `ExerciseSession`, so workouts are written
+  as `ActiveCaloriesBurned` (duration-based kcal estimate; tune in
+  `native-health.ts`).
+- **Remaining (needs Android Studio + a phone, can't run from CI):**
+  `VITE_NATIVE=true npm run build` → `npx cap add android` → manifest permission
+  → build APK → sideload. All steps in `ANDROID.md`.
+- Future: read other apps' data back; better calorie model.
 
 ## Cross-cutting (any phase)
 

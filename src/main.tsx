@@ -7,6 +7,13 @@ import { runMigrations } from './lib/storage'
 // Upgrade any stored data to the current schema before the app reads it.
 runMigrations()
 
+// Native (Capacitor) builds only: register the Health Connect writer. VITE_NATIVE
+// is unset in the web/Vercel build, so vite drops this branch and the native
+// plugin never enters the web bundle.
+if (import.meta.env.VITE_NATIVE === 'true') {
+  void import('./native-health')
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

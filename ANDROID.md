@@ -1,106 +1,59 @@
 # Android (Capacitor + Health Connect) — sideload build
 
-Turn the PWA into a sideloadable Android app that writes completed workouts to
-**Health Connect** (Google/Samsung Health ecosystem). No Play Store, no $25 fee.
+Turn the app into a sideloadable Android app that writes finished workouts to
+**Health Connect**. No Play Store, no $25 fee.
 
-What's already in the repo:
+## What's already done in the repo
 
+- **Capacitor + plugin deps installed** (`@capacitor/core`, `@capacitor/cli`,
+  `@capacitor/android`, `capacitor-health-connect`), all pinned to Capacitor 5
+  (the plugin requires it).
 - `capacitor.config.json` — app id `dev.n8builds.fitflow7`, bundles `dist/`.
-- `src/lib/healthConnect.ts` — a build-safe seam. The workout-complete path
-  (`timerStore.ts`) already calls `writeWorkoutToHealth()`; on web it's a no-op.
-  The native build below registers `window.fitflowNativeHealth` to fulfill it.
+- `src/lib/healthConnect.ts` — build-safe seam; `timerStore` already calls it on
+  workout complete (no-op on web).
+- `src/native-health.ts` — the real native writer, registered on `window` and
+  loaded **only** in the native build (gated by `VITE_NATIVE` in `main.tsx`).
+  Verified to compile and bundle; it never enters the web/Vercel bundle.
 
-Everything below runs on **your** machine — building/running an APK needs the
-Android toolchain and a device, which can't be done from this repo's CI.
+> **Record type note:** `capacitor-health-connect` v0.7 has no `ExerciseSession`
+> record, so a workout is written as **ActiveCaloriesBurned** over the workout
+> window. Calories are a rough duration estimate (`CALORIES_PER_MINUTE` in
+> `native-health.ts`) since the app has no body-weight input — tune as you like.
+
+So the web side is finished. Everything below runs on **your** machine (it needs
+the Android toolchain + a device, which can't run from this repo's CI).
 
 ## Prerequisites (one time)
 
-- **Android Studio** (gives you the Android SDK + Gradle) and a **JDK 17**.
+- **Android Studio** (Android SDK + Gradle) and **JDK 17**.
 - A phone with **Health Connect** (built into Android 14+; older devices install
   it from the Play Store) and **USB debugging** enabled.
 
-## 1. Install Capacitor + the Health Connect plugin
-
-```bash
-npm install @capacitor/core @capacitor/cli @capacitor/android
-npm install capacitor-health-connect
-```
-
-## 2. Add the native Health Connect writer
-
-Create `src/native-health.ts`:
-
-```ts
-import { Capacitor } from '@capacitor/core'
-import { HealthConnect } from 'capacitor-health-connect'
-import type { WorkoutSession } from './types'
-
-// EXERCISE_TYPE constants come from androidx.health.connect ExerciseSessionRecord.
-// 56 = HIGH_INTENSITY_INTERVAL_TRAINING (good fit for a 7-minute workout).
-const EXERCISE_TYPE_HIIT = 56
-
-if (Capacitor.getPlatform() === 'android') {
-  window.fitflowNativeHealth = async (session: WorkoutSession) => {
-    const perm = await HealthConnect.requestHealthPermissions({
-      read: [],
-      write: ['ExerciseSession'],
-    })
-    if (!perm.hasAllPermissions) return
-    const start = new Date(session.startedAt)
-    const end = session.completedAt
-      ? new Date(session.completedAt)
-      : new Date(start.getTime() + session.durationSeconds * 1000)
-    await HealthConnect.insertRecords({
-      records: [
-        {
-          type: 'ExerciseSession',
-          startTime: start,
-          endTime: end,
-          exerciseType: EXERCISE_TYPE_HIIT,
-          title: session.routineName,
-        },
-      ],
-    })
-  }
-}
-```
-
-Import it once, **only for native builds**, near the top of `src/main.tsx`:
-
-```ts
-if (import.meta.env.VITE_NATIVE === 'true') {
-  await import('./native-health')
-}
-```
-
-Build the native bundle with that flag so the plugin is only pulled into the
-native build, never the web/Vercel build:
+## 1. Build the native web bundle
 
 ```bash
 VITE_NATIVE=true npm run build
 ```
 
-(`main.tsx` is currently sync; if you prefer not to make it async, instead import
-`./native-health` unconditionally and only run `npm run build` with the plugin
-installed — it tree-shakes to a no-op on platforms other than android.)
+This is the only build that includes the Health Connect plugin. (Plain
+`npm run build`, used by Vercel, deliberately excludes it.)
 
-## 3. Add the Android platform + sync
+## 2. Add the Android platform + sync
 
 ```bash
 npx cap add android
 npx cap sync android
 ```
 
-## 4. Declare Health Connect permissions
+## 3. Declare the Health Connect permission
 
 In `android/app/src/main/AndroidManifest.xml`, inside `<manifest>`:
 
 ```xml
-<uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
+<uses-permission android:name="android.permission.health.WRITE_ACTIVE_CALORIES_BURNED" />
 ```
 
-Health Connect also requires a permissions-rationale activity. Add inside
-`<application>`:
+Health Connect also wants a permissions-rationale activity. Inside `<application>`:
 
 ```xml
 <activity-alias
@@ -115,27 +68,31 @@ Health Connect also requires a permissions-rationale activity. Add inside
 </activity-alias>
 ```
 
-(See the plugin README for the exact, current permission set — Health Connect's
-manifest requirements change between Android versions.)
+(Confirm the current required manifest entries against the `capacitor-health-connect`
+README — Health Connect's requirements shift across Android versions.)
 
-## 5. Build + sideload
+## 4. Build the APK + sideload
 
 ```bash
-npx cap open android      # opens Android Studio
+npx cap open android        # opens Android Studio
 ```
 
 In Android Studio: **Build → Build APK(s)**, then install on the device
-(`adb install app/build/outputs/apk/debug/app-debug.apk`, or drag-drop). On first
-completed workout the app asks for Health Connect permission; after granting,
-sessions appear in Health Connect → Exercise.
+(`adb install app/build/outputs/apk/debug/app-debug.apk`, or drag-drop). On the
+first completed workout the app requests Health Connect permission; after you
+grant it, sessions show up in Health Connect → Active calories.
+
+## Re-deploying changes
+
+- After web changes: `VITE_NATIVE=true npm run build && npx cap sync android`,
+  then rebuild the APK.
+- Prefer always-latest without rebuilding the bundle? Set `server.url` to
+  `https://fitflow7.vercel.app` in `capacitor.config.json` — but then the Health
+  Connect plugin won't be present (the live site is the plain web build), so keep
+  the bundled approach if you want Health Connect.
 
 ## Notes
 
-- The app loads its bundled `dist/`. Re-run `npm run build && npx cap sync` after
-  web changes to refresh the native bundle. (Alternatively set `server.url` in
-  `capacitor.config.json` to `https://fitflow7.vercel.app` to always load the
-  live site — then you only rebuild the APK when native code changes.)
 - Cloud sync and the MCP server are independent of this — Health Connect is a
-  local device mirror of completed workouts.
-- This writes only. Reading other apps' workouts back would add `read` scopes and
-  a sync strategy — out of scope for now.
+  local device mirror of finished workouts.
+- Write-only for now. Reading other apps' data back would add `read` scopes.
