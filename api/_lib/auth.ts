@@ -105,6 +105,15 @@ export function getRedirectUri(req: VercelRequest): string {
   return `${getBaseUrl(req)}/api/auth/callback`
 }
 
+/** Restricts a post-login returnTo to a same-origin absolute path. Rejects
+ *  protocol-relative ("//evil.com") and backslash ("/\\evil.com") forms that
+ *  browsers treat as cross-origin — i.e. prevents an open redirect. */
+export function sanitizeReturnTo(raw: string | undefined): string {
+  if (!raw || !raw.startsWith('/')) return '/'
+  if (raw.startsWith('//') || raw.startsWith('/\\')) return '/'
+  return raw
+}
+
 // ---------------------------------------------------------------------------
 // Signed-token helpers (HMAC-SHA256 over a base64url JSON payload)
 // ---------------------------------------------------------------------------

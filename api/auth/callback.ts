@@ -5,6 +5,7 @@ import {
   clearOAuthState,
   getRedirectUri,
   readOAuthState,
+  sanitizeReturnTo,
   setSession,
 } from '../_lib/auth.js'
 import { ensureSchema, getDb } from '../_lib/db.js'
@@ -69,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userId = result.rows[0]?.id as string
 
     setSession(res, userId)
-    res.redirect(302, saved.returnTo || '/')
+    res.redirect(302, sanitizeReturnTo(saved.returnTo))
   } catch {
     res.status(500).send('Sign-in failed. Please try again.')
   }

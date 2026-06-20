@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { PROVIDERS, getRedirectUri, isProvider, setOAuthState } from '../_lib/auth.js'
+import { PROVIDERS, getRedirectUri, isProvider, sanitizeReturnTo, setOAuthState } from '../_lib/auth.js'
 
 // GET /api/auth/login?provider=github&returnTo=/settings
 // Starts the OAuth authorization-code flow: sets a signed state cookie and
@@ -15,8 +15,8 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const returnToRaw = Array.isArray(req.query.returnTo) ? req.query.returnTo[0] : req.query.returnTo
-  // Only allow same-origin relative paths as returnTo (no open redirect).
-  const returnTo = returnToRaw && returnToRaw.startsWith('/') ? returnToRaw : '/'
+  // Same-origin absolute path only — blocks protocol-relative open redirects.
+  const returnTo = sanitizeReturnTo(returnToRaw)
 
   const state = setOAuthState(res, provider, returnTo)
   const params = new URLSearchParams({
