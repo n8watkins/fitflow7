@@ -638,7 +638,9 @@ const IMAGE_SLUGS = new Set([
 ])
 
 export const EXERCISES: Exercise[] = RAW_EXERCISES.map((e) =>
-  IMAGE_SLUGS.has(e.slug) ? { ...e, imageUrl: `/exercises/${e.slug}.jpg` } : e,
+  IMAGE_SLUGS.has(e.slug)
+    ? { ...e, imageUrl: `/exercises/${e.slug}.jpg`, imageUrl2: `/exercises/${e.slug}-2.jpg` }
+    : e,
 )
 
 export const EXERCISE_MAP: Record<string, Exercise> = Object.fromEntries(

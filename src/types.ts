@@ -34,6 +34,8 @@ export type Exercise = {
   icon: string
   /** Optional bundled movement photo (public/exercises/<slug>.jpg); `icon` is the fallback. */
   imageUrl?: string
+  /** Optional second frame (end position); when present the two alternate as an animation. */
+  imageUrl2?: string
 }
 
 export type Routine = {
