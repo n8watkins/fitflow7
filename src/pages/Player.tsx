@@ -4,6 +4,7 @@ import { useTimerStore } from '../store/timerStore'
 import { getRoutine, getSettings } from '../lib/storage'
 import { EXERCISE_MAP } from '../data/exercises'
 import { CLASSIC_7 } from '../data/routines'
+import ExerciseVisual from '../components/ExerciseVisual'
 import {
   cueStart,
   cueWorkStart,
@@ -468,7 +469,11 @@ export default function Player() {
           <div
             className={`rounded-2xl border p-5 text-center transition-colors ${PHASE_BG[phase]}`}
           >
-            <div className="mb-3 text-7xl leading-none">{currentExercise.icon}</div>
+            <ExerciseVisual
+              exercise={currentExercise}
+              imgClassName="mx-auto mb-3 max-h-44 w-full rounded-2xl bg-surface object-contain"
+              emojiClassName="mb-3 inline-block text-7xl leading-none"
+            />
             <h2 className="text-xl font-bold text-slate-100">{currentExercise.name}</h2>
             {currentExercise.instructions[0] && (
               <p className="mt-2 text-sm leading-relaxed text-slate-400 line-clamp-2">

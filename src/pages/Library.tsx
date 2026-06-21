@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { EXERCISES, EXERCISE_MAP } from '../data/exercises'
 import type { Category, Difficulty, Exercise } from '../types'
+import ExerciseVisual from '../components/ExerciseVisual'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -99,8 +100,8 @@ function ExerciseCard({ exercise: ex, isExpanded, onToggle, onJump }: ExerciseCa
         <div className="p-6">
           <div className="flex items-start gap-5">
             {/* Icon */}
-            <div className="flex-shrink-0 flex h-20 w-20 items-center justify-center rounded-2xl bg-surface text-5xl">
-              {ex.icon}
+            <div className="flex-shrink-0 flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-surface text-5xl">
+              <ExerciseVisual exercise={ex} imgClassName="h-full w-full object-cover" />
             </div>
 
             {/* Name + badges */}
@@ -219,8 +220,8 @@ function ExerciseCard({ exercise: ex, isExpanded, onToggle, onJump }: ExerciseCa
         // ---- Collapsed card ----
         <div className="flex flex-col p-5 h-full">
           {/* Icon */}
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-surface text-4xl">
-            {ex.icon}
+          <div className="mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-surface text-4xl">
+            <ExerciseVisual exercise={ex} imgClassName="h-full w-full object-cover" />
           </div>
 
           {/* Name */}

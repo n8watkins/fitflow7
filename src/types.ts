@@ -32,6 +32,8 @@ export type Exercise = {
   commonMistake?: string
   /** MVP visual placeholder: an emoji rendered large in the player/cards. */
   icon: string
+  /** Optional bundled movement photo (public/exercises/<slug>.jpg); `icon` is the fallback. */
+  imageUrl?: string
 }
 
 export type Routine = {

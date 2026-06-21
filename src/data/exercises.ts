@@ -1,6 +1,6 @@
 import type { Exercise } from '../types'
 
-export const EXERCISES: Exercise[] = [
+const RAW_EXERCISES: Exercise[] = [
   // Classic 12
   {
     id: 'jumping-jacks',
@@ -628,6 +628,18 @@ export const EXERCISES: Exercise[] = [
     icon: '🔁'
   }
 ]
+
+// Exercises with a bundled real-movement photo in public/exercises/<slug>.jpg
+// (licensed public-domain, from free-exercise-db). The rest keep their emoji.
+const IMAGE_SLUGS = new Set([
+  'push-ups', 'crunches', 'step-ups', 'squats', 'triceps-dips', 'plank', 'lunges',
+  'side-plank', 'mountain-climbers', 'glute-bridge', 'dead-bug', 'incline-push-up',
+  'reverse-lunges',
+])
+
+export const EXERCISES: Exercise[] = RAW_EXERCISES.map((e) =>
+  IMAGE_SLUGS.has(e.slug) ? { ...e, imageUrl: `/exercises/${e.slug}.jpg` } : e,
+)
 
 export const EXERCISE_MAP: Record<string, Exercise> = Object.fromEntries(
   EXERCISES.map(e => [e.id, e])
