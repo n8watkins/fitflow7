@@ -36,7 +36,11 @@ See `HANDOFF.md` for current session state, `SETUP_SYNC.md` to enable sync, and
 - Per-record `dirty` marker + `getPendingSync()`/`markSynced()` queue seam.
 - No behavior change; `tsc`/`lint`/`build` clean.
 
-## Phase 1 — Accounts + Cloud Sync ✅ BUILT (dormant until configured)
+## Phase 1 — Accounts + Cloud Sync ✅ LIVE (configured 2026-06-20)
+
+> Turso + GitHub OAuth + SESSION_SECRET are set in Vercel and deployed; GitHub
+> sign-in is active. Pending only the owner's first real two-browser verification.
+> (Original "dormant" build notes below.)
 
 Built across commits in session 4. Enable via `SETUP_SYNC.md`.
 - Backend: Turso (libSQL) via `@libsql/client`; Vercel serverless functions in

@@ -1,5 +1,10 @@
 # FitFlow 7 — Session Handoff (2026-06-12, session 4)
 
+> ⚠️ **HISTORICAL — superseded by `STATUS.md`.** Since this was written: Phases
+> 1.5/2/3a/3b/3c shipped, cloud sync is now **live/configured**, plus
+> Add-to-Calendar and animated exercise photos. Read `STATUS.md` first for the
+> current state; this file is kept for session-4 history.
+
 Zero-context handoff. Read this file and `PLAN.md` in full before doing anything.
 
 ## Session 4 update (2026-06-12): Phase 0 + Phase 1 built

@@ -1,5 +1,9 @@
 # UNBLOCK — turn the cloud on (do this together, ~15 min)
 
+> ✅ **DONE (2026-06-20).** Turso + GitHub OAuth + SESSION_SECRET are set in Vercel
+> and deployed; GitHub sign-in is live. Kept as reference (e.g. to add Google or
+> rotate secrets later). Only the real sign-in verification remains — see `STATUS.md`.
+
 One-time setup. Everything cloud-dependent is **built, tested, and deployed but
 dormant**; it all lights up the moment these env vars exist. Until then the app
 is byte-identical to the local-only MVP.
