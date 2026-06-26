@@ -84,7 +84,10 @@ export default function Player() {
   const { routineId } = useParams<{ routineId: string }>()
   const [searchParams] = useSearchParams()
   // Optional rounds override (challenges pass ?rounds=N to scale intensity).
-  const roundsParam = Number(searchParams.get('rounds')) || undefined
+  // Coerce to a positive integer and clamp so a hand-typed fractional/huge value
+  // can't build a fractional loop count or thousands of rounds.
+  const roundsRaw = Math.floor(Number(searchParams.get('rounds')))
+  const roundsParam = Number.isFinite(roundsRaw) && roundsRaw > 0 ? Math.min(roundsRaw, 20) : undefined
 
   const {
     routine,
@@ -432,7 +435,7 @@ export default function Player() {
         </div>
         <button
           onClick={endWorkout}
-          className="shrink-0 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-900/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
+          className="inline-flex min-h-11 shrink-0 items-center rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-900/40 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
         >
           End Workout
         </button>
@@ -526,12 +529,24 @@ export default function Player() {
       )}
 
       {/* ---- Controls ---- */}
-      <div className="mx-auto mt-6 flex w-full max-w-sm flex-wrap items-center justify-center gap-3">
+      {/* Mobile-first: big Pause on top, four 44px icon buttons in a row below. */}
+      <div className="mx-auto mt-6 grid w-full max-w-sm grid-cols-4 gap-2">
+        {/* Pause / Resume (full-width primary) */}
+        <button
+          onClick={togglePause}
+          disabled={phase === 'idle' || phase === 'complete'}
+          className="col-span-4 min-h-12 w-full rounded-xl bg-accent px-8 text-base font-bold text-slate-900 shadow-lg shadow-cyan-900/30 transition hover:opacity-90 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-30"
+          title="Pause/Resume (Space)"
+          aria-label={isPaused ? 'Resume workout' : 'Pause workout'}
+        >
+          {isPaused ? 'Resume' : 'Pause'}
+        </button>
+
         {/* Previous */}
         <button
           onClick={previous}
           disabled={phase === 'idle' || phase === 'complete'}
-          className="rounded-xl border border-edge bg-card p-3 text-slate-300 transition-colors hover:bg-card-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-30"
+          className="flex min-h-11 items-center justify-center rounded-xl border border-edge bg-card text-slate-300 transition-colors hover:bg-card-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-30"
           title="Previous (←)"
           aria-label="Previous exercise"
         >
@@ -540,22 +555,11 @@ export default function Player() {
           </svg>
         </button>
 
-        {/* Pause / Resume */}
-        <button
-          onClick={togglePause}
-          disabled={phase === 'idle' || phase === 'complete'}
-          className="rounded-xl bg-accent px-8 py-3 text-sm font-bold text-slate-900 shadow-lg shadow-cyan-900/30 transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-30"
-          title="Pause/Resume (Space)"
-          aria-label={isPaused ? 'Resume workout' : 'Pause workout'}
-        >
-          {isPaused ? 'Resume' : 'Pause'}
-        </button>
-
         {/* Skip */}
         <button
           onClick={skip}
           disabled={phase === 'idle' || phase === 'complete'}
-          className="rounded-xl border border-edge bg-card p-3 text-slate-300 transition-colors hover:bg-card-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-30"
+          className="flex min-h-11 items-center justify-center rounded-xl border border-edge bg-card text-slate-300 transition-colors hover:bg-card-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-30"
           title="Skip (→)"
           aria-label="Skip exercise"
         >
@@ -567,7 +571,7 @@ export default function Player() {
         {/* Mute toggle */}
         <button
           onClick={toggleMute}
-          className="rounded-xl border border-edge bg-card p-3 text-slate-300 transition-colors hover:bg-card-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          className="flex min-h-11 items-center justify-center rounded-xl border border-edge bg-card text-slate-300 transition-colors hover:bg-card-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
           title="Mute (M)"
           aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
         >
@@ -586,7 +590,7 @@ export default function Player() {
         {/* Focus mode toggle */}
         <button
           onClick={() => void toggleFocusMode()}
-          className="rounded-xl border border-edge bg-card p-3 text-slate-300 transition-colors hover:bg-card-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          className="flex min-h-11 items-center justify-center rounded-xl border border-edge bg-card text-slate-300 transition-colors hover:bg-card-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
           title="Focus mode (F)"
           aria-label="Toggle focus mode"
         >

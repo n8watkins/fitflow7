@@ -225,10 +225,16 @@ function getSettingsMeta(): SettingsMeta {
 }
 
 // ---------------------------------------------------------------------------
-// Sync queue (Phase 0 seam — not yet wired to any backend)
+// Sync queue
 // ---------------------------------------------------------------------------
+// Routines + sessions (and settings, via getPendingSettings) sync to the cloud
+// through lib/sync.ts. The body profile, weight log, and challenge-progress
+// collections are intentionally LOCAL-ONLY for now: they carry the same
+// dirty/tombstone fields as forward-looking groundwork, but getPendingSync()
+// deliberately does not drain them and the server has no columns for them yet.
+// Wiring them into sync is a planned follow-up (see STATUS.md session 6).
 
-/** All records with unsynced local changes. The future sync engine drains this. */
+/** All routine/session records with unsynced local changes. The sync engine drains this. */
 export function getPendingSync(): { routines: Routine[]; sessions: WorkoutSession[] } {
   return {
     routines: getRoutinesRaw().filter((r) => r.dirty),
@@ -434,6 +440,7 @@ export function importData(bundle: ExportBundle): ImportResult {
   if (Array.isArray(bundle.weightLog) && bundle.weightLog.length > 0) {
     const byId = new Map(readJSON<WeightEntry[]>(KEY.weightLog, []).map((e) => [e.id, e]))
     for (const e of bundle.weightLog) {
+      if (!e || !e.id) continue // skip malformed rows so they can't collapse into one undefined key
       const existing = byId.get(e.id)
       if (!existing || (e.updatedAt ?? '') >= (existing.updatedAt ?? '')) {
         byId.set(e.id, { ...e, dirty: true })
@@ -449,6 +456,7 @@ export function importData(bundle: ExportBundle): ImportResult {
       readJSON<ChallengeProgress[]>(KEY.challengeProgress, []).map((c) => [c.challengeId, c]),
     )
     for (const c of bundle.challengeProgress) {
+      if (!c || !c.challengeId) continue // skip malformed records
       const existing = byId.get(c.challengeId)
       if (!existing || (c.updatedAt ?? '') >= (existing.updatedAt ?? '')) {
         byId.set(c.challengeId, { ...c, dirty: true })
@@ -502,11 +510,13 @@ export function getLatestWeight(): WeightEntry | undefined {
   return entries.length ? entries[entries.length - 1] : undefined
 }
 
-/** Upsert a weight measurement for its `date` (one entry per day). */
+/** Upsert a weight measurement for its `date` (one entry per day). Matches an
+ *  existing row for the date even if it was previously deleted, reviving it, so
+ *  delete-then-relog can never create a duplicate live row for the same day. */
 export function saveWeightEntry(date: string, weightKg: number): void {
   const all = readJSON<WeightEntry[]>(KEY.weightLog, [])
   const stamp = now()
-  const idx = all.findIndex((e) => e.date === date && !e.deletedAt)
+  const idx = all.findIndex((e) => e.date === date)
   if (idx >= 0) {
     all[idx] = { ...all[idx], weightKg, updatedAt: stamp, deletedAt: undefined, dirty: true }
   } else {
@@ -551,6 +561,7 @@ function writeChallengeProgress(next: ChallengeProgress): void {
 
 /** Mark a day complete in a challenge (creating the progress record if needed). */
 export function markChallengeDay(challengeId: string, day: number): void {
+  if (!Number.isInteger(day) || day < 1) return
   const stamp = now()
   const existing = getChallengeProgressFor(challengeId)
   const base: ChallengeProgress = existing ?? {

@@ -18,6 +18,7 @@ function VBars({ data, ariaLabel }: { data: { label: string; value: number }[]; 
   const padB = 24
   const max = Math.max(1, ...data.map((d) => d.value))
   const n = data.length
+  if (n === 0) return null
   const gap = 8
   const bw = (W - gap * (n - 1)) / n
 
@@ -42,12 +43,12 @@ function VBars({ data, ariaLabel }: { data: { label: string; value: number }[]; 
               <title>{`${d.label || `#${i + 1}`}: ${d.value}`}</title>
             </rect>
             {d.value > 0 && (
-              <text x={cx} y={yTop - 5} textAnchor="middle" fontSize={11} className="fill-slate-300">
+              <text x={cx} y={yTop - 5} textAnchor="middle" fontSize={14} className="fill-slate-300">
                 {d.value}
               </text>
             )}
             {d.label && (
-              <text x={cx} y={H - 8} textAnchor="middle" fontSize={11} className="fill-slate-500">
+              <text x={cx} y={H - 8} textAnchor="middle" fontSize={14} className="fill-slate-500">
                 {d.label}
               </text>
             )}
@@ -72,7 +73,7 @@ function Heatmap({ days }: { days: HeatmapDay[] }) {
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-2xl" role="img" aria-label="Workout activity calendar">
       {rowLabels.map((lbl, r) =>
         lbl ? (
-          <text key={r} x={0} y={r * (cell + gap) + cell - 2} fontSize={9} className="fill-slate-500">
+          <text key={r} x={0} y={r * (cell + gap) + cell - 2} fontSize={11} className="fill-slate-500">
             {lbl}
           </text>
         ) : null,

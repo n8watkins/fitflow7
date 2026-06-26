@@ -155,7 +155,8 @@ export default function Stats() {
         </p>
       </div>
 
-      <BodySection unit={unit} onChange={refresh} />
+      {/* key on unit so the inputs re-seed (and re-convert) if units change. */}
+      <BodySection key={unit} unit={unit} onChange={refresh} />
 
       {/* BMI from saved data */}
       <Card title="Body Mass Index">
@@ -182,7 +183,7 @@ export default function Stats() {
         )}
       </Card>
 
-      <BmiCalculator unit={unit} initialHeightCm={profile.heightCm} initialWeightKg={latest?.weightKg} />
+      <BmiCalculator key={unit} unit={unit} initialHeightCm={profile.heightCm} initialWeightKg={latest?.weightKg} />
 
       {/* Weight trend */}
       <Card title="Weight trend">
@@ -205,7 +206,7 @@ export default function Stats() {
                       deleteWeightEntry(e.id)
                       refresh()
                     }}
-                    className="text-xs text-slate-500 transition hover:text-red-400"
+                    className="-m-1 p-2 text-xs text-slate-500 transition hover:text-red-400 active:scale-95"
                     aria-label={`Delete weigh-in from ${e.date}`}
                   >
                     ✕
@@ -296,7 +297,7 @@ function BodySection({ unit, onChange }: { unit: UnitSystem; onChange: () => voi
   const input =
     'w-20 rounded-lg border border-edge bg-surface px-3 py-2 text-slate-100 outline-none focus:border-accent'
   const btn =
-    'rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-900 transition hover:brightness-110 active:scale-95'
+    'inline-flex min-h-11 items-center rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-900 transition hover:brightness-110 active:scale-95'
 
   return (
     <Card title="Body" subtitle="Stored in your chosen units; BMI uses these.">
@@ -317,7 +318,7 @@ function BodySection({ unit, onChange }: { unit: UnitSystem; onChange: () => voi
               <span className="text-sm text-slate-500">cm</span>
             </div>
           )}
-          <button onClick={saveHeight} className="text-xs font-medium text-accent hover:underline">
+          <button onClick={saveHeight} className="inline-flex min-h-11 items-center text-xs font-medium text-accent hover:underline active:scale-95">
             Save height
           </button>
         </div>
@@ -329,7 +330,7 @@ function BodySection({ unit, onChange }: { unit: UnitSystem; onChange: () => voi
             <input className={input} type="number" min={0} value={goal} onChange={(e) => setGoal(e.target.value)} />
             <span className="text-sm text-slate-500">{weightUnitLabel(unit)}</span>
           </div>
-          <button onClick={saveGoal} className="text-xs font-medium text-accent hover:underline">
+          <button onClick={saveGoal} className="inline-flex min-h-11 items-center text-xs font-medium text-accent hover:underline active:scale-95">
             Save goal
           </button>
         </div>

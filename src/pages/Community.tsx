@@ -47,7 +47,7 @@ function PublishableRow({ routine, ownerName }: { routine: Routine; ownerName?: 
         <div className="font-semibold text-slate-100">{routine.name}</div>
         <div className="mt-0.5 text-sm text-slate-400">{subtitle(routine)}</div>
       </div>
-      <div className="flex shrink-0 items-center gap-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-3">
         {msg && (
           <span className={`text-sm ${msg.ok ? 'text-emerald-400' : 'text-red-400'}`}>
             {msg.text}
@@ -57,7 +57,7 @@ function PublishableRow({ routine, ownerName }: { routine: Routine; ownerName?: 
           type="button"
           onClick={handlePublish}
           disabled={busy}
-          className="rounded-lg bg-accent px-4 py-1.5 text-sm font-semibold text-slate-900 transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+          className="rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:brightness-110 active:scale-95 disabled:opacity-50"
         >
           {busy ? 'Publishing…' : 'Publish'}
         </button>
@@ -118,13 +118,13 @@ function PublicRow({ routine }: { routine: PublicRoutine }) {
         </div>
         <div className="mt-0.5 text-sm text-slate-400">{subtitle(routine)}</div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         {error && <span className="text-xs text-red-400">{error}</span>}
         <button
           type="button"
           onClick={handleClone}
           disabled={added}
-          className="rounded-lg bg-accent px-4 py-1.5 text-sm font-semibold text-slate-900 transition hover:brightness-110 active:scale-95 disabled:opacity-60"
+          className="rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:brightness-110 active:scale-95 disabled:opacity-60"
         >
           {added ? 'Added' : 'Clone to my routines'}
         </button>
@@ -132,7 +132,7 @@ function PublicRow({ routine }: { routine: PublicRoutine }) {
           type="button"
           onClick={handleReport}
           disabled={reported}
-          className="rounded-lg border border-edge bg-card px-3 py-1.5 text-sm font-medium text-slate-400 transition hover:bg-card-hover disabled:opacity-60"
+          className="rounded-lg border border-edge bg-card px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-card-hover disabled:opacity-60"
         >
           {reported ? 'Reported' : 'Report'}
         </button>

@@ -158,7 +158,7 @@ function ChallengeDetail({
 
   return (
     <div className="space-y-8">
-      <button onClick={onBack} className="text-sm text-slate-400 transition hover:text-slate-200">
+      <button onClick={onBack} className="text-sm text-slate-400 transition hover:text-slate-200 active:scale-95">
         ‹ All challenges
       </button>
 
@@ -209,7 +209,7 @@ function ChallengeDetail({
               <button
                 onClick={() => toggle(d.day)}
                 aria-label={isDone ? `Mark day ${d.day} not done` : `Mark day ${d.day} done`}
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-sm transition ${
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-sm transition ${
                   isDone
                     ? 'border-accent bg-accent text-slate-900'
                     : 'border-edge text-slate-500 hover:border-slate-400'
@@ -227,7 +227,7 @@ function ChallengeDetail({
               {d.routineId && (
                 <Link
                   to={workoutHref(d.routineId, d.rounds)}
-                  className="shrink-0 rounded-lg border border-edge bg-card px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-card-hover"
+                  className="shrink-0 rounded-lg border border-edge bg-card px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-card-hover active:scale-95"
                 >
                   Start
                 </Link>
@@ -240,7 +240,7 @@ function ChallengeDetail({
       {done > 0 && (
         <button
           onClick={handleReset}
-          className="rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-900/30"
+          className="rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-900/30 active:scale-95"
         >
           Reset progress
         </button>

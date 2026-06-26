@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Link, NavLink, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Player from './pages/Player'
 import RoutineEditor from './pages/RoutineEditor'
@@ -77,11 +77,11 @@ function Shell() {
         </>
       )}
 
-      <main className={inWorkout ? '' : 'mx-auto max-w-5xl px-4 py-8 pb-28 md:pb-8'}>
+      <main className={inWorkout ? '' : 'mx-auto max-w-5xl px-4 py-8 pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-8'}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/workout/:routineId" element={<Player />} />
-          <Route path="/routines/:routineId/edit" element={<RoutineEditor />} />
+          <Route path="/routines/:routineId/edit" element={<RoutineEditorRoute />} />
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/challenges" element={<Challenges />} />
@@ -99,6 +99,13 @@ function Shell() {
   )
 }
 
+// Keys RoutineEditor on the route param so it remounts (and re-seeds its state)
+// when navigating directly between two different routine-edit URLs.
+function RoutineEditorRoute() {
+  const { routineId } = useParams<{ routineId: string }>()
+  return <RoutineEditor key={routineId} />
+}
+
 // ---------------------------------------------------------------------------
 // Mobile bottom tab bar + "More" sheet
 // ---------------------------------------------------------------------------
@@ -108,7 +115,7 @@ function MobileNav() {
   const close = () => setMoreOpen(false)
 
   const onSecondary = SECONDARY.some((s) => location.pathname.startsWith(s.to))
-  const tabBase = 'flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors'
+  const tabBase = 'flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs font-medium transition-colors active:scale-95'
 
   return (
     <>
@@ -143,7 +150,7 @@ function MobileNav() {
         </div>
       )}
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 flex border-t border-edge bg-card/95 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-50 flex border-t border-edge bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         {PRIMARY.map((item) => (
           <NavLink
             key={item.to}

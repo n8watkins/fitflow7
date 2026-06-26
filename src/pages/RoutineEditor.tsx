@@ -29,15 +29,16 @@ function buildNewRoutine(): Routine {
   }
 }
 
-function buildClassicCopy(): Routine {
+/** Editable copy of any built-in routine (Classic 7, Abs, Butt, …). */
+function buildSystemCopy(src: Routine): Routine {
   const now = new Date().toISOString()
   return {
     id: newId(),
-    name: 'Classic 7 (custom)',
-    exerciseIds: [...CLASSIC_7.exerciseIds],
-    workSeconds: CLASSIC_7.workSeconds,
-    restSeconds: CLASSIC_7.restSeconds,
-    rounds: CLASSIC_7.rounds,
+    name: `${src.name} (custom)`,
+    exerciseIds: [...src.exerciseIds],
+    workSeconds: src.workSeconds,
+    restSeconds: src.restSeconds,
+    rounds: src.rounds,
     isSystem: false,
     createdAt: now,
     updatedAt: now,
@@ -68,7 +69,7 @@ function Stepper({ label, value, min, max, step = 5, unit, onChange }: StepperPr
           aria-label={`Decrease ${label}`}
           disabled={value <= min}
           onClick={() => onChange(Math.max(min, value - step))}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-edge bg-card text-lg font-bold text-slate-300 transition hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-30"
+          className="flex h-11 w-11 items-center justify-center rounded-lg border border-edge bg-card text-lg font-bold text-slate-300 transition hover:bg-card-hover active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
         >
           −
         </button>
@@ -80,7 +81,7 @@ function Stepper({ label, value, min, max, step = 5, unit, onChange }: StepperPr
           aria-label={`Increase ${label}`}
           disabled={value >= max}
           onClick={() => onChange(Math.min(max, value + step))}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-edge bg-card text-lg font-bold text-slate-300 transition hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-30"
+          className="flex h-11 w-11 items-center justify-center rounded-lg border border-edge bg-card text-lg font-bold text-slate-300 transition hover:bg-card-hover active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
         >
           +
         </button>
@@ -131,7 +132,7 @@ function ExerciseRow({ exId, index, total, onMoveUp, onMoveDown, onRemove }: Exe
           aria-label="Move up"
           disabled={index === 0}
           onClick={onMoveUp}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-sm text-slate-400 transition hover:bg-card hover:text-slate-200 disabled:opacity-30"
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-sm text-slate-400 transition active:scale-95 hover:bg-card hover:text-slate-200 disabled:opacity-30"
         >
           ↑
         </button>
@@ -140,7 +141,7 @@ function ExerciseRow({ exId, index, total, onMoveUp, onMoveDown, onRemove }: Exe
           aria-label="Move down"
           disabled={index === total - 1}
           onClick={onMoveDown}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-sm text-slate-400 transition hover:bg-card hover:text-slate-200 disabled:opacity-30"
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-sm text-slate-400 transition active:scale-95 hover:bg-card hover:text-slate-200 disabled:opacity-30"
         >
           ↓
         </button>
@@ -148,7 +149,7 @@ function ExerciseRow({ exId, index, total, onMoveUp, onMoveDown, onRemove }: Exe
           type="button"
           aria-label="Remove exercise"
           onClick={onRemove}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-sm text-slate-400 transition hover:bg-red-900/40 hover:text-red-400"
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-sm text-slate-400 transition active:scale-95 hover:bg-red-900/40 hover:text-red-400"
         >
           ×
         </button>
@@ -187,7 +188,7 @@ function ExercisePicker({ onAdd }: ExercisePickerProps) {
         !q ||
         ex.name.toLowerCase().includes(q) ||
         ex.description.toLowerCase().includes(q) ||
-        ex.tags.some((t) => t.includes(q))
+        ex.tags.some((t) => t.toLowerCase().includes(q))
       return matchCat && matchSearch
     })
   }, [search, category])
@@ -268,11 +269,13 @@ export default function RoutineEditor() {
       return { initialRoutine: null, isSystemCopy: false, isNotFound: true }
     }
     if (found.isSystem) {
-      return { initialRoutine: buildClassicCopy(), isSystemCopy: true, isNotFound: false }
+      return { initialRoutine: buildSystemCopy(found), isSystemCopy: true, isNotFound: false }
     }
     return { initialRoutine: { ...found }, isSystemCopy: false, isNotFound: false }
   }, [routineId])
 
+  // The router keys this component on routineId (see App.tsx), so it remounts
+  // on a route change and this initial state is always for the current routine.
   const [routine, setRoutine] = useState<Routine | null>(initialRoutine)
 
   const isNew = routineId === 'new' || isSystemCopy
@@ -387,7 +390,7 @@ export default function RoutineEditor() {
           </h1>
           {isSystemCopy && (
             <p className="mt-1 rounded-lg border border-amber-700/50 bg-amber-950/30 px-3 py-1.5 text-sm text-amber-400">
-              Classic 7 is a system routine — you're editing a copy.
+              This is a built-in routine — you're editing a copy.
             </p>
           )}
         </div>

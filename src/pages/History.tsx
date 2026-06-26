@@ -60,7 +60,7 @@ export default function History() {
           {sessions.map((session) => (
             <div
               key={session.id}
-              className="flex flex-wrap items-center gap-3 rounded-2xl border border-edge bg-card px-5 py-4 transition hover:bg-card-hover"
+              className="flex flex-col gap-2 rounded-2xl border border-edge bg-card px-5 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3"
             >
               {/* Date + name */}
               <div className="min-w-0 flex-1">

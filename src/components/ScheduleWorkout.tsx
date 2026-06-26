@@ -41,7 +41,7 @@ export default function ScheduleWorkout({ routine }: { routine: Routine }) {
         Schedule
       </button>
       {open && (
-        <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-edge bg-card p-4 text-left shadow-xl">
+        <div className="absolute right-0 z-20 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-edge bg-card p-4 text-left shadow-xl">
           <div className="mb-2 truncate text-sm font-medium text-slate-200">Schedule “{routine.name}”</div>
           <div className="flex gap-2">
             <input

@@ -79,6 +79,20 @@ export default function Calendar() {
 
   const selectedSessions = selected ? byDay.get(selected) ?? [] : []
 
+  // Build the 12 month-matrices once per data change, not every render.
+  const last12 = useMemo(
+    () =>
+      lastNMonths(12).map(({ year, month }) => {
+        const mCells = monthMatrix(year, month)
+        const total = mCells.reduce(
+          (sum, c) => sum + (c ? (byDay.get(dayKey(c))?.length ?? 0) : 0),
+          0,
+        )
+        return { year, month, mCells, total }
+      }),
+    [byDay],
+  )
+
   return (
     <div className="space-y-10">
       <div>
@@ -87,11 +101,11 @@ export default function Calendar() {
       </div>
 
       {/* Month navigator */}
-      <section className="rounded-2xl border border-edge bg-card p-5">
+      <section className="rounded-2xl border border-edge bg-card p-3 sm:p-5">
         <div className="mb-4 flex items-center justify-between">
           <button
             onClick={() => shift(-1)}
-            className="rounded-lg border border-edge bg-card px-3 py-1.5 text-slate-300 transition hover:bg-card-hover"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-edge bg-card px-3 py-1.5 text-slate-300 transition hover:bg-card-hover active:bg-card-hover"
             aria-label="Previous month"
           >
             ‹
@@ -106,14 +120,14 @@ export default function Calendar() {
           </div>
           <button
             onClick={() => shift(1)}
-            className="rounded-lg border border-edge bg-card px-3 py-1.5 text-slate-300 transition hover:bg-card-hover"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-edge bg-card px-3 py-1.5 text-slate-300 transition hover:bg-card-hover active:bg-card-hover"
             aria-label="Next month"
           >
             ›
           </button>
         </div>
 
-        <div className="grid grid-cols-7 gap-1.5">
+        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
           {WEEKDAYS.map((w, i) => (
             <div key={i} className="pb-1 text-center text-xs font-medium text-slate-500">
               {w}
@@ -129,7 +143,7 @@ export default function Calendar() {
               <button
                 key={i}
                 onClick={() => setSelected(k)}
-                className={`relative flex aspect-square flex-col items-center justify-center rounded-lg border text-sm transition ${
+                className={`relative flex aspect-square flex-col items-center justify-center rounded-lg border text-sm transition active:scale-95 ${
                   count > 0
                     ? 'border-accent/40 bg-accent/15 text-slate-100 hover:bg-accent/25'
                     : 'border-edge bg-surface text-slate-400 hover:bg-card-hover'
@@ -199,12 +213,7 @@ export default function Calendar() {
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-500">Last 12 months</h2>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {lastNMonths(12).map(({ year, month }) => {
-            const mCells = monthMatrix(year, month)
-            const total = mCells.reduce(
-              (sum, c) => sum + (c ? (byDay.get(dayKey(c))?.length ?? 0) : 0),
-              0,
-            )
+          {last12.map(({ year, month, mCells, total }) => {
             return (
               <button
                 key={`${year}-${month}`}

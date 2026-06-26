@@ -226,6 +226,16 @@ describe('weight log', () => {
     storage.deleteWeightEntry(id)
     expect(storage.getWeightEntries()).toHaveLength(0)
   })
+
+  it('revives (not duplicates) a deleted day when re-logged', () => {
+    storage.saveWeightEntry('2026-06-01', 80)
+    const id = storage.getWeightEntries()[0].id
+    storage.deleteWeightEntry(id)
+    storage.saveWeightEntry('2026-06-01', 82) // same date again
+    const entries = storage.getWeightEntries()
+    expect(entries).toHaveLength(1) // not two rows
+    expect(entries[0].weightKg).toBe(82)
+  })
 })
 
 describe('body profile', () => {

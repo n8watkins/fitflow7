@@ -270,8 +270,8 @@ export default function Library() {
         !q ||
         ex.name.toLowerCase().includes(q) ||
         ex.description.toLowerCase().includes(q) ||
-        ex.tags.some((t) => t.includes(q)) ||
-        ex.primaryMuscles.some((m) => m.includes(q))
+        ex.tags.some((t) => t.toLowerCase().includes(q)) ||
+        ex.primaryMuscles.some((m) => m.toLowerCase().includes(q))
       return matchCat && matchDiff && matchSearch
     })
   }, [search, category, difficulty])
