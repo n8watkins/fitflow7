@@ -1,7 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import crypto from 'node:crypto'
-import { getAuthedUserId } from '../_lib/auth.js'
+import { resolveAuth } from '../_lib/tokens.js'
 import { ensureSchema, getDb } from '../_lib/db.js'
+
+// Exercise ids are short kebab-case slugs (see src/data/exercises.ts). Validate
+// the shape server-side so junk / injection-y ids can't be stored or served.
+const SLUG_RE = /^[a-z0-9-]{1,64}$/
+// Burst guard on top of the per-owner total cap: at most this many publishes/hour.
+const MAX_PER_HOUR = 10
 
 // POST /api/routines/publish — auth required.
 //
@@ -33,8 +39,10 @@ const MAX_PER_OWNER = 25
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' })
-  const userId = getAuthedUserId(req)
-  if (!userId) return res.status(401).json({ error: 'not signed in' })
+  const auth = await resolveAuth(req)
+  if (!auth) return res.status(401).json({ error: 'not signed in' })
+  if (auth.scope === 'read') return res.status(403).json({ error: 'read-only token cannot publish' })
+  const userId = auth.userId
 
   const body = (req.body ?? {}) as PublishBody
   const routine = body.routine ?? {}
@@ -46,6 +54,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const exerciseIds = Array.isArray(routine.exerciseIds)
     ? routine.exerciseIds.filter((id): id is string => typeof id === 'string')
     : []
+  // Server-side shape validation: every id must be a valid slug (S1).
+  if (exerciseIds.some((id) => !SLUG_RE.test(id))) {
+    return res.status(400).json({ error: 'invalid exercise id' })
+  }
   const workSeconds = Number(routine.workSeconds)
   const restSeconds = Number(routine.restSeconds)
   const rounds = Number(routine.rounds)
@@ -86,6 +98,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const count = Number(countRes.rows[0]?.n ?? 0)
     if (count >= MAX_PER_OWNER) {
       return res.status(429).json({ error: 'publish limit reached' })
+    }
+
+    // Burst guard: cap publishes in the trailing hour (S1 rate limiting).
+    const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const recentRes = await db.execute({
+      sql: `SELECT COUNT(*) AS n FROM public_routines WHERE owner_id = ? AND created_at > ?`,
+      args: [userId, hourAgo],
+    })
+    if (Number(recentRes.rows[0]?.n ?? 0) >= MAX_PER_HOUR) {
+      return res.status(429).json({ error: 'too many publishes — try again later' })
     }
 
     await db.execute({

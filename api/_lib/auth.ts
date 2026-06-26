@@ -236,22 +236,42 @@ export function getUserId(req: VercelRequest): string | null {
 
 const PAT_TTL_SECONDS = 60 * 60 * 24 * 365 // 1 year
 
-/** Mints a long-lived personal access token (PAT) for headless clients (the MCP
- *  server). Same signed-token scheme as the session cookie; `pat: true` marks it
- *  so it can only arrive via the Authorization header, never as a cookie. */
-export function createAccessToken(userId: string): string {
-  return encodeToken({ uid: userId, pat: true, exp: Math.floor(Date.now() / 1000) + PAT_TTL_SECONDS })
+/** PAT capability scope. 'read' can only pull; 'readwrite' can also push/publish. */
+export type Scope = 'read' | 'readwrite'
+
+export interface PatClaims {
+  uid: string
+  jti: string
+  scope: Scope
 }
 
-/** Resolves the user id from either a session cookie or a `Bearer <pat>` header.
- *  Use for endpoints reachable by both the browser and the MCP server. */
-export function getAuthedUserId(req: VercelRequest): string | null {
+/** Mints a long-lived personal access token (PAT) for headless clients (the MCP
+ *  server). Same signed-token scheme as the session cookie; `pat: true` marks it
+ *  so it can only arrive via the Authorization header, never as a cookie. Carries
+ *  a random `jti` so it can be tracked + revoked server-side (see _lib/tokens). */
+export function createAccessToken(userId: string, scope: Scope = 'readwrite'): { token: string; jti: string } {
+  const jti = crypto.randomUUID()
+  const token = encodeToken({
+    uid: userId,
+    pat: true,
+    jti,
+    scope,
+    exp: Math.floor(Date.now() / 1000) + PAT_TTL_SECONDS,
+  })
+  return { token, jti }
+}
+
+/** Decodes + verifies a `Bearer <pat>` header's signature/expiry (no DB). Returns
+ *  the claims, or null if absent/invalid/not a PAT/missing a jti. Revocation is
+ *  checked separately against the token registry (see _lib/tokens resolveAuth). */
+export function decodePat(req: VercelRequest): PatClaims | null {
   const header = req.headers.authorization
-  if (header && header.startsWith('Bearer ')) {
-    const payload = decodeToken<{ uid: string; pat?: boolean }>(header.slice(7).trim())
-    if (payload?.pat && payload.uid) return payload.uid
-  }
-  return getUserId(req)
+  if (!header || !header.startsWith('Bearer ')) return null
+  const payload = decodeToken<{ uid?: string; pat?: boolean; jti?: string; scope?: Scope }>(
+    header.slice(7).trim(),
+  )
+  if (!payload?.pat || !payload.uid || !payload.jti) return null
+  return { uid: payload.uid, jti: payload.jti, scope: payload.scope === 'read' ? 'read' : 'readwrite' }
 }
 
 // ---------------------------------------------------------------------------

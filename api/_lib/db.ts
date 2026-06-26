@@ -93,6 +93,28 @@ const SCHEMA = [
      blocked       INTEGER NOT NULL DEFAULT 0
    )`,
   `CREATE INDEX IF NOT EXISTS idx_public_routines_blocked_created ON public_routines (blocked, created_at)`,
+  // S1: personal access token registry. PATs carry a `jti`; a token is valid only
+  // while a non-revoked row exists here, so tokens become revocable (and listable
+  // in Settings) instead of being valid-forever signed blobs. `scope` is
+  // 'read' or 'readwrite'. No secret is stored — only the id + metadata.
+  `CREATE TABLE IF NOT EXISTS access_tokens (
+     jti          TEXT PRIMARY KEY,
+     user_id      TEXT NOT NULL,
+     label        TEXT,
+     scope        TEXT NOT NULL DEFAULT 'readwrite',
+     created_at   TEXT NOT NULL,
+     last_used_at TEXT,
+     revoked_at   TEXT
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_access_tokens_user ON access_tokens (user_id, created_at)`,
+  // S1: one abuse report per (routine, user). The block threshold counts DISTINCT
+  // reporters from here, so a single user can't drive a routine to blocked.
+  `CREATE TABLE IF NOT EXISTS routine_reports (
+     slug        TEXT NOT NULL,
+     user_id     TEXT NOT NULL,
+     created_at  TEXT NOT NULL,
+     PRIMARY KEY (slug, user_id)
+   )`,
 ]
 
 /** Ensures the schema exists. Memoized so concurrent requests share one bootstrap. */

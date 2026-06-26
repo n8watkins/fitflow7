@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getAuthedUserId } from '../_lib/auth.js'
+import { resolveAuth } from '../_lib/tokens.js'
 import { ensureSchema, getDb } from '../_lib/db.js'
 
 // POST /api/routines/report — auth required.
 //
 // Body: { slug }
-// Increments the abuse-report count for a published routine. Once a routine
-// reaches 3 reports it auto-hides (blocked = 1) and drops out of all public
-// listings. Reply: { ok: true }.
+// Records one abuse report per (routine, user) — re-reporting is idempotent, so
+// a single user can't drive the count up. `reports` tracks DISTINCT reporters;
+// once it reaches 3 the routine auto-hides (blocked = 1). Reply: { ok: true }.
 
 interface ReportBody {
   slug?: unknown
@@ -17,8 +17,10 @@ const BLOCK_THRESHOLD = 3
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' })
-  const userId = getAuthedUserId(req)
-  if (!userId) return res.status(401).json({ error: 'not signed in' })
+  const auth = await resolveAuth(req)
+  if (!auth) return res.status(401).json({ error: 'not signed in' })
+  if (auth.scope === 'read') return res.status(403).json({ error: 'read-only token cannot report' })
+  const userId = auth.userId
 
   const body = (req.body ?? {}) as ReportBody
   const slug = typeof body.slug === 'string' ? body.slug : ''
@@ -27,12 +29,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     await ensureSchema()
     const db = getDb()
+    // One report per user per routine (dedup). Re-reporting is a no-op.
+    await db.execute({
+      sql: `INSERT OR IGNORE INTO routine_reports (slug, user_id, created_at) VALUES (?, ?, ?)`,
+      args: [slug, userId, new Date().toISOString()],
+    })
+    // Recompute from distinct reporters, then block at the threshold.
+    const distinct = Number(
+      (
+        await db.execute({
+          sql: `SELECT COUNT(*) AS n FROM routine_reports WHERE slug = ?`,
+          args: [slug],
+        })
+      ).rows[0]?.n ?? 0,
+    )
     await db.execute({
       sql: `UPDATE public_routines
-            SET reports = reports + 1,
-                blocked = CASE WHEN reports + 1 >= ? THEN 1 ELSE blocked END
-            WHERE slug = ? AND blocked = 0`,
-      args: [BLOCK_THRESHOLD, slug],
+            SET reports = ?, blocked = CASE WHEN ? >= ? THEN 1 ELSE blocked END
+            WHERE slug = ?`,
+      args: [distinct, distinct, BLOCK_THRESHOLD, slug],
     })
     res.status(200).json({ ok: true })
   } catch {

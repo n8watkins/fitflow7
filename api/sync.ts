@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import type { Routine, UserSettings, WorkoutSession } from '../src/types'
-import { getAuthedUserId } from './_lib/auth.js'
+import { resolveAuth } from './_lib/tokens.js'
 import { ensureSchema, getDb } from './_lib/db.js'
 import type { InStatement } from '@libsql/client'
 
@@ -115,11 +115,19 @@ function sessionUpsert(userId: string, s: WorkoutSession): InStatement {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' })
-  const userId = getAuthedUserId(req)
-  if (!userId) return res.status(401).json({ error: 'not signed in' })
+  const auth = await resolveAuth(req)
+  if (!auth) return res.status(401).json({ error: 'not signed in' })
+  const userId = auth.userId
 
   const body = (req.body ?? {}) as SyncBody
   const since = body.since || EPOCH
+
+  // A read-scoped token may pull but never push (S1).
+  const wantsWrite =
+    (body.routines?.length ?? 0) > 0 || (body.sessions?.length ?? 0) > 0 || !!body.settings
+  if (auth.scope === 'read' && wantsWrite) {
+    return res.status(403).json({ error: 'read-only token cannot push' })
+  }
 
   try {
     await ensureSchema()
