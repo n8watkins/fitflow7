@@ -183,7 +183,14 @@ export default function Stats() {
         )}
       </Card>
 
-      <BmiCalculator key={unit} unit={unit} initialHeightCm={profile.heightCm} initialWeightKg={latest?.weightKg} />
+      {/* Re-key on saved stats so the calculator always pre-fills from the
+          height + latest weigh-in you've entered (and re-converts on unit change). */}
+      <BmiCalculator
+        key={`${unit}|${profile.heightCm ?? ''}|${latest?.weightKg ?? ''}`}
+        unit={unit}
+        initialHeightCm={profile.heightCm}
+        initialWeightKg={latest?.weightKg}
+      />
 
       {/* Weight trend */}
       <Card title="Weight trend">
@@ -411,7 +418,7 @@ function BmiCalculator({
     'w-20 rounded-lg border border-edge bg-surface px-3 py-2 text-slate-100 outline-none focus:border-accent'
 
   return (
-    <Card title="BMI calculator" subtitle="A quick what-if — nothing here is saved.">
+    <Card title="BMI calculator" subtitle="Pre-filled from your saved height and latest weigh-in — tweak it for a what-if (nothing here is saved).">
       <div className="flex flex-wrap items-end gap-6">
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">Height</label>

@@ -478,6 +478,7 @@ export default function Player() {
           >
             <ExerciseVisual
               exercise={currentExercise}
+              autoPlay
               imgClassName="mx-auto mb-3 max-h-44 w-full rounded-2xl bg-surface object-contain"
               emojiClassName="mb-3 inline-block text-7xl leading-none"
             />

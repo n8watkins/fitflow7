@@ -1,5 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ComponentType } from 'react'
 import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useParams } from 'react-router-dom'
+import {
+  IconBook,
+  IconCalendar,
+  IconChart,
+  IconClock,
+  IconCog,
+  IconDumbbell,
+  IconMenu,
+  IconTrophy,
+  IconUsers,
+} from './components/icons'
 import Dashboard from './pages/Dashboard'
 import Player from './pages/Player'
 import RoutineEditor from './pages/RoutineEditor'
@@ -14,23 +25,23 @@ import Challenges from './pages/Challenges'
 import { bootstrapAuth, startSyncListeners } from './lib/sync'
 import { useSyncStore } from './store/syncStore'
 
-type NavItem = { to: string; label: string; icon: string }
+type NavItem = { to: string; label: string; Icon: ComponentType<{ className?: string }> }
 
 // Primary destinations — top nav on desktop, bottom tab bar on mobile.
 const PRIMARY: NavItem[] = [
-  { to: '/', label: 'Workouts', icon: '🏠' },
-  { to: '/calendar', label: 'Calendar', icon: '📅' },
-  { to: '/stats', label: 'Stats', icon: '📊' },
-  { to: '/challenges', label: 'Challenges', icon: '🏆' },
+  { to: '/', label: 'Workouts', Icon: IconDumbbell },
+  { to: '/calendar', label: 'Calendar', Icon: IconCalendar },
+  { to: '/stats', label: 'Stats', Icon: IconChart },
+  { to: '/challenges', label: 'Challenges', Icon: IconTrophy },
 ]
 
 // Secondary destinations — top nav on desktop, "More" sheet on mobile.
 const SECONDARY: NavItem[] = [
-  { to: '/library', label: 'Exercises', icon: '🏋️' },
-  { to: '/history', label: 'History', icon: '📋' },
-  { to: '/insights', label: 'Insights', icon: '📈' },
-  { to: '/community', label: 'Community', icon: '🌐' },
-  { to: '/settings', label: 'Settings', icon: '⚙️' },
+  { to: '/library', label: 'Exercises', Icon: IconBook },
+  { to: '/history', label: 'History', Icon: IconClock },
+  { to: '/insights', label: 'Insights', Icon: IconChart },
+  { to: '/community', label: 'Community', Icon: IconUsers },
+  { to: '/settings', label: 'Settings', Icon: IconCog },
 ]
 
 const ALL_NAV = [...PRIMARY, ...SECONDARY]
@@ -141,7 +152,7 @@ function MobileNav() {
                     }`
                   }
                 >
-                  <span className="text-xl">{item.icon}</span>
+                  <item.Icon className="h-6 w-6" />
                   {item.label}
                 </NavLink>
               ))}
@@ -161,7 +172,7 @@ function MobileNav() {
               `${tabBase} ${isActive ? 'text-accent' : 'text-slate-400'}`
             }
           >
-            <span className="text-xl leading-none">{item.icon}</span>
+            <item.Icon className="h-6 w-6" />
             {item.label}
           </NavLink>
         ))}
@@ -170,7 +181,7 @@ function MobileNav() {
           className={`${tabBase} ${moreOpen || onSecondary ? 'text-accent' : 'text-slate-400'}`}
           aria-expanded={moreOpen}
         >
-          <span className="text-xl leading-none">☰</span>
+          <IconMenu className="h-6 w-6" />
           More
         </button>
       </nav>
