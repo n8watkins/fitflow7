@@ -481,7 +481,7 @@ export function importData(bundle: ExportBundle): ImportResult {
 }
 
 // ---------------------------------------------------------------------------
-// Body profile (singleton: height, goal weight, sex, birthdate)
+// Body profile (singleton: height, goal weight)
 // ---------------------------------------------------------------------------
 
 /** Returns the stored body profile, or an empty one (no height/goal yet). */

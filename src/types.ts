@@ -104,17 +104,12 @@ export const DEFAULT_SETTINGS: UserSettings = {
 // Body stats (weight, height, BMI, goal) — local-first, canonical kg/cm.
 // ---------------------------------------------------------------------------
 
-export type Sex = 'male' | 'female' | 'unspecified'
-
 /** Standing body profile: the values that don't change day-to-day. Singleton. */
 export type BodyProfile = {
   /** Height in centimeters (canonical; convert for display). */
   heightCm?: number
   /** Target/goal weight in kilograms (canonical). */
   goalWeightKg?: number
-  sex?: Sex
-  /** 'YYYY-MM-DD'. Optional — only used for future calorie/age context. */
-  birthDate?: string
   updatedAt: string
   /** Sync groundwork: true when local changes await a future push. */
   dirty?: boolean
