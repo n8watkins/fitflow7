@@ -157,6 +157,31 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   start(routine, exercises, settings) {
     clearTick()
 
+    // Guard: an all-unknown-exercise routine (e.g. a clone/import whose ids no
+    // longer resolve) yields an empty list. Starting it would instantly hit the
+    // "last exercise" branch and log a 0-exercise "completed" session (and even
+    // auto-complete a challenge day). Stay idle instead — the Player shows a
+    // guard screen. See B3.
+    if (exercises.length === 0) {
+      set({
+        routine,
+        exercises: [],
+        phase: 'idle',
+        currentIndex: 0,
+        secondsLeft: 0,
+        totalSeconds: 0,
+        isPaused: false,
+        startedAt: undefined,
+        completedAt: undefined,
+        exercisesCompleted: 0,
+        sessionSaved: false,
+        phaseEndsAt: 0,
+        countdownSeconds: settings.countdownSeconds,
+        cueEvent: null,
+      })
+      return
+    }
+
     const hasPrepare = settings.countdownSeconds > 0
     const phase: WorkoutPhase = hasPrepare ? 'prepare' : 'work'
     const seconds = hasPrepare ? settings.countdownSeconds : routine.workSeconds

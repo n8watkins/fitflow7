@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useTimerStore } from '../store/timerStore'
 import { getRoutine, getSettings, markChallengeDay } from '../lib/storage'
@@ -117,6 +117,14 @@ export default function Player() {
   const [focusMode, setFocusMode] = useState(false)
   const [isFsNative, setIsFsNative] = useState(false)
 
+  // Derived (not eff't state): true when the resolved routine has no playable
+  // exercises (e.g. an import/clone whose ids no longer exist). When blocked we
+  // never start the timer, so no junk session is logged. See B3.
+  const blocked = useMemo(() => {
+    const resolved = getRoutine(routineId ?? '') ?? CLASSIC_7
+    return !resolved.exerciseIds.some((id) => EXERCISE_MAP[id])
+  }, [routineId])
+
   // Finding 5: Screen Wake Lock ref
   const wakeLockRef = useRef<WakeLockSentinel | null>(null)
 
@@ -134,6 +142,9 @@ export default function Player() {
         if (ex) repeated.push(ex)
       }
     }
+    // Guard: refuse to start a routine with no playable exercises. Otherwise the
+    // timer would instantly "complete" and log a junk 0-exercise session (B3).
+    if (repeated.length === 0) return
     start(resolved, repeated, settings)
   }, [start])
 
@@ -141,6 +152,7 @@ export default function Player() {
   // Mount: resolve routine + start timer
   // ---------------------------------------------------------------------------
   useEffect(() => {
+    if (blocked) return
     buildAndStart(routineId ?? '', roundsParam)
 
     return () => {
@@ -326,6 +338,42 @@ export default function Player() {
   // currentPhase keeps the full WorkoutPhase union type after the complete early-return below
   // so later JSX comparisons against it remain valid to the type checker.
   const currentPhase: WorkoutPhase = phase
+
+  // ---------------------------------------------------------------------------
+  // Empty-routine guard — nothing playable resolved, so we never started the
+  // timer (and never logged a session). Offer a way out.
+  // ---------------------------------------------------------------------------
+  if (blocked) {
+    const blockedRoutine = getRoutine(routineId ?? '')
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
+        <div className="w-full max-w-lg rounded-2xl border border-amber-500/30 bg-amber-950/30 p-8 text-center">
+          <div className="mb-3 text-6xl">🫥</div>
+          <h1 className="mb-2 text-2xl font-bold text-amber-200">Nothing to play here</h1>
+          <p className="mb-6 text-sm leading-relaxed text-slate-400">
+            {blockedRoutine?.name ? `"${blockedRoutine.name}"` : 'This routine'} has no exercises we
+            recognize — it may have been imported or cloned with exercises this version doesn't include.
+          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <Link
+              to="/"
+              className="rounded-xl border border-edge bg-card px-6 py-3 text-sm font-medium text-slate-200 transition-colors hover:bg-card-hover"
+            >
+              Back to Dashboard
+            </Link>
+            {blockedRoutine && !blockedRoutine.isSystem && (
+              <Link
+                to={`/routines/${blockedRoutine.id}/edit`}
+                className="rounded-xl bg-accent px-6 py-3 text-sm font-bold text-slate-900 transition-opacity hover:opacity-90"
+              >
+                Edit routine
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // ---------------------------------------------------------------------------
   // Complete phase
