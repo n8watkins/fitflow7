@@ -1,0 +1,43 @@
+name: CI
+
+# Verifies every push to main and every PR with the same pipeline used locally:
+# type-check + lint + tests + production build, plus the MCP server's type-check.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mcp/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npx tsc -b
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+      - name: MCP type-check
+        working-directory: mcp
+        run: |
+          npm ci
+          npm run typecheck
