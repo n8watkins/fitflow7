@@ -1,6 +1,6 @@
 # FitFlow 7 — Project Status
 
-Living snapshot: what's done, what's left, and what's on the owner. Updated 2026-06-20.
+Living snapshot: what's done, what's left, and what's on the owner. Updated 2026-06-25.
 
 - **Live:** https://fitflow7.vercel.app (public, deployed). Repo `main`, all pushed, working tree clean.
 - **Cloud sync is now CONFIGURED + LIVE** — Turso DB + GitHub OAuth + `SESSION_SECRET` are set in Vercel and deployed. `…/api/auth/login?provider=github` returns 302 → GitHub. (Google OAuth intentionally **not** configured; its sign-in button is hidden.)
@@ -35,6 +35,14 @@ Capacitor 5 + `capacitor-health-connect`; `healthConnect.ts` seam (called on wor
 - **Add-to-Calendar** — a "Schedule" popover on each Dashboard routine → downloadable `.ics` + "Add to Google Calendar" link (optional weekly repeat). Zero backend, works offline (`lib/calendar.ts`, `components/ScheduleWorkout.tsx`).
 - **Real exercise visuals** — 13 of 24 exercises show **public-domain photos that animate** (start↔end frames from free-exercise-db); the other 11 keep their emoji. Emoji fallback on missing/broken image (`components/ExerciseVisual.tsx`, `public/exercises/`).
 - **Data-driven sign-in** — Settings shows only *configured* providers (GitHub only now), so the dead "Sign in with Google" button is gone; add Google later and it returns automatically.
+
+### Session 6 (2026-06-25) — Seven Minute Workout parity — shipped (local-only)
+- **Body stats + BMI** (`/stats`, `src/pages/Stats.tsx` + `src/lib/body.ts`): weight log (one upsert per day), height + goal weight, BMI card with a colored WHO category scale + healthy-weight range, a standalone non-persisting **BMI calculator**, a weight-trend SVG chart, plus **last-7-day / last-30-day** windows and a streak panel (current / longest / total / last-3-days). Dual units (imperial default) via a Settings toggle; stored canonically in kg/cm.
+- **Calendar** (`/calendar`, `src/pages/Calendar.tsx`): navigable month grid (tap a day → that day's sessions) + a last-12-months overview.
+- **Challenges** (`/challenges`, `src/pages/Challenges.tsx` + `src/data/challenges.ts`): 30-Day Challenge + 7-Day Kickstart, 14-Day Abs, 21-Day Full Body, with per-day progress (mark/unmark/reset) and an "up next" CTA. Days can pass `?rounds=N` to the Player to scale intensity.
+- **Exercises + routines**: 24 → **71 exercises** (authored instructions/muscles/icons; emoji fallback) covering the source app's Abs/Butt/Leg/Arm/Stretching sets; **5 new system routines** join Classic 7. Library gains a Stretching filter.
+- **Navigation**: responsive — desktop top nav lists all destinations; mobile gets a fixed bottom tab bar (Workouts · Calendar · Stats · Challenges) + a "More" sheet.
+- **Storage**: new local-first data (body profile, weight log, challenge progress) rides the existing `dirty`/tombstone seam + export/import; **no Turso/`api` schema change** this pass (cloud sync of body/challenge data is a deliberate follow-up). `unitSystem` is a device-local preference. Tests 49 → **76**.
 
 ### Cross-cutting — shipped
 - **Vitest, 49 tests** (sync merge/tombstones/migrations, dirty queue, stats/insights, calendar, export/import, auth open-redirect, render smokes).
