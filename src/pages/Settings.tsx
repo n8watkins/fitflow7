@@ -172,7 +172,7 @@ function AccountSection() {
                         {!t.revoked && (
                           <button
                             onClick={() => void handleRevoke(t.id)}
-                            className="shrink-0 rounded-lg border border-red-900/60 px-3 py-1.5 text-xs font-medium text-red-400 transition hover:bg-red-900/30 active:scale-95"
+                            className="shrink-0 rounded-lg border border-red-900/60 px-3 py-1.5 text-xs font-medium text-red-400 transition hover:bg-red-900/30 active:scale-95 light:border-red-300 light:text-red-600 light:hover:bg-red-100"
                           >
                             Revoke
                           </button>
@@ -403,7 +403,7 @@ export default function Settings() {
           </p>
         </div>
         <span
-          className={`mt-1 rounded-full border border-emerald-800 bg-emerald-950 px-3 py-1 text-sm font-medium text-emerald-400 transition-opacity duration-300 ${savedVisible ? 'opacity-100' : 'opacity-0'}`}
+          className={`mt-1 rounded-full border border-emerald-800 bg-emerald-950 px-3 py-1 text-sm font-medium text-emerald-400 transition-opacity duration-300 light:border-emerald-300 light:bg-emerald-100 light:text-emerald-700 ${savedVisible ? 'opacity-100' : 'opacity-0'}`}
           aria-live="polite"
         >
           Saved
@@ -586,7 +586,7 @@ export default function Settings() {
               />
               {importMsg && (
                 <span
-                  className={`text-sm ${importMsg.ok ? 'text-emerald-400' : 'text-red-400'}`}
+                  className={`text-sm ${importMsg.ok ? 'text-emerald-400 light:text-emerald-600' : 'text-red-400 light:text-red-600'}`}
                   aria-live="polite"
                 >
                   {importMsg.text}
@@ -616,9 +616,9 @@ export default function Settings() {
 
       {/* Danger zone */}
       <section>
-        <div className="rounded-2xl border border-red-900 bg-card">
-          <div className="border-b border-red-900 px-5 py-4">
-            <h2 className="font-semibold text-red-400">Danger Zone</h2>
+        <div className="rounded-2xl border border-red-900 bg-card light:border-red-300">
+          <div className="border-b border-red-900 px-5 py-4 light:border-red-300">
+            <h2 className="font-semibold text-red-400 light:text-red-600">Danger Zone</h2>
           </div>
           <div className="px-5 py-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -630,7 +630,7 @@ export default function Settings() {
               </div>
               <button
                 onClick={handleClearHistory}
-                className="rounded-lg border border-red-800 bg-red-950 px-4 py-2 text-sm font-semibold text-red-400 transition hover:bg-red-900 active:scale-95"
+                className="rounded-lg border border-red-800 bg-red-950 px-4 py-2 text-sm font-semibold text-red-400 transition hover:bg-red-900 active:scale-95 light:border-red-300 light:bg-red-50 light:text-red-600 light:hover:bg-red-100"
               >
                 Clear history
               </button>

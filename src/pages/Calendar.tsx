@@ -193,11 +193,11 @@ export default function Calendar() {
                   <div className="flex shrink-0 items-center gap-4 text-sm text-slate-400">
                     <span className="font-medium tabular-nums text-slate-200">{fmtDuration(s.durationSeconds)}</span>
                     {s.completed ? (
-                      <span className="rounded-full border border-emerald-800 bg-emerald-950 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
+                      <span className="rounded-full border border-emerald-800 bg-emerald-950 px-2.5 py-0.5 text-xs font-medium text-emerald-400 light:border-emerald-300 light:bg-emerald-100 light:text-emerald-700">
                         ✓ completed
                       </span>
                     ) : (
-                      <span className="rounded-full border border-amber-800 bg-amber-950 px-2.5 py-0.5 text-xs font-medium text-amber-400">
+                      <span className="rounded-full border border-amber-800 bg-amber-950 px-2.5 py-0.5 text-xs font-medium text-amber-400 light:border-amber-300 light:bg-amber-100 light:text-amber-700">
                         ended early
                       </span>
                     )}

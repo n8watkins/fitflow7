@@ -375,9 +375,9 @@ export default function Player() {
     const blockedRoutine = getRoutine(routineId ?? '')
     return (
       <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
-        <div className="w-full max-w-lg rounded-2xl border border-amber-500/30 bg-amber-950/30 p-8 text-center">
+        <div className="w-full max-w-lg rounded-2xl border border-amber-500/30 bg-amber-950/30 p-8 text-center light:border-amber-300 light:bg-amber-50">
           <div className="mb-3 text-6xl">🫥</div>
-          <h1 className="mb-2 text-2xl font-bold text-amber-200">Nothing to play here</h1>
+          <h1 className="mb-2 text-2xl font-bold text-amber-200 light:text-amber-700">Nothing to play here</h1>
           <p className="mb-6 text-sm leading-relaxed text-slate-400">
             {blockedRoutine?.name ? `"${blockedRoutine.name}"` : 'This routine'} has no exercises we
             recognize — it may have been imported or cloned with exercises this version doesn't include.
@@ -414,14 +414,14 @@ export default function Player() {
     const endedEarly = exercisesCompleted < totalExercises
     return (
       <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
-        <div className="w-full max-w-lg rounded-2xl border border-violet-500/30 bg-violet-950/40 p-8 text-center">
+        <div className="w-full max-w-lg rounded-2xl border border-violet-500/30 bg-violet-950/40 p-8 text-center light:border-violet-300 light:bg-violet-50">
           <div className="mb-3 text-6xl">🎉</div>
-          <h1 className="mb-1 text-3xl font-bold text-violet-300">
+          <h1 className="mb-1 text-3xl font-bold text-violet-300 light:text-violet-700">
             {endedEarly ? 'Workout Ended' : 'Workout Complete!'}
           </h1>
           <p className="mb-1 text-slate-400">{routine?.name ?? 'Workout'}</p>
           {endedEarly && (
-            <p className="mb-5 text-xs text-amber-400">Ended early</p>
+            <p className="mb-5 text-xs text-amber-400 light:text-amber-600">Ended early</p>
           )}
           {!endedEarly && <div className="mb-5" />}
 
@@ -528,7 +528,7 @@ export default function Player() {
         </div>
         <button
           onClick={endWorkout}
-          className="inline-flex min-h-11 shrink-0 items-center rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-900/40 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
+          className="inline-flex min-h-11 shrink-0 items-center rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-900/40 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500 light:border-red-300 light:bg-red-50 light:text-red-600 light:hover:bg-red-100"
         >
           End Workout
         </button>

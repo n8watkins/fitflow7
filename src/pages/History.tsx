@@ -78,11 +78,11 @@ export default function History() {
                 </span>
 
                 {session.completed ? (
-                  <span className="flex items-center gap-1 rounded-full border border-emerald-800 bg-emerald-950 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
+                  <span className="flex items-center gap-1 rounded-full border border-emerald-800 bg-emerald-950 px-2.5 py-0.5 text-xs font-medium text-emerald-400 light:border-emerald-300 light:bg-emerald-100 light:text-emerald-700">
                     <span>✓</span> completed
                   </span>
                 ) : (
-                  <span className="rounded-full border border-amber-800 bg-amber-950 px-2.5 py-0.5 text-xs font-medium text-amber-400">
+                  <span className="rounded-full border border-amber-800 bg-amber-950 px-2.5 py-0.5 text-xs font-medium text-amber-400 light:border-amber-300 light:bg-amber-100 light:text-amber-700">
                     ended early
                   </span>
                 )}

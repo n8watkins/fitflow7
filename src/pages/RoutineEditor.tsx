@@ -399,7 +399,7 @@ export default function RoutineEditor() {
             {isNew ? 'New Routine' : 'Edit Routine'}
           </h1>
           {isSystemCopy && (
-            <p className="mt-1 rounded-lg border border-amber-700/50 bg-amber-950/30 px-3 py-1.5 text-sm text-amber-400">
+            <p className="mt-1 rounded-lg border border-amber-700/50 bg-amber-950/30 px-3 py-1.5 text-sm text-amber-400 light:border-amber-300 light:bg-amber-50 light:text-amber-700">
               This is a built-in routine — you're editing a copy.
             </p>
           )}
@@ -430,7 +430,7 @@ export default function RoutineEditor() {
               className="w-full rounded-xl border border-edge bg-card px-4 py-2.5 text-lg font-semibold text-slate-100 placeholder-slate-600 outline-none transition focus:border-accent"
             />
             {nameEmpty && (
-              <p className="mt-1 text-xs text-red-400">Name is required to save.</p>
+              <p className="mt-1 text-xs text-red-400 light:text-red-600">Name is required to save.</p>
             )}
           </div>
 
@@ -563,7 +563,7 @@ export default function RoutineEditor() {
               <button
                 type="button"
                 onClick={handleDelete}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-800/60 py-3 font-semibold text-red-400 transition hover:bg-red-900/30"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-800/60 py-3 font-semibold text-red-400 transition hover:bg-red-900/30 light:border-red-300 light:text-red-600 light:hover:bg-red-100"
               >
                 Delete Routine
               </button>

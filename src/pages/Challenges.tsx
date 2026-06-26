@@ -245,7 +245,7 @@ function ChallengeDetail({
       {done > 0 && (
         <button
           onClick={handleReset}
-          className="rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-900/30 active:scale-95"
+          className="rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-900/30 active:scale-95 light:border-red-300 light:bg-red-50 light:text-red-600 light:hover:bg-red-100"
         >
           Reset progress
         </button>

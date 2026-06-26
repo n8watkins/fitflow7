@@ -49,7 +49,7 @@ function PublishableRow({ routine, ownerName }: { routine: Routine; ownerName?: 
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-3">
         {msg && (
-          <span className={`text-sm ${msg.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+          <span className={`text-sm ${msg.ok ? 'text-emerald-400 light:text-emerald-600' : 'text-red-400 light:text-red-600'}`}>
             {msg.text}
           </span>
         )}
@@ -119,7 +119,7 @@ function PublicRow({ routine }: { routine: PublicRoutine }) {
         <div className="mt-0.5 text-sm text-slate-400">{subtitle(routine)}</div>
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        {error && <span className="text-xs text-red-400">{error}</span>}
+        {error && <span className="text-xs text-red-400 light:text-red-600">{error}</span>}
         <button
           type="button"
           onClick={handleClone}

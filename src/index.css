@@ -1,5 +1,10 @@
 @import 'tailwindcss';
 
+/* `light:` variant — applies when an ancestor (the <html>) is data-theme=light.
+   Used to give legible light-mode overrides to the dark color tints (bg-*-950,
+   text-*-400, etc.) that the slate-ramp remap below can't reach. */
+@custom-variant light (&:where([data-theme='light'] *));
+
 @theme {
   --color-accent: #22d3ee;
   --color-accent-dim: #0e7490;

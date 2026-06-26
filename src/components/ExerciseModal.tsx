@@ -15,15 +15,15 @@ const CATEGORY_LABEL: Record<Category, string> = {
 }
 
 const LEVEL_COLOR: Record<Difficulty, string> = {
-  beginner: 'bg-emerald-900/40 text-emerald-300',
-  intermediate: 'bg-amber-900/40 text-amber-300',
-  advanced: 'bg-red-900/40 text-red-300',
+  beginner: 'bg-emerald-900/40 text-emerald-300 light:bg-emerald-100 light:text-emerald-700',
+  intermediate: 'bg-amber-900/40 text-amber-300 light:bg-amber-100 light:text-amber-700',
+  advanced: 'bg-red-900/40 text-red-300 light:bg-red-100 light:text-red-700',
 }
 
 const IMPACT_COLOR: Record<string, string> = {
-  low: 'bg-sky-900/40 text-sky-300',
-  medium: 'bg-amber-900/40 text-amber-300',
-  high: 'bg-red-900/40 text-red-300',
+  low: 'bg-sky-900/40 text-sky-300 light:bg-sky-100 light:text-sky-700',
+  medium: 'bg-amber-900/40 text-amber-300 light:bg-amber-100 light:text-amber-700',
+  high: 'bg-red-900/40 text-red-300 light:bg-red-100 light:text-red-700',
 }
 
 /**

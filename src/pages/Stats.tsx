@@ -55,10 +55,10 @@ function StatTile({ label, value }: { label: string; value: string | number }) {
 }
 
 const CAT_TEXT: Record<string, string> = {
-  sky: 'text-sky-400',
-  emerald: 'text-emerald-400',
-  amber: 'text-amber-400',
-  red: 'text-red-400',
+  sky: 'text-sky-400 light:text-sky-600',
+  emerald: 'text-emerald-400 light:text-emerald-600',
+  amber: 'text-amber-400 light:text-amber-600',
+  red: 'text-red-400 light:text-red-600',
   slate: 'text-slate-400',
 }
 
