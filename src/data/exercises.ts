@@ -1770,11 +1770,89 @@ const IMAGE_SLUGS = new Set([
   'reverse-lunges',
 ])
 
-export const EXERCISES: Exercise[] = RAW_EXERCISES.map((e) =>
-  IMAGE_SLUGS.has(e.slug)
-    ? { ...e, imageUrl: `/exercises/${e.slug}.jpg`, imageUrl2: `/exercises/${e.slug}-2.jpg` }
-    : e,
-)
+// Concise (≤8-word) cues for outline rows + the exercise modal. Kept here as a
+// map (rather than inline on each object) so the cue copy reads as one list and
+// the per-exercise data stays uncluttered. Falls back to instructions[0] if absent.
+const CUES: Record<string, string> = {
+  'jumping-jacks': 'Jump feet wide, arms overhead, repeat',
+  'wall-sit': 'Hold a 90° seat against the wall',
+  'push-ups': 'Lower chest to floor, press back up',
+  'crunches': 'Curl your shoulders up toward your knees',
+  'step-ups': 'Drive up onto the step, alternate legs',
+  'squats': 'Sit back to parallel, drive through heels',
+  'triceps-dips': 'Bend elbows to dip, press back up',
+  'plank': 'Hold a straight line on your forearms',
+  'high-knees': 'Run in place, knees up to hip',
+  'lunges': 'Step forward, drop back knee, alternate',
+  'push-up-rotation': 'Push up, then rotate into a side reach',
+  'side-plank': 'Hold a straight line on one forearm',
+  'mountain-climbers': 'Drive knees to chest in a plank',
+  'glute-bridge': 'Thrust hips up, squeeze glutes at top',
+  'dead-bug': 'Extend opposite arm and leg, back flat',
+  'bird-dog': 'Extend opposite arm and leg on all fours',
+  'incline-push-up': 'Push up with hands on a raised surface',
+  'knee-push-up': 'Push up from your knees',
+  'reverse-lunges': 'Step back, drop your knee, alternate',
+  'calf-raises': 'Rise onto your toes, lower slowly',
+  'shoulder-taps': 'Tap opposite shoulder, keep hips still',
+  'plank-up-downs': 'Move forearms to hands and back',
+  'march-in-place': 'March in place, lifting your knees',
+  'hip-hinge': 'Hinge from hips, keep your back flat',
+  'jumping-squats': 'Squat down, explode into a jump',
+  'reverse-crunches': 'Curl knees to chest, lift your hips',
+  'straight-arm-plank': 'Hold a straight line on your hands',
+  'russian-twist': 'Lean back, twist side to side',
+  'burpees': 'Squat, plank, push-up, then jump up',
+  'long-arm-crunches': 'Crunch up with arms stretched overhead',
+  'one-leg-bridge': 'Bridge up with one leg extended',
+  'one-leg-push-ups': 'Push up with one leg lifted',
+  'cross-arm-crunches': 'Crunch up, arms crossed on chest',
+  'bicycle-crunches': 'Pedal legs, opposite elbow to knee',
+  'froggy-glute-lifts': 'Soles together, lift knees with glutes',
+  'donkey-kick-left': 'Drive left heel up on all fours',
+  'split-squat-right': 'Right leg forward, lower straight down',
+  'fire-hydrant-left': 'Lift bent left leg out to side',
+  'fire-hydrant-right': 'Lift bent right leg out to side',
+  'plie-squats': 'Wide stance, toes out, squat down',
+  'donkey-kick-right': 'Drive right heel up on all fours',
+  'sumo-squat-calf-raises': 'Hold a sumo squat, raise your heels',
+  'split-squat-left': 'Left leg forward, lower straight down',
+  'curtsy-lunges': 'Cross one leg back into a curtsy',
+  'single-left-leg-calf-raises': 'Rise onto your left toes, lower slowly',
+  'side-lunge-knee-hop': 'Side lunge, then hop the knee up',
+  'single-right-leg-calf-raises': 'Rise onto your right toes, lower slowly',
+  'bottom-leg-lift-left': 'Side-lying, lift your bottom left leg',
+  'bottom-leg-lift-right': 'Side-lying, lift your bottom right leg',
+  'right-lunge-knee-hops': 'Lunge back, hop the right knee up',
+  'side-leg-circles-left': 'Side-lying, circle your top left leg',
+  'side-leg-circles-right': 'Side-lying, circle your top right leg',
+  'backward-lunge-front-kick-left': 'Lunge back, then front-kick your left leg',
+  'backward-lunge-front-kick-right': 'Lunge back, then front-kick your right leg',
+  'side-arm-raise': 'Raise arms out to shoulder height',
+  'diamond-push-ups': 'Push up with hands in a diamond',
+  'punches': 'Throw fast alternating punches, stay light',
+  'shoulder-stretch': 'Pull one arm across your chest',
+  'arm-circles': 'Trace circles with extended arms',
+  'reverse-push-ups': 'Pike hips high, press through shoulders',
+  'tricep-stretch-left': 'Reach left hand down your back',
+  'tricep-stretch-right': 'Reach right hand down your back',
+  'kneeling-lunge-stretch-left': 'Kneel and sink into the left hip',
+  'kneeling-lunge-stretch-right': 'Kneel and sink into the right hip',
+  'calf-stretch-left': 'Press your left heel into the floor',
+  'calf-stretch-right': 'Press your right heel into the floor',
+  'cat-cow-pose': 'Arch and round your spine with breath',
+  'cobra-stretch': 'Press your chest up, hips stay down',
+  'child-pose': 'Sit hips back, reach arms forward, rest',
+  'spine-lumbar-twist-left': 'Drop both knees left, shoulders down',
+  'spine-lumbar-twist-right': 'Drop both knees right, shoulders down',
+}
+
+export const EXERCISES: Exercise[] = RAW_EXERCISES.map((e) => {
+  const withCue: Exercise = CUES[e.id] ? { ...e, cue: CUES[e.id] } : e
+  return IMAGE_SLUGS.has(e.slug)
+    ? { ...withCue, imageUrl: `/exercises/${e.slug}.jpg`, imageUrl2: `/exercises/${e.slug}-2.jpg` }
+    : withCue
+})
 
 export const EXERCISE_MAP: Record<string, Exercise> = Object.fromEntries(
   EXERCISES.map(e => [e.id, e])

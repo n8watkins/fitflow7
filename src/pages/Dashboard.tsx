@@ -142,7 +142,7 @@ function OutlineRow({ index, exercise, onOpen }: { index: number; exercise: Exer
           <div className="text-sm font-semibold text-slate-100">
             <span className="text-slate-500">{index + 1}.</span> {exercise.name}
           </div>
-          <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-slate-400">{exercise.instructions[0]}</p>
+          <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-slate-400">{exercise.cue ?? exercise.instructions[0]}</p>
         </div>
         <IconChevronRight className="h-4 w-4 shrink-0 text-slate-600" />
       </button>

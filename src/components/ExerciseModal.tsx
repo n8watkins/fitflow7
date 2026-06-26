@@ -131,7 +131,10 @@ export default function ExerciseModal({
 
         {/* Body */}
         <div className="space-y-6 p-4 sm:p-5">
-          <p className="text-sm leading-relaxed text-slate-400">{ex.description}</p>
+          <div className="space-y-2">
+            {ex.cue && <p className="text-base font-semibold leading-snug text-accent">{ex.cue}</p>}
+            <p className="text-sm leading-relaxed text-slate-400">{ex.description}</p>
+          </div>
 
           {/* Instructions */}
           <div>

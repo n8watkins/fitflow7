@@ -27,6 +27,8 @@ export type Exercise = {
   isWeighted: boolean
   isBodyweight: boolean
   tags: string[]
+  /** A concise (≤8-word) one-liner for outlines/cards; falls back to `instructions[0]`. */
+  cue?: string
   easierVariationId?: string
   harderVariationId?: string
   commonMistake?: string
