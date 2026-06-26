@@ -1,4 +1,12 @@
-import { DEFAULT_SETTINGS, type Routine, type UserSettings, type WorkoutSession } from '../types'
+import {
+  DEFAULT_SETTINGS,
+  type BodyProfile,
+  type ChallengeProgress,
+  type Routine,
+  type UserSettings,
+  type WeightEntry,
+  type WorkoutSession,
+} from '../types'
 import { SYSTEM_ROUTINES } from '../data/routines'
 
 // ---------------------------------------------------------------------------
@@ -12,6 +20,9 @@ const KEY = {
   lastRoutineId: 'fitflow.lastRoutineId',
   schemaVersion: 'fitflow.schemaVersion',
   syncCursor: 'fitflow.syncCursor',
+  bodyProfile: 'fitflow.bodyProfile',
+  weightLog: 'fitflow.weightLog',
+  challengeProgress: 'fitflow.challengeProgress',
 } as const
 
 // ---------------------------------------------------------------------------
@@ -314,7 +325,9 @@ export function applyRemoteSessions(remote: WorkoutSession[]): void {
 
 export function applyRemoteSettings(value: UserSettings, updatedAt: string): void {
   if (updatedAt >= getSettingsMeta().updatedAt) {
-    writeJSON(KEY.settings, value)
+    // unitSystem is device-local (not persisted server-side); keep ours so a
+    // remote pull never resets the chosen display units.
+    writeJSON(KEY.settings, { ...value, unitSystem: getSettings().unitSystem })
     writeJSON(KEY.settingsMeta, { updatedAt, dirty: false })
   }
 }
@@ -332,12 +345,19 @@ export interface ExportBundle {
   sessions: WorkoutSession[]
   settings: UserSettings
   settingsUpdatedAt: string
+  /** Body stats (optional — absent in pre-body-stats backups). */
+  weightLog?: WeightEntry[]
+  bodyProfile?: BodyProfile
+  challengeProgress?: ChallengeProgress[]
 }
 
 export interface ImportResult {
   routines: number
   sessions: number
   settings: boolean
+  weightEntries: number
+  challenges: number
+  bodyProfile: boolean
 }
 
 /** Snapshots all local data (tombstones included) into a portable JSON bundle. */
@@ -351,6 +371,9 @@ export function exportData(): ExportBundle {
     sessions: readJSON<WorkoutSession[]>(KEY.sessions, []),
     settings: getSettings(),
     settingsUpdatedAt: getSettingsMeta().updatedAt || now(),
+    weightLog: readJSON<WeightEntry[]>(KEY.weightLog, []),
+    bodyProfile: getBodyProfile(),
+    challengeProgress: readJSON<ChallengeProgress[]>(KEY.challengeProgress, []),
   }
 }
 
@@ -369,6 +392,9 @@ export function importData(bundle: ExportBundle): ImportResult {
   let routines = 0
   let sessions = 0
   let settings = false
+  let weightEntries = 0
+  let challenges = 0
+  let bodyProfile = false
 
   if (Array.isArray(bundle.routines) && bundle.routines.length > 0) {
     const byId = new Map(getRoutinesRaw().map((r) => [r.id, r]))
@@ -404,8 +430,157 @@ export function importData(bundle: ExportBundle): ImportResult {
     }
   }
 
+  // Weight log — LWW per entry by id, mark dirty for a future push.
+  if (Array.isArray(bundle.weightLog) && bundle.weightLog.length > 0) {
+    const byId = new Map(readJSON<WeightEntry[]>(KEY.weightLog, []).map((e) => [e.id, e]))
+    for (const e of bundle.weightLog) {
+      const existing = byId.get(e.id)
+      if (!existing || (e.updatedAt ?? '') >= (existing.updatedAt ?? '')) {
+        byId.set(e.id, { ...e, dirty: true })
+        weightEntries++
+      }
+    }
+    writeJSON(KEY.weightLog, [...byId.values()])
+  }
+
+  // Challenge progress — LWW per challenge.
+  if (Array.isArray(bundle.challengeProgress) && bundle.challengeProgress.length > 0) {
+    const byId = new Map(
+      readJSON<ChallengeProgress[]>(KEY.challengeProgress, []).map((c) => [c.challengeId, c]),
+    )
+    for (const c of bundle.challengeProgress) {
+      const existing = byId.get(c.challengeId)
+      if (!existing || (c.updatedAt ?? '') >= (existing.updatedAt ?? '')) {
+        byId.set(c.challengeId, { ...c, dirty: true })
+        challenges++
+      }
+    }
+    writeJSON(KEY.challengeProgress, [...byId.values()])
+  }
+
+  // Body profile — singleton, LWW by updatedAt.
+  if (bundle.bodyProfile && (bundle.bodyProfile.updatedAt ?? '') >= getBodyProfile().updatedAt) {
+    writeJSON(KEY.bodyProfile, { ...bundle.bodyProfile, dirty: true })
+    bodyProfile = true
+  }
+
   emitWrite()
-  return { routines, sessions, settings }
+  return { routines, sessions, settings, weightEntries, challenges, bodyProfile }
+}
+
+// ---------------------------------------------------------------------------
+// Body profile (singleton: height, goal weight, sex, birthdate)
+// ---------------------------------------------------------------------------
+
+/** Returns the stored body profile, or an empty one (no height/goal yet). */
+export function getBodyProfile(): BodyProfile {
+  return readJSON<BodyProfile>(KEY.bodyProfile, { updatedAt: '' })
+}
+
+/** Persists the body profile, stamping updatedAt + dirty (sync groundwork). */
+export function saveBodyProfile(patch: Partial<BodyProfile>): void {
+  const current = getBodyProfile()
+  const next: BodyProfile = { ...current, ...patch, updatedAt: now(), dirty: true }
+  writeJSON(KEY.bodyProfile, next)
+  emitWrite()
+}
+
+// ---------------------------------------------------------------------------
+// Weight log (one entry per local calendar day; upsert by date)
+// ---------------------------------------------------------------------------
+
+/** All live weight entries (tombstones filtered), oldest -> newest by date. */
+export function getWeightEntries(): WeightEntry[] {
+  return readJSON<WeightEntry[]>(KEY.weightLog, [])
+    .filter((e) => !e.deletedAt)
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
+/** The most recent weight entry by date, or undefined if the log is empty. */
+export function getLatestWeight(): WeightEntry | undefined {
+  const entries = getWeightEntries()
+  return entries.length ? entries[entries.length - 1] : undefined
+}
+
+/** Upsert a weight measurement for its `date` (one entry per day). */
+export function saveWeightEntry(date: string, weightKg: number): void {
+  const all = readJSON<WeightEntry[]>(KEY.weightLog, [])
+  const stamp = now()
+  const idx = all.findIndex((e) => e.date === date && !e.deletedAt)
+  if (idx >= 0) {
+    all[idx] = { ...all[idx], weightKg, updatedAt: stamp, deletedAt: undefined, dirty: true }
+  } else {
+    all.push({ id: newId(), date, weightKg, createdAt: stamp, updatedAt: stamp, dirty: true })
+  }
+  writeJSON(KEY.weightLog, all)
+  emitWrite()
+}
+
+/** Soft-delete a weight entry so the delete can sync later. */
+export function deleteWeightEntry(id: string): void {
+  const all = readJSON<WeightEntry[]>(KEY.weightLog, [])
+  const idx = all.findIndex((e) => e.id === id)
+  if (idx < 0) return
+  all[idx] = { ...all[idx], deletedAt: now(), updatedAt: now(), dirty: true }
+  writeJSON(KEY.weightLog, all)
+  emitWrite()
+}
+
+// ---------------------------------------------------------------------------
+// Challenge progress (one record per challenge the user has started)
+// ---------------------------------------------------------------------------
+
+/** All live challenge-progress records (tombstones filtered). */
+export function getChallengeProgressAll(): ChallengeProgress[] {
+  return readJSON<ChallengeProgress[]>(KEY.challengeProgress, []).filter((c) => !c.deletedAt)
+}
+
+/** Progress for one challenge, or undefined if not started. */
+export function getChallengeProgressFor(challengeId: string): ChallengeProgress | undefined {
+  return getChallengeProgressAll().find((c) => c.challengeId === challengeId)
+}
+
+function writeChallengeProgress(next: ChallengeProgress): void {
+  const all = readJSON<ChallengeProgress[]>(KEY.challengeProgress, [])
+  const idx = all.findIndex((c) => c.challengeId === next.challengeId)
+  if (idx >= 0) all[idx] = next
+  else all.push(next)
+  writeJSON(KEY.challengeProgress, all)
+  emitWrite()
+}
+
+/** Mark a day complete in a challenge (creating the progress record if needed). */
+export function markChallengeDay(challengeId: string, day: number): void {
+  const stamp = now()
+  const existing = getChallengeProgressFor(challengeId)
+  const base: ChallengeProgress = existing ?? {
+    challengeId,
+    completedDays: {},
+    startedAt: stamp,
+  }
+  writeChallengeProgress({
+    ...base,
+    completedDays: { ...base.completedDays, [day]: stamp },
+    deletedAt: undefined,
+    updatedAt: stamp,
+    dirty: true,
+  })
+}
+
+/** Un-mark a previously completed challenge day. */
+export function unmarkChallengeDay(challengeId: string, day: number): void {
+  const existing = getChallengeProgressFor(challengeId)
+  if (!existing) return
+  const completedDays = { ...existing.completedDays }
+  delete completedDays[day]
+  writeChallengeProgress({ ...existing, completedDays, updatedAt: now(), dirty: true })
+}
+
+/** Reset (tombstone) a challenge's progress so the user can start over. */
+export function resetChallenge(challengeId: string): void {
+  const existing = getChallengeProgressFor(challengeId)
+  if (!existing) return
+  writeChallengeProgress({ ...existing, deletedAt: now(), updatedAt: now(), dirty: true })
 }
 
 // ---------------------------------------------------------------------------

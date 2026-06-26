@@ -186,6 +186,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             defaultRounds: Number(settingsRow.default_rounds),
             countdownSeconds: Number(settingsRow.countdown_seconds),
             audioCuesEnabled: Boolean(settingsRow.audio_cues_enabled),
+            // unitSystem is a device-local preference (no server column). The
+            // client's applyRemoteSettings preserves the local value, so this
+            // default is never actually applied — it only satisfies the type.
+            unitSystem: 'imperial',
           },
           updatedAt: settingsRow.updated_at as string,
         }

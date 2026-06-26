@@ -86,6 +86,46 @@ function isoWeekKey(date: Date): string {
 }
 
 // ---------------------------------------------------------------------------
+// Windowed stats (last N days) — used by the Stats/Body page.
+// ---------------------------------------------------------------------------
+
+export interface PeriodStats {
+  workouts: number
+  minutes: number
+  /** Distinct local days with at least one completed workout in the window. */
+  activeDays: number
+}
+
+/**
+ * Completed-workout totals over the last `days` calendar days (inclusive of
+ * today). `days = 7` => today and the previous 6 days. Local time.
+ */
+export function statsForLastDays(sessions: WorkoutSession[], days: number): PeriodStats {
+  const cutoff = new Date()
+  cutoff.setHours(0, 0, 0, 0)
+  cutoff.setDate(cutoff.getDate() - (days - 1))
+
+  let workouts = 0
+  let seconds = 0
+  const activeDayKeys = new Set<string>()
+  for (const s of sessions) {
+    if (!s.completed) continue
+    const d = new Date(s.startedAt)
+    if (d >= cutoff) {
+      workouts++
+      seconds += s.durationSeconds
+      activeDayKeys.add(dayKey(d))
+    }
+  }
+  return { workouts, minutes: Math.round(seconds / 60), activeDays: activeDayKeys.size }
+}
+
+/** Count of completed workouts in the last `days` days (today inclusive). */
+export function workoutsLastNDays(sessions: WorkoutSession[], days: number): number {
+  return statsForLastDays(sessions, days).workouts
+}
+
+// ---------------------------------------------------------------------------
 // computeStats
 // ---------------------------------------------------------------------------
 

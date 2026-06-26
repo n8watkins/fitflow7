@@ -246,8 +246,11 @@ export default function Settings() {
         const result = importData(parsed)
         if (result.settings) setSettings(getSettings())
         bumpData() // refresh Dashboard/History reads
+        const extras: string[] = []
+        if (result.weightEntries) extras.push(`${result.weightEntries} weigh-in${result.weightEntries === 1 ? '' : 's'}`)
+        if (result.challenges) extras.push(`${result.challenges} challenge${result.challenges === 1 ? '' : 's'}`)
         setImportMsg({
-          text: `Imported ${result.routines} routine${result.routines === 1 ? '' : 's'} and ${result.sessions} session${result.sessions === 1 ? '' : 's'}.`,
+          text: `Imported ${result.routines} routine${result.routines === 1 ? '' : 's'} and ${result.sessions} session${result.sessions === 1 ? '' : 's'}${extras.length ? `, plus ${extras.join(' and ')}` : ''}.`,
           ok: true,
         })
       } catch {
@@ -359,6 +362,33 @@ export default function Settings() {
                 />
               </button>
             </label>
+          </div>
+        </div>
+      </section>
+
+      {/* Units */}
+      <section>
+        <div className="rounded-2xl border border-edge bg-card">
+          <div className="border-b border-edge px-5 py-4">
+            <h2 className="font-semibold text-slate-200">Units</h2>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Display units for weight, height, and BMI on the Stats page.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 px-5 py-4">
+            {(['imperial', 'metric'] as const).map((u) => (
+              <button
+                key={u}
+                onClick={() => update('unitSystem', u)}
+                className={`rounded-lg border px-4 py-2 text-sm font-medium capitalize transition ${
+                  settings.unitSystem === u
+                    ? 'border-accent bg-accent text-slate-900'
+                    : 'border-edge bg-card text-slate-300 hover:bg-card-hover'
+                }`}
+              >
+                {u === 'imperial' ? 'Imperial (lb, ft/in)' : 'Metric (kg, cm)'}
+              </button>
+            ))}
           </div>
         </div>
       </section>
