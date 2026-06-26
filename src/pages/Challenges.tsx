@@ -152,8 +152,13 @@ function ChallengeDetail({
     }
   }
 
-  function workoutHref(routineId: string, rounds?: number): string {
-    return rounds && rounds > 1 ? `/workout/${routineId}?rounds=${rounds}` : `/workout/${routineId}`
+  // Carry challenge + day so the Player auto-marks the day done on completion.
+  function workoutHref(routineId: string, rounds: number | undefined, day: number): string {
+    const params = new URLSearchParams()
+    if (rounds && rounds > 1) params.set('rounds', String(rounds))
+    params.set('challenge', challenge.id)
+    params.set('day', String(day))
+    return `/workout/${routineId}?${params.toString()}`
   }
 
   return (
@@ -186,7 +191,7 @@ function ChallengeDetail({
             </div>
           </div>
           <Link
-            to={workoutHref(nextDay.routineId, nextDay.rounds)}
+            to={workoutHref(nextDay.routineId, nextDay.rounds, nextDay.day)}
             className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-slate-900 transition hover:brightness-110 active:scale-95"
           >
             Start day {nextDay.day}
@@ -226,7 +231,7 @@ function ChallengeDetail({
               </div>
               {d.routineId && (
                 <Link
-                  to={workoutHref(d.routineId, d.rounds)}
+                  to={workoutHref(d.routineId, d.rounds, d.day)}
                   className="shrink-0 rounded-lg border border-edge bg-card px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-card-hover active:scale-95"
                 >
                   Start

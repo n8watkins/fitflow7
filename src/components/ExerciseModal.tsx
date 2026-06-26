@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { Category, Difficulty, Exercise } from '../types'
 import { EXERCISE_MAP } from '../data/exercises'
 import ExerciseVisual from './ExerciseVisual'
@@ -40,15 +40,44 @@ export default function ExerciseModal({
   onClose: () => void
   onJump?: (id: string) => void
 }) {
+  const panelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
+    const prevActive = document.activeElement as HTMLElement | null
+    const getFocusable = () =>
+      Array.from(
+        panelRef.current?.querySelectorAll<HTMLElement>(
+          'button, a[href], input, [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((el) => !el.hasAttribute('disabled'))
+
+    // Move focus into the dialog (the close button is first).
+    getFocusable()[0]?.focus()
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (e.key !== 'Tab') return
+      // Trap focus within the dialog.
+      const f = getFocusable()
+      if (f.length === 0) return
+      const first = f[0]
+      const last = f[f.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
+      prevActive?.focus?.() // return focus to whatever opened the modal
     }
   }, [onClose])
 
@@ -68,6 +97,7 @@ export default function ExerciseModal({
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
       <div
+        ref={panelRef}
         className="relative z-[61] flex h-full w-full flex-col overflow-y-auto border-edge bg-card sm:h-auto sm:max-h-[88vh] sm:max-w-2xl sm:rounded-2xl sm:border"
         onClick={(e) => e.stopPropagation()}
       >

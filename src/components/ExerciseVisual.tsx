@@ -20,8 +20,12 @@ export default function ExerciseVisual({
   const [failed, setFailed] = useState(false)
   const [frame, setFrame] = useState(0)
   const [hovered, setHovered] = useState(false)
+  // Honor prefers-reduced-motion: never animate the two-frame swap.
+  const [reduceMotion] = useState(
+    () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
+  )
   const canAnimate = Boolean(exercise.imageUrl && exercise.imageUrl2 && !failed)
-  const animating = canAnimate && (autoPlay || hovered)
+  const animating = canAnimate && (autoPlay || hovered) && !reduceMotion
 
   // Preload the second frame so the first swap is instant.
   useEffect(() => {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useTimerStore } from '../store/timerStore'
-import { getRoutine, getSettings } from '../lib/storage'
+import { getRoutine, getSettings, markChallengeDay } from '../lib/storage'
 import { EXERCISE_MAP } from '../data/exercises'
 import { CLASSIC_7 } from '../data/routines'
 import ExerciseVisual from '../components/ExerciseVisual'
@@ -88,6 +88,10 @@ export default function Player() {
   // can't build a fractional loop count or thousands of rounds.
   const roundsRaw = Math.floor(Number(searchParams.get('rounds')))
   const roundsParam = Number.isFinite(roundsRaw) && roundsRaw > 0 ? Math.min(roundsRaw, 20) : undefined
+  // Optional challenge context (challenges launch a day via ?challenge=&day=)
+  // so finishing the workout auto-marks that day complete.
+  const challengeId = searchParams.get('challenge') || undefined
+  const challengeDay = Math.floor(Number(searchParams.get('day')))
 
   const {
     routine,
@@ -298,6 +302,19 @@ export default function Player() {
       document.title = 'FitFlow 7'
     }
   }, [phase, currentIndex, exercises])
+
+  // ---------------------------------------------------------------------------
+  // Challenge auto-completion: when a challenge-launched workout finishes in
+  // full (not ended early), mark that challenge day done. Fires once.
+  // ---------------------------------------------------------------------------
+  const challengeMarkedRef = useRef(false)
+  useEffect(() => {
+    if (phase !== 'complete' || challengeMarkedRef.current) return
+    if (!challengeId || !(challengeDay > 0)) return
+    if (exercisesCompleted < exercises.length) return // ended early — leave it manual
+    challengeMarkedRef.current = true
+    markChallengeDay(challengeId, challengeDay)
+  }, [phase, challengeId, challengeDay, exercisesCompleted, exercises.length])
 
   // ---------------------------------------------------------------------------
   // Derived values

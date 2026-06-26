@@ -93,12 +93,14 @@ function ChallengeWidget() {
 
   const { challenge, done, total, nextDay } = active
   const pct = total ? Math.round((done / total) * 100) : 0
-  const href =
-    nextDay?.routineId
-      ? nextDay.rounds && nextDay.rounds > 1
-        ? `/workout/${nextDay.routineId}?rounds=${nextDay.rounds}`
-        : `/workout/${nextDay.routineId}`
-      : '/challenges'
+  let href = '/challenges'
+  if (nextDay?.routineId) {
+    const params = new URLSearchParams()
+    if (nextDay.rounds && nextDay.rounds > 1) params.set('rounds', String(nextDay.rounds))
+    params.set('challenge', challenge.id)
+    params.set('day', String(nextDay.day))
+    href = `/workout/${nextDay.routineId}?${params.toString()}`
+  }
 
   return (
     <div className="rounded-2xl border border-edge bg-card p-4">
