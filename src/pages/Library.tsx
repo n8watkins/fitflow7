@@ -14,6 +14,7 @@ const CATEGORY_PILLS: { label: string; value: Category | 'all' }[] = [
   { label: 'Upper Body', value: 'upper_body' },
   { label: 'Lower Body', value: 'lower_body' },
   { label: 'Mobility', value: 'mobility' },
+  { label: 'Stretching', value: 'stretching' },
   { label: 'Full Body', value: 'full_body' },
 ]
 

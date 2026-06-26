@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useSyncStore } from '../store/syncStore'
-import { CLASSIC_7 } from '../data/routines'
+import { SYSTEM_ROUTINES } from '../data/routines'
 import { getLastRoutineId, getRoutine, getRoutines, getSessions } from '../lib/storage'
 import { computeStats } from '../lib/stats'
 import { formatRelativeDay } from '../lib/format'
@@ -39,7 +39,7 @@ export default function Dashboard() {
   const sessions = useMemo(() => getSessions(), [location.key, dataVersion])
   const stats = useMemo(() => computeStats(sessions), [sessions])
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const allRoutines = useMemo(() => [CLASSIC_7, ...getRoutines()], [location.key, dataVersion])
+  const allRoutines = useMemo(() => [...SYSTEM_ROUTINES, ...getRoutines()], [location.key, dataVersion])
   const lastRoutine = useMemo(() => {
     const lastRoutineId = getLastRoutineId()
     return lastRoutineId && lastRoutineId !== 'classic-7'
