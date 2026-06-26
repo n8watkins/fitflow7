@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useTimerStore } from '../store/timerStore'
 import { getRoutine, getSettings } from '../lib/storage'
 import { EXERCISE_MAP } from '../data/exercises'
@@ -82,6 +82,9 @@ function ProgressBar({
 // ---------------------------------------------------------------------------
 export default function Player() {
   const { routineId } = useParams<{ routineId: string }>()
+  const [searchParams] = useSearchParams()
+  // Optional rounds override (challenges pass ?rounds=N to scale intensity).
+  const roundsParam = Number(searchParams.get('rounds')) || undefined
 
   const {
     routine,
@@ -113,11 +116,12 @@ export default function Player() {
   // ---------------------------------------------------------------------------
   // Finding 16: Extract buildAndStart helper to avoid duplicated loop
   // ---------------------------------------------------------------------------
-  const buildAndStart = useCallback((rId: string) => {
+  const buildAndStart = useCallback((rId: string, roundsOverride?: number) => {
     const settings = getSettings()
     const resolved = getRoutine(rId) ?? CLASSIC_7
+    const roundsToUse = roundsOverride && roundsOverride > 0 ? roundsOverride : resolved.rounds
     const repeated: Exercise[] = []
-    for (let r = 0; r < resolved.rounds; r++) {
+    for (let r = 0; r < roundsToUse; r++) {
       for (const id of resolved.exerciseIds) {
         const ex = EXERCISE_MAP[id]
         if (ex) repeated.push(ex)
@@ -130,13 +134,13 @@ export default function Player() {
   // Mount: resolve routine + start timer
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    buildAndStart(routineId ?? '')
+    buildAndStart(routineId ?? '', roundsParam)
 
     return () => {
       reset()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routineId])
+  }, [routineId, roundsParam])
 
   // ---------------------------------------------------------------------------
   // Finding 5: Screen Wake Lock — acquire on mount, release on complete/unmount
@@ -348,7 +352,7 @@ export default function Player() {
               Back to Dashboard
             </Link>
             <button
-              onClick={() => buildAndStart(routineId ?? '')}
+              onClick={() => buildAndStart(routineId ?? '', roundsParam)}
               className="rounded-xl bg-accent px-6 py-3 text-sm font-bold text-slate-900 transition-opacity hover:opacity-90"
             >
               Go Again
