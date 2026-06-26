@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeStats, computeInsights } from '../src/lib/stats'
+import { computeStats, computeInsights, statsForLastDays, workoutsLastNDays } from '../src/lib/stats'
 import type { WorkoutSession } from '../src/types'
 
 // Sessions are built relative to "now" so streak assertions are date-agnostic.
@@ -108,5 +108,33 @@ describe('computeInsights', () => {
     )
     expect(ins.topRoutines.map((r) => r.name)).toEqual(['A', 'B'])
     expect(ins.topRoutines[0].count).toBe(3)
+  })
+})
+
+describe('statsForLastDays', () => {
+  it('counts completed workouts within the window (today inclusive)', () => {
+    const sessions = [sessionOn(0), sessionOn(3), sessionOn(6), sessionOn(10)]
+    const s = statsForLastDays(sessions, 7)
+    expect(s.workouts).toBe(3) // day 10 excluded
+    expect(s.activeDays).toBe(3)
+    expect(s.minutes).toBe(21) // 3 x 420s = 21 min
+  })
+
+  it('ignores incomplete sessions', () => {
+    const s = statsForLastDays([sessionOn(1), sessionOn(1, false)], 7)
+    expect(s.workouts).toBe(1)
+  })
+
+  it('counts multiple workouts on one day as one active day', () => {
+    const s = statsForLastDays([sessionOn(1), sessionOn(1)], 30)
+    expect(s.workouts).toBe(2)
+    expect(s.activeDays).toBe(1)
+  })
+})
+
+describe('workoutsLastNDays', () => {
+  it('windows to the last N days', () => {
+    const sessions = [sessionOn(0), sessionOn(1), sessionOn(2), sessionOn(3)]
+    expect(workoutsLastNDays(sessions, 3)).toBe(3) // day 3 excluded
   })
 })

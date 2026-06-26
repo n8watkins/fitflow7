@@ -207,3 +207,74 @@ describe('sync cursor', () => {
     expect(storage.getSyncCursor()).toBeUndefined()
   })
 })
+
+describe('weight log', () => {
+  it('upserts one entry per day and reads them sorted', () => {
+    storage.saveWeightEntry('2026-06-01', 80)
+    storage.saveWeightEntry('2026-06-03', 79)
+    storage.saveWeightEntry('2026-06-01', 81) // same day -> replace
+    const entries = storage.getWeightEntries()
+    expect(entries).toHaveLength(2)
+    expect(entries[0].date).toBe('2026-06-01')
+    expect(entries[0].weightKg).toBe(81)
+    expect(storage.getLatestWeight()?.date).toBe('2026-06-03')
+  })
+
+  it('soft-deletes an entry', () => {
+    storage.saveWeightEntry('2026-06-01', 80)
+    const id = storage.getWeightEntries()[0].id
+    storage.deleteWeightEntry(id)
+    expect(storage.getWeightEntries()).toHaveLength(0)
+  })
+})
+
+describe('body profile', () => {
+  it('merges patches and stamps updatedAt', () => {
+    storage.saveBodyProfile({ heightCm: 180 })
+    storage.saveBodyProfile({ goalWeightKg: 75 })
+    const p = storage.getBodyProfile()
+    expect(p.heightCm).toBe(180)
+    expect(p.goalWeightKg).toBe(75)
+    expect(p.updatedAt).not.toBe('')
+    expect(p.dirty).toBe(true)
+  })
+})
+
+describe('challenge progress', () => {
+  it('marks and unmarks days', () => {
+    storage.markChallengeDay('thirty-day', 1)
+    storage.markChallengeDay('thirty-day', 2)
+    expect(Object.keys(storage.getChallengeProgressFor('thirty-day')!.completedDays)).toHaveLength(2)
+    storage.unmarkChallengeDay('thirty-day', 1)
+    expect(storage.getChallengeProgressFor('thirty-day')!.completedDays[1]).toBeUndefined()
+    expect(storage.getChallengeProgressFor('thirty-day')!.completedDays[2]).toBeTruthy()
+  })
+
+  it('reset tombstones the record', () => {
+    storage.markChallengeDay('abs-14', 1)
+    storage.resetChallenge('abs-14')
+    expect(storage.getChallengeProgressFor('abs-14')).toBeUndefined()
+  })
+})
+
+describe('export/import of body + challenge data', () => {
+  it('round-trips weight log, body profile, and challenge progress', () => {
+    storage.saveWeightEntry('2026-06-01', 80)
+    storage.saveBodyProfile({ heightCm: 178, goalWeightKg: 74 })
+    storage.markChallengeDay('thirty-day', 1)
+
+    const bundle = storage.exportData()
+    expect(bundle.weightLog?.length).toBe(1)
+    expect(bundle.bodyProfile?.heightCm).toBe(178)
+    expect(bundle.challengeProgress?.length).toBe(1)
+
+    localStorage.clear()
+    const result = storage.importData(bundle)
+    expect(result.weightEntries).toBe(1)
+    expect(result.bodyProfile).toBe(true)
+    expect(result.challenges).toBe(1)
+    expect(storage.getLatestWeight()?.weightKg).toBe(80)
+    expect(storage.getBodyProfile().goalWeightKg).toBe(74)
+    expect(storage.getChallengeProgressFor('thirty-day')?.completedDays[1]).toBeTruthy()
+  })
+})
