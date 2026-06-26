@@ -30,7 +30,10 @@ cd mcp
 npm install
 ```
 
-1. In the app: **Settings → Account & Sync → Generate access token**. Copy it.
+1. In the app: **Settings → Account → Generate** an access token. Choose the
+   **Read + write** scope (the default) so `log_session` works — a **Read only**
+   token can read your data but can't record workouts. Copy the secret (it's
+   shown once). You can revoke it any time from the same screen.
 2. Add the server to your MCP client config (examples below), setting:
    - `FITFLOW_TOKEN` — the token you just generated (treat it like a password)
    - `FITFLOW_API_URL` — optional, defaults to `https://fitflow7.vercel.app`
@@ -77,5 +80,7 @@ FITFLOW_API_URL=http://localhost:3001 FITFLOW_TOKEN=<pat> npm start
 ## Notes
 
 - stdout is the MCP transport; all logging goes to stderr.
-- The token is a stateless signed token (1-year expiry). There is no server-side
-  revocation list yet — rotate `SESSION_SECRET` to invalidate all tokens.
+- Tokens are signed (1-year expiry) **and** tracked server-side in a registry, so
+  they're individually revocable — revoke one from Settings → Account and this
+  server stops authenticating with it immediately (no need to rotate the secret).
+  Tokens are scoped: `read` (pull only) or `readwrite` (also `log_session`).

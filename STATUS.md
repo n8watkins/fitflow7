@@ -4,7 +4,7 @@ Living snapshot: what's done, what's left, and what's on the owner. Updated 2026
 
 - **Live:** https://fitflow7.vercel.app (public, deployed). Repo `main`, all pushed, working tree clean.
 - **Cloud sync is now CONFIGURED + LIVE** — Turso DB + GitHub OAuth + `SESSION_SECRET` are set in Vercel and deployed. `…/api/auth/login?provider=github` returns 302 → GitHub. (Google OAuth intentionally **not** configured; its sign-in button is hidden.)
-- **Verify pipeline:** `npx tsc -b` + `npm run lint` + `npm run test` (**100 tests**) + `npm run build` — all green. `/api` type-checked via `tsconfig.api.json`; `mcp/` has its own `npm run typecheck`. **CI** (`.github/workflows/ci.yml`) now runs the full pipeline on push/PR.
+- **Verify pipeline:** `npx tsc -b` + `npm run lint` + `npm run test` (**107 tests**) + `npm run build` — all green. `/api` type-checked via `tsconfig.api.json`; `mcp/` has its own `npm run typecheck`. **CI** (`.github/workflows/ci.yml`) now runs the full pipeline on push/PR.
 - **Design principle still holds:** the signed-out app is byte-identical to the local-only MVP; cloud features only activate when signed in. (The "dormant when unconfigured" behavior remains the fail-closed default.)
 
 > **One thing unverified:** nobody has actually signed in yet — the Turso `users` table is still empty. The last open go-live step is the owner doing a real two-browser sign-in test (then I confirm the data landed server-side).
@@ -47,7 +47,8 @@ Capacitor 5 + `capacitor-health-connect`; `healthConnect.ts` seam (called on wor
 ### Session 7 (2026-06-26) — backlog burn-down — shipped (local + tests + CI)
 - **Front-door polish:** per-exercise concise cues (`Exercise.cue`, ~71 authored; outline + modal), first-run/empty states (Dashboard weight CTA + welcome nudge that vanishes after first action; Stats setup prompt), and goal-weight progress + 7/30-day trend deltas on Stats (`body.ts` helpers).
 - **Durability:** Player **empty-routine guard** (the timer refuses an all-unknown routine instead of logging a junk 0-exercise session / auto-completing a challenge day); `/api` **request-harness tests** (auth gating, sync LWW + tombstones + user-scoping, community no-PII + block threshold) via an in-memory libSQL DB; **render smokes** for the Session-6 pages; first **CI** workflow.
-- **Polish:** route **code-splitting** (initial JS ~120 KB → ~104 KB gzip); RoutineEditor mobile add-panel + stable per-row keys; dropped dead `BodyProfile.sex`/`birthDate`; assorted review cleanups (Player document-title/wake-lock, settings LWW `updatedAt`, import body-profile message). Tests 77 → **100**.
+- **Polish:** route **code-splitting** (initial JS ~120 KB → ~104 KB gzip); RoutineEditor mobile add-panel + stable per-row keys; dropped dead `BodyProfile.sex`/`birthDate`; assorted review cleanups (Player document-title/wake-lock, settings LWW `updatedAt`, import body-profile message).
+- **Content + theming + sharing (later in session 7):** **29/71 real exercise images** (free-exercise-db, Unlicense; emoji fallback); **light theme** + System/Light/Dark toggle (`html[data-theme='light']` token remap, no-flash boot script); **community hardening (S1)** — revocable + scoped (`read`/`readwrite`) PATs via an `access_tokens` registry (`resolveAuth`), one-report-per-user dedup (block on 3 *distinct* reporters), publish rate-limit + exercise-id validation; **token management UX (S2)** — list/revoke/copy + scope choice in Settings. Tests 77 → **107**.
 
 ### Cross-cutting — shipped
 - **Vitest, 49 tests** (sync merge/tombstones/migrations, dirty queue, stats/insights, calendar, export/import, auth open-redirect, render smokes).
@@ -62,12 +63,12 @@ Capacitor 5 + `capacitor-health-connect`; `healthConnect.ts` seam (called on wor
 |---|------|----------------|-------|
 | T1 | Real-device sign-in verification | Sync is live but **0 users so far** — sign in on two browsers, confirm routine/session propagation + delete/clear tombstones; I'll confirm in Turso. | **You** |
 | T2 | Build + sideload the Android APK | `VITE_NATIVE=true npm run build` → `cap add android` → manifest perm → Android Studio → sideload (`ANDROID.md`). | **You** |
-| T3 | `/api` request-harness tests | Endpoints have local manual e2e only; add automated coverage before more endpoints. | me |
-| T4 | Harden 3c before it's used by anyone but you | Scoped + **revocable** tokens (today: full-account, 1-yr); **rate limiting**; **report dedup** (one per user); server-side `exerciseIds` validation. Now relevant since the backend is live. | me |
-| T5 | Player empty-routine guard | Clone already drops unknown exercise ids (`Community`), but the timer should also refuse an all-unknown routine instead of recording a 0-exercise session. | me |
-| T6 | MCP token UX | Add a copy button + token list/revoke once revocation lands (T4). | me |
-| T7 | Phase 4 (deferred) | Full social: follows, leaderboards, public profiles — big data-model + moderation jump. Only if the network direction is wanted. | decision |
-| — | (Optional) richer exercise GIFs | Paid **ExerciseDB** ($299–599 one-time) for animated GIFs covering all 24, or fill the 11 emoji gaps with Everkinetic (CC-BY-SA). Current free 2-frame photos may be enough. | decision |
+| T3 | `/api` request-harness tests | ✅ **DONE** — `test/api/handlers.test.ts` (auth gating, sync LWW/tombstones/scoping, community no-PII + dedup) + CI. | me |
+| T4 | Harden 3c before it's used by anyone but you | ✅ **DONE (S1)** — revocable + scoped (`read`/`readwrite`) tokens via the `access_tokens` registry; publish rate-limit; one-report-per-user dedup; server-side exercise-id validation. **Unblocks T7.** | me |
+| T5 | Player empty-routine guard | ✅ **DONE** — store refuses an empty list; Player shows a guard screen instead of logging a junk session. | me |
+| T6 | MCP token UX | ✅ **DONE (S2)** — copy button + token list/revoke/scope in Settings → Account. | me |
+| T7 | Phase 4 (deferred) | Full social: follows, leaderboards, public profiles. **No longer gated** (T4 done); still a big data-model + moderation jump. Only if the network direction is wanted. | decision |
+| — | (Optional) richer exercise images | 29/71 now have free 2-frame photos. Fill remaining emoji gaps with Everkinetic/wger (CC-BY-SA — needs Credits + ShareAlike), or pay for ExerciseDB GIFs. Current set may be enough. | decision |
 | — | (Optional) Google login | Intentionally off; add a Google OAuth app + 2 env vars to re-enable the button. | decision |
 
 ---
@@ -87,7 +88,7 @@ Capacitor 5 + `capacitor-health-connect`; `healthConnect.ts` seam (called on wor
 - **Single-user by construction.** Cloud tables scoped by `user_id`; sync is LWW by `updatedAt`. Sharing (3c, Phase 4) is **copy-on-clone** via **separate endpoints** — never widen `/api/sync` to serve other users.
 - **Fail closed when unconfigured.** No env vars → clean 401 / `{user:null}` / "unavailable". Never commit `.env`.
 - **`/api` ESM imports need `.js`** (`type: module` + Vercel ESM runtime).
-- **PAT (known limit):** full-account, 1-yr, no revocation list (only `SESSION_SECRET` rotation invalidates). Must become scoped + revocable before public/social (T4).
+- **PAT model (post-S1):** PATs carry a `jti` and are valid only while a non-revoked row exists in the `access_tokens` registry; `scope` is `read`|`readwrite`. Revoke from Settings → Account (or `DELETE /api/token`). `resolveAuth` (api/_lib/tokens.ts) is the single auth path for sync/publish/report.
 - **LWW cursor skew (known):** server-clock cursor vs client `updatedAt`; fine for one user's devices.
 - **Verify** with `tsc -b` + `lint` + `test` + `build` (+ `mcp` typecheck); cloud changes get a local `vercel dev` + file-DB e2e before deploy.
 
