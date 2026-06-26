@@ -1,10 +1,10 @@
 # FitFlow 7 — Project Status
 
-Living snapshot: what's done, what's left, and what's on the owner. Updated 2026-06-25.
+Living snapshot: what's done, what's left, and what's on the owner. Updated 2026-06-26.
 
 - **Live:** https://fitflow7.vercel.app (public, deployed). Repo `main`, all pushed, working tree clean.
 - **Cloud sync is now CONFIGURED + LIVE** — Turso DB + GitHub OAuth + `SESSION_SECRET` are set in Vercel and deployed. `…/api/auth/login?provider=github` returns 302 → GitHub. (Google OAuth intentionally **not** configured; its sign-in button is hidden.)
-- **Verify pipeline:** `npx tsc -b` + `npm run lint` + `npm run test` (**49 tests**) + `npm run build` — all green. `/api` type-checked via `tsconfig.api.json`; `mcp/` has its own `npm run typecheck`.
+- **Verify pipeline:** `npx tsc -b` + `npm run lint` + `npm run test` (**100 tests**) + `npm run build` — all green. `/api` type-checked via `tsconfig.api.json`; `mcp/` has its own `npm run typecheck`. **CI** (`.github/workflows/ci.yml`) now runs the full pipeline on push/PR.
 - **Design principle still holds:** the signed-out app is byte-identical to the local-only MVP; cloud features only activate when signed in. (The "dormant when unconfigured" behavior remains the fail-closed default.)
 
 > **One thing unverified:** nobody has actually signed in yet — the Turso `users` table is still empty. The last open go-live step is the owner doing a real two-browser sign-in test (then I confirm the data landed server-side).
@@ -43,6 +43,11 @@ Capacitor 5 + `capacitor-health-connect`; `healthConnect.ts` seam (called on wor
 - **Exercises + routines**: 24 → **71 exercises** (authored instructions/muscles/icons; emoji fallback) covering the source app's Abs/Butt/Leg/Arm/Stretching sets; **5 new system routines** join Classic 7. Library gains a Stretching filter.
 - **Navigation**: responsive — desktop top nav lists all destinations; mobile gets a fixed bottom tab bar (Workouts · Calendar · Stats · Challenges) + a "More" sheet.
 - **Storage**: new local-first data (body profile, weight log, challenge progress) rides the existing `dirty`/tombstone seam + export/import; **no Turso/`api` schema change** this pass (cloud sync of body/challenge data is a deliberate follow-up). `unitSystem` is a device-local preference. Tests 49 → **76**.
+
+### Session 7 (2026-06-26) — backlog burn-down — shipped (local + tests + CI)
+- **Front-door polish:** per-exercise concise cues (`Exercise.cue`, ~71 authored; outline + modal), first-run/empty states (Dashboard weight CTA + welcome nudge that vanishes after first action; Stats setup prompt), and goal-weight progress + 7/30-day trend deltas on Stats (`body.ts` helpers).
+- **Durability:** Player **empty-routine guard** (the timer refuses an all-unknown routine instead of logging a junk 0-exercise session / auto-completing a challenge day); `/api` **request-harness tests** (auth gating, sync LWW + tombstones + user-scoping, community no-PII + block threshold) via an in-memory libSQL DB; **render smokes** for the Session-6 pages; first **CI** workflow.
+- **Polish:** route **code-splitting** (initial JS ~120 KB → ~104 KB gzip); RoutineEditor mobile add-panel + stable per-row keys; dropped dead `BodyProfile.sex`/`birthDate`; assorted review cleanups (Player document-title/wake-lock, settings LWW `updatedAt`, import body-profile message). Tests 77 → **100**.
 
 ### Cross-cutting — shipped
 - **Vitest, 49 tests** (sync merge/tombstones/migrations, dirty queue, stats/insights, calendar, export/import, auth open-redirect, render smokes).
