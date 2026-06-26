@@ -267,6 +267,64 @@ describe('challenge progress', () => {
   })
 })
 
+describe('B1 sync seam: body/weight/challenge dirty queue + remote merge', () => {
+  it('drains dirty body/weight/challenge into getPendingSync and clears on markSynced', () => {
+    storage.saveWeightEntry('2026-06-01', 80)
+    storage.saveBodyProfile({ heightCm: 180 })
+    storage.markChallengeDay('thirty-day', 1)
+
+    const pending = storage.getPendingSync()
+    expect(pending.weightLog).toHaveLength(1)
+    expect(pending.challengeProgress).toHaveLength(1)
+    expect(pending.bodyProfile?.heightCm).toBe(180)
+
+    storage.markSynced({
+      weightLog: pending.weightLog,
+      challengeProgress: pending.challengeProgress,
+      bodyProfile: pending.bodyProfile,
+    })
+    const after = storage.getPendingSync()
+    expect(after.weightLog).toHaveLength(0)
+    expect(after.challengeProgress).toHaveLength(0)
+    expect(after.bodyProfile).toBeUndefined()
+  })
+
+  it('includes weight tombstones in the pending queue so deletes sync', () => {
+    storage.saveWeightEntry('2026-06-01', 80)
+    const id = storage.getWeightEntries()[0].id
+    storage.deleteWeightEntry(id)
+    const tomb = storage.getPendingSync().weightLog.find((e) => e.id === id)
+    expect(tomb?.deletedAt).toBeTruthy()
+  })
+
+  it('applyRemoteWeightLog is last-write-wins and marks merged rows clean', () => {
+    storage.saveWeightEntry('2026-06-01', 80) // local, dirty
+    const id = storage.getWeightEntries()[0].id
+    // Older remote loses; the local dirty value stays.
+    storage.applyRemoteWeightLog([{ id, date: '2026-06-01', weightKg: 50, createdAt: 'x', updatedAt: '2000-01-01T00:00:00.000Z' }])
+    expect(storage.getWeightEntries()[0].weightKg).toBe(80)
+    // Newer remote wins and is clean (no longer pending).
+    storage.applyRemoteWeightLog([{ id, date: '2026-06-01', weightKg: 70, createdAt: 'x', updatedAt: '2999-01-01T00:00:00.000Z' }])
+    expect(storage.getWeightEntries()[0].weightKg).toBe(70)
+    expect(storage.getPendingSync().weightLog.some((e) => e.id === id)).toBe(false)
+  })
+
+  it('applyRemoteBodyProfile only applies a newer profile', () => {
+    storage.applyRemoteBodyProfile({ heightCm: 190, updatedAt: '2999-01-01T00:00:00.000Z' })
+    expect(storage.getBodyProfile().heightCm).toBe(190)
+    storage.applyRemoteBodyProfile({ heightCm: 150, updatedAt: '2000-01-01T00:00:00.000Z' })
+    expect(storage.getBodyProfile().heightCm).toBe(190) // stale ignored
+  })
+
+  it('applyRemoteChallengeProgress merges a remote tombstone (delete propagates)', () => {
+    storage.markChallengeDay('thirty-day', 1)
+    storage.applyRemoteChallengeProgress([
+      { challengeId: 'thirty-day', completedDays: { 1: 'x' }, startedAt: 'x', updatedAt: '2999-01-01T00:00:00.000Z', deletedAt: '2999-01-01T00:00:00.000Z' },
+    ])
+    expect(storage.getChallengeProgressFor('thirty-day')).toBeUndefined()
+  })
+})
+
 describe('export/import of body + challenge data', () => {
   it('round-trips weight log, body profile, and challenge progress', () => {
     storage.saveWeightEntry('2026-06-01', 80)

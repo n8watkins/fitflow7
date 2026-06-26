@@ -1,7 +1,10 @@
 import {
+  applyRemoteBodyProfile,
+  applyRemoteChallengeProgress,
   applyRemoteRoutines,
   applyRemoteSessions,
   applyRemoteSettings,
+  applyRemoteWeightLog,
   clearSyncCursor,
   getPendingSettings,
   getPendingSync,
@@ -11,7 +14,14 @@ import {
   setSyncCursor,
 } from './storage'
 import { useSyncStore, type AuthUser } from '../store/syncStore'
-import type { Routine, UserSettings, WorkoutSession } from '../types'
+import type {
+  BodyProfile,
+  ChallengeProgress,
+  Routine,
+  UserSettings,
+  WeightEntry,
+  WorkoutSession,
+} from '../types'
 
 // ---------------------------------------------------------------------------
 // Client sync engine. Offline-first: every write stays local; this layer pushes
@@ -27,6 +37,9 @@ interface SyncResponse {
   routines: Routine[]
   sessions: WorkoutSession[]
   settings: { value: UserSettings; updatedAt: string } | null
+  weightLog: WeightEntry[]
+  challengeProgress: ChallengeProgress[]
+  bodyProfile: BodyProfile | null
 }
 
 let inFlight = false
@@ -54,6 +67,9 @@ export async function sync(): Promise<void> {
         routines: pending.routines,
         sessions: pending.sessions,
         settings: pendingSettings,
+        weightLog: pending.weightLog,
+        challengeProgress: pending.challengeProgress,
+        bodyProfile: pending.bodyProfile ?? null,
       }),
     })
 
@@ -71,17 +87,33 @@ export async function sync(): Promise<void> {
     const data = (await res.json()) as SyncResponse
 
     // The push succeeded — clear dirty flags on what we sent.
-    markSynced({ routines: pending.routines, sessions: pending.sessions })
+    markSynced({
+      routines: pending.routines,
+      sessions: pending.sessions,
+      weightLog: pending.weightLog,
+      challengeProgress: pending.challengeProgress,
+      bodyProfile: pending.bodyProfile,
+    })
     if (pendingSettings) markSettingsSynced()
 
     // Merge what the server sent back (last-write-wins, tombstones included).
     applyRemoteRoutines(data.routines)
     applyRemoteSessions(data.sessions)
     if (data.settings) applyRemoteSettings(data.settings.value, data.settings.updatedAt)
+    applyRemoteWeightLog(data.weightLog ?? [])
+    applyRemoteChallengeProgress(data.challengeProgress ?? [])
+    if (data.bodyProfile) applyRemoteBodyProfile(data.bodyProfile)
 
     setSyncCursor(data.serverTime)
     useSyncStore.getState().markSynced()
-    if (data.routines.length || data.sessions.length || data.settings) {
+    if (
+      data.routines.length ||
+      data.sessions.length ||
+      data.settings ||
+      data.weightLog?.length ||
+      data.challengeProgress?.length ||
+      data.bodyProfile
+    ) {
       useSyncStore.getState().bumpData()
     }
   } catch {

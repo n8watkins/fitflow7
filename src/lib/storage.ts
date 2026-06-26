@@ -248,11 +248,22 @@ function getSettingsMeta(): SettingsMeta {
 // deliberately does not drain them and the server has no columns for them yet.
 // Wiring them into sync is a planned follow-up (see STATUS.md session 6).
 
-/** All routine/session records with unsynced local changes. The sync engine drains this. */
-export function getPendingSync(): { routines: Routine[]; sessions: WorkoutSession[] } {
+/** All records with unsynced local changes (tombstones included). The sync engine
+ *  drains this. Body/weight/challenge ride the same dirty/LWW contract (B1). */
+export function getPendingSync(): {
+  routines: Routine[]
+  sessions: WorkoutSession[]
+  weightLog: WeightEntry[]
+  challengeProgress: ChallengeProgress[]
+  bodyProfile?: BodyProfile
+} {
+  const bodyProfile = readJSON<BodyProfile>(KEY.bodyProfile, { updatedAt: '' })
   return {
     routines: getRoutinesRaw().filter((r) => r.dirty),
     sessions: readJSON<WorkoutSession[]>(KEY.sessions, []).filter((s) => s.dirty),
+    weightLog: readJSON<WeightEntry[]>(KEY.weightLog, []).filter((e) => e.dirty),
+    challengeProgress: readJSON<ChallengeProgress[]>(KEY.challengeProgress, []).filter((c) => c.dirty),
+    bodyProfile: bodyProfile.dirty ? bodyProfile : undefined,
   }
 }
 
@@ -263,6 +274,9 @@ export function getPendingSync(): { routines: Routine[]; sessions: WorkoutSessio
 export function markSynced(pushed: {
   routines?: { id: string; updatedAt?: string }[]
   sessions?: { id: string; updatedAt?: string }[]
+  weightLog?: { id: string; updatedAt?: string }[]
+  challengeProgress?: { challengeId: string; updatedAt?: string }[]
+  bodyProfile?: { updatedAt: string }
 }): void {
   if (pushed.routines?.length) {
     const m = new Map(pushed.routines.map((r) => [r.id, r.updatedAt]))
@@ -281,6 +295,29 @@ export function markSynced(pushed: {
         m.has(s.id) && s.updatedAt === m.get(s.id) ? { ...s, dirty: false } : s,
       ),
     )
+  }
+  if (pushed.weightLog?.length) {
+    const m = new Map(pushed.weightLog.map((e) => [e.id, e.updatedAt]))
+    writeJSON(
+      KEY.weightLog,
+      readJSON<WeightEntry[]>(KEY.weightLog, []).map((e) =>
+        m.has(e.id) && e.updatedAt === m.get(e.id) ? { ...e, dirty: false } : e,
+      ),
+    )
+  }
+  if (pushed.challengeProgress?.length) {
+    const m = new Map(pushed.challengeProgress.map((c) => [c.challengeId, c.updatedAt]))
+    writeJSON(
+      KEY.challengeProgress,
+      readJSON<ChallengeProgress[]>(KEY.challengeProgress, []).map((c) =>
+        m.has(c.challengeId) && c.updatedAt === m.get(c.challengeId) ? { ...c, dirty: false } : c,
+      ),
+    )
+  }
+  if (pushed.bodyProfile) {
+    const bp = readJSON<BodyProfile>(KEY.bodyProfile, { updatedAt: '' })
+    // Only clear dirty if it wasn't edited again during the round-trip.
+    if (bp.updatedAt === pushed.bodyProfile.updatedAt) writeJSON(KEY.bodyProfile, { ...bp, dirty: false })
   }
 }
 
@@ -341,6 +378,43 @@ export function applyRemoteSessions(remote: WorkoutSession[]): void {
     }
   }
   writeJSON(KEY.sessions, [...byId.values()])
+}
+
+/** Merges server weight entries into local storage, LWW by updatedAt keyed by id
+ *  (tombstones win like any other newer write). Merged rows are marked clean. */
+export function applyRemoteWeightLog(remote: WeightEntry[]): void {
+  if (remote.length === 0) return
+  const byId = new Map(readJSON<WeightEntry[]>(KEY.weightLog, []).map((e) => [e.id, e]))
+  for (const e of remote) {
+    const existing = byId.get(e.id)
+    if (!existing || (e.updatedAt ?? '') > (existing.updatedAt ?? '')) {
+      byId.set(e.id, { ...e, dirty: false })
+    }
+  }
+  writeJSON(KEY.weightLog, [...byId.values()])
+}
+
+/** Merges server challenge-progress records, LWW by updatedAt keyed by challengeId. */
+export function applyRemoteChallengeProgress(remote: ChallengeProgress[]): void {
+  if (remote.length === 0) return
+  const byId = new Map(
+    readJSON<ChallengeProgress[]>(KEY.challengeProgress, []).map((c) => [c.challengeId, c]),
+  )
+  for (const c of remote) {
+    const existing = byId.get(c.challengeId)
+    if (!existing || (c.updatedAt ?? '') > (existing.updatedAt ?? '')) {
+      byId.set(c.challengeId, { ...c, dirty: false })
+    }
+  }
+  writeJSON(KEY.challengeProgress, [...byId.values()])
+}
+
+/** Applies the server's body profile (singleton) if it's newer than the local one. */
+export function applyRemoteBodyProfile(value: BodyProfile): void {
+  const current = readJSON<BodyProfile>(KEY.bodyProfile, { updatedAt: '' })
+  if ((value.updatedAt ?? '') > (current.updatedAt ?? '')) {
+    writeJSON(KEY.bodyProfile, { ...value, dirty: false })
+  }
 }
 
 export function applyRemoteSettings(value: UserSettings, updatedAt: string): void {

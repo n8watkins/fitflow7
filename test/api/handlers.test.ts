@@ -241,3 +241,56 @@ describe('routines/public — no PII, validation, report dedup', () => {
     expect((await call(publicHandler, { method: 'GET', query: { slug } })).statusCode).toBe(404)
   })
 })
+
+describe('B1 — body/weight/challenge sync (LWW + tombstone + scoping)', () => {
+  interface FullPull {
+    weightLog: { id: string; weightKg: number; deletedAt?: string }[]
+    challengeProgress: { challengeId: string; completedDays: Record<number, string>; deletedAt?: string }[]
+    bodyProfile: { heightCm?: number; goalWeightKg?: number } | null
+  }
+  async function push(userId: string, body: unknown) {
+    return call(syncHandler, { method: 'POST', headers: await bearer(userId), body })
+  }
+  async function pull(userId: string, since = EPOCH): Promise<FullPull> {
+    const res = await call(syncHandler, { method: 'POST', headers: await bearer(userId), body: { since } })
+    return res.body as FullPull
+  }
+
+  it('weight log: newer wins, tombstones propagate, scoped per user', async () => {
+    const w = (over = {}) => ({ id: 'w1', date: '2026-06-01', weightKg: 80, createdAt: '2026-06-01T00:00:00.000Z', updatedAt: '2026-06-01T00:00:00.000Z', ...over })
+    await push('userA', { weightLog: [w()] })
+    await push('userA', { weightLog: [w({ weightKg: 78, updatedAt: '2026-06-10T00:00:00.000Z' })] })
+    await push('userA', { weightLog: [w({ weightKg: 99, updatedAt: '2025-01-01T00:00:00.000Z' })] }) // stale, ignored
+    expect((await pull('userA')).weightLog.find((x) => x.id === 'w1')?.weightKg).toBe(78)
+
+    await push('userA', { weightLog: [w({ updatedAt: '2026-06-20T00:00:00.000Z', deletedAt: '2026-06-20T00:00:00.000Z' })] })
+    expect((await pull('userA')).weightLog.find((x) => x.id === 'w1')?.deletedAt).toBeTruthy()
+
+    await push('userB', { weightLog: [w({ id: 'wB', updatedAt: '2026-06-05T00:00:00.000Z' })] })
+    expect((await pull('userA')).weightLog.some((x) => x.id === 'wB')).toBe(false)
+  })
+
+  it('body profile: singleton LWW, scoped per user', async () => {
+    await push('userA', { bodyProfile: { heightCm: 180, updatedAt: '2026-06-01T00:00:00.000Z' } })
+    await push('userA', { bodyProfile: { heightCm: 182, goalWeightKg: 75, updatedAt: '2026-06-10T00:00:00.000Z' } })
+    await push('userA', { bodyProfile: { heightCm: 1, updatedAt: '2025-01-01T00:00:00.000Z' } }) // stale
+    const a = await pull('userA')
+    expect(a.bodyProfile).toMatchObject({ heightCm: 182, goalWeightKg: 75 })
+    expect((await pull('userB')).bodyProfile).toBeNull()
+  })
+
+  it('challenge progress: newer wins, completedDays preserved, scoped', async () => {
+    const c = (over = {}) => ({ challengeId: 'c30', completedDays: { 1: '2026-06-01T00:00:00.000Z' }, startedAt: '2026-06-01T00:00:00.000Z', updatedAt: '2026-06-01T00:00:00.000Z', ...over })
+    await push('userA', { challengeProgress: [c()] })
+    await push('userA', { challengeProgress: [c({ completedDays: { 1: 'x', 2: 'y' }, updatedAt: '2026-06-05T00:00:00.000Z' })] })
+    const row = (await pull('userA')).challengeProgress.find((x) => x.challengeId === 'c30')
+    expect(Object.keys(row?.completedDays ?? {})).toEqual(['1', '2'])
+    expect((await pull('userB')).challengeProgress.some((x) => x.challengeId === 'c30')).toBe(false)
+  })
+
+  it('a read-only token cannot push body data', async () => {
+    const ro = await bearer('userA', 'read')
+    const res = await call(syncHandler, { method: 'POST', headers: ro, body: { weightLog: [{ id: 'w', date: '2026-06-01', weightKg: 80, createdAt: 'x', updatedAt: 'x' }] } })
+    expect(res.statusCode).toBe(403)
+  })
+})

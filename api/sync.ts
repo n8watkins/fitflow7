@@ -1,5 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import type { Routine, UserSettings, WorkoutSession } from '../src/types'
+import type {
+  BodyProfile,
+  ChallengeProgress,
+  Routine,
+  UserSettings,
+  WeightEntry,
+  WorkoutSession,
+} from '../src/types'
 import { resolveAuth } from './_lib/tokens.js'
 import { ensureSchema, getDb } from './_lib/db.js'
 import type { InStatement } from '@libsql/client'
@@ -22,6 +29,9 @@ interface SyncBody {
   routines?: Routine[]
   sessions?: WorkoutSession[]
   settings?: { value: UserSettings; updatedAt: string } | null
+  weightLog?: WeightEntry[]
+  bodyProfile?: BodyProfile | null
+  challengeProgress?: ChallengeProgress[]
 }
 
 const EPOCH = '1970-01-01T00:00:00.000Z'
@@ -113,6 +123,74 @@ function sessionUpsert(userId: string, s: WorkoutSession): InStatement {
   }
 }
 
+// --- Body stats (B1) ---------------------------------------------------------
+
+function rowToWeight(r: Record<string, unknown>): WeightEntry {
+  return {
+    id: r.id as string,
+    date: r.date as string,
+    weightKg: Number(r.weight_kg),
+    createdAt: r.created_at as string,
+    updatedAt: r.updated_at as string,
+    deletedAt: (r.deleted_at as string) ?? undefined,
+  }
+}
+
+function weightUpsert(userId: string, e: WeightEntry): InStatement {
+  return {
+    sql: `INSERT INTO weight_log (id, user_id, date, weight_kg, created_at, updated_at, deleted_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            date = excluded.date, weight_kg = excluded.weight_kg,
+            updated_at = excluded.updated_at, deleted_at = excluded.deleted_at
+          WHERE excluded.updated_at > weight_log.updated_at AND weight_log.user_id = excluded.user_id`,
+    args: [
+      e.id,
+      userId,
+      e.date,
+      e.weightKg,
+      e.createdAt,
+      e.updatedAt ?? new Date().toISOString(),
+      e.deletedAt ?? null,
+    ],
+  }
+}
+
+function rowToChallenge(r: Record<string, unknown>): ChallengeProgress {
+  let completedDays: Record<number, string>
+  try {
+    completedDays = JSON.parse((r.completed_days as string) || '{}') as Record<number, string>
+  } catch {
+    completedDays = {}
+  }
+  return {
+    challengeId: r.challenge_id as string,
+    completedDays,
+    startedAt: r.started_at as string,
+    updatedAt: r.updated_at as string,
+    deletedAt: (r.deleted_at as string) ?? undefined,
+  }
+}
+
+function challengeUpsert(userId: string, c: ChallengeProgress): InStatement {
+  return {
+    sql: `INSERT INTO challenge_progress (user_id, challenge_id, completed_days, started_at, updated_at, deleted_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(user_id, challenge_id) DO UPDATE SET
+            completed_days = excluded.completed_days, started_at = excluded.started_at,
+            updated_at = excluded.updated_at, deleted_at = excluded.deleted_at
+          WHERE excluded.updated_at > challenge_progress.updated_at`,
+    args: [
+      userId,
+      c.challengeId,
+      JSON.stringify(c.completedDays ?? {}),
+      c.startedAt,
+      c.updatedAt ?? new Date().toISOString(),
+      c.deletedAt ?? null,
+    ],
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' })
   const auth = await resolveAuth(req)
@@ -124,7 +202,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // A read-scoped token may pull but never push (S1).
   const wantsWrite =
-    (body.routines?.length ?? 0) > 0 || (body.sessions?.length ?? 0) > 0 || !!body.settings
+    (body.routines?.length ?? 0) > 0 ||
+    (body.sessions?.length ?? 0) > 0 ||
+    !!body.settings ||
+    (body.weightLog?.length ?? 0) > 0 ||
+    !!body.bodyProfile ||
+    (body.challengeProgress?.length ?? 0) > 0
   if (auth.scope === 'read' && wantsWrite) {
     return res.status(403).json({ error: 'read-only token cannot push' })
   }
@@ -166,11 +249,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ],
       })
     }
+    for (const e of body.weightLog ?? []) writes.push(weightUpsert(userId, e))
+    for (const c of body.challengeProgress ?? []) writes.push(challengeUpsert(userId, c))
+    if (body.bodyProfile) {
+      const bp = body.bodyProfile
+      writes.push({
+        sql: `INSERT INTO body_profile (user_id, height_cm, goal_weight_kg, updated_at)
+              VALUES (?, ?, ?, ?)
+              ON CONFLICT(user_id) DO UPDATE SET
+                height_cm = excluded.height_cm, goal_weight_kg = excluded.goal_weight_kg,
+                updated_at = excluded.updated_at
+              WHERE excluded.updated_at > body_profile.updated_at`,
+        args: [userId, bp.heightCm ?? null, bp.goalWeightKg ?? null, bp.updatedAt],
+      })
+    }
     if (writes.length > 0) await db.batch(writes, 'write')
 
     // --- Pull everything changed since the cursor (tombstones included). ---
     const serverTime = new Date().toISOString()
-    const [routinesRes, sessionsRes, settingsRes] = await Promise.all([
+    const [routinesRes, sessionsRes, settingsRes, weightRes, challengeRes, bodyRes] = await Promise.all([
       db.execute({
         sql: `SELECT * FROM routines WHERE user_id = ? AND updated_at > ?`,
         args: [userId, since],
@@ -181,6 +278,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }),
       db.execute({
         sql: `SELECT * FROM settings WHERE user_id = ? AND updated_at > ?`,
+        args: [userId, since],
+      }),
+      db.execute({
+        sql: `SELECT * FROM weight_log WHERE user_id = ? AND updated_at > ?`,
+        args: [userId, since],
+      }),
+      db.execute({
+        sql: `SELECT * FROM challenge_progress WHERE user_id = ? AND updated_at > ?`,
+        args: [userId, since],
+      }),
+      db.execute({
+        sql: `SELECT * FROM body_profile WHERE user_id = ? AND updated_at > ?`,
         args: [userId, since],
       }),
     ])
@@ -203,11 +312,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       : null
 
+    const bodyRow = bodyRes.rows[0]
+    const bodyProfile: BodyProfile | null = bodyRow
+      ? {
+          heightCm: bodyRow.height_cm != null ? Number(bodyRow.height_cm) : undefined,
+          goalWeightKg: bodyRow.goal_weight_kg != null ? Number(bodyRow.goal_weight_kg) : undefined,
+          updatedAt: bodyRow.updated_at as string,
+        }
+      : null
+
     res.status(200).json({
       serverTime,
       routines: routinesRes.rows.map((r) => rowToRoutine(r as Record<string, unknown>)),
       sessions: sessionsRes.rows.map((r) => rowToSession(r as Record<string, unknown>)),
       settings,
+      weightLog: weightRes.rows.map((r) => rowToWeight(r as Record<string, unknown>)),
+      challengeProgress: challengeRes.rows.map((r) => rowToChallenge(r as Record<string, unknown>)),
+      bodyProfile,
     })
   } catch {
     res.status(500).json({ error: 'sync failed' })

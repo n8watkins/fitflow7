@@ -115,6 +115,36 @@ const SCHEMA = [
      created_at  TEXT NOT NULL,
      PRIMARY KEY (slug, user_id)
    )`,
+  // B1: body stats sync (previously local-only). All user_id-scoped, LWW by
+  // updated_at, tombstones via deleted_at — same contract as routines/sessions.
+  `CREATE TABLE IF NOT EXISTS weight_log (
+     id          TEXT PRIMARY KEY,
+     user_id     TEXT NOT NULL,
+     date        TEXT NOT NULL,
+     weight_kg   REAL NOT NULL,
+     created_at  TEXT NOT NULL,
+     updated_at  TEXT NOT NULL,
+     deleted_at  TEXT
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_weight_log_user_updated ON weight_log (user_id, updated_at)`,
+  // Singleton per user (height + goal weight). No tombstone — it's never deleted.
+  `CREATE TABLE IF NOT EXISTS body_profile (
+     user_id        TEXT PRIMARY KEY,
+     height_cm      REAL,
+     goal_weight_kg REAL,
+     updated_at     TEXT NOT NULL
+   )`,
+  // One row per challenge a user has started; completed_days is a JSON map.
+  `CREATE TABLE IF NOT EXISTS challenge_progress (
+     user_id        TEXT NOT NULL,
+     challenge_id   TEXT NOT NULL,
+     completed_days TEXT NOT NULL,
+     started_at     TEXT NOT NULL,
+     updated_at     TEXT NOT NULL,
+     deleted_at     TEXT,
+     PRIMARY KEY (user_id, challenge_id)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_challenge_progress_user_updated ON challenge_progress (user_id, updated_at)`,
 ]
 
 /** Ensures the schema exists. Memoized so concurrent requests share one bootstrap. */
