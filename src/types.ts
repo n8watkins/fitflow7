@@ -80,6 +80,10 @@ export type WorkoutSession = {
 /** Display unit system for body stats. Storage is always canonical (kg/cm). */
 export type UnitSystem = 'imperial' | 'metric'
 
+/** Color-theme preference. 'system' follows the OS `prefers-color-scheme`.
+ *  Device-local (like display units) — not synced to the cloud. */
+export type ThemePref = 'system' | 'light' | 'dark'
+
 export type UserSettings = {
   defaultWorkSeconds: number
   defaultRestSeconds: number

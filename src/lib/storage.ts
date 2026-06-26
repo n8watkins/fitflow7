@@ -3,6 +3,7 @@ import {
   type BodyProfile,
   type ChallengeProgress,
   type Routine,
+  type ThemePref,
   type UserSettings,
   type WeightEntry,
   type WorkoutSession,
@@ -23,6 +24,7 @@ const KEY = {
   bodyProfile: 'fitflow.bodyProfile',
   weightLog: 'fitflow.weightLog',
   challengeProgress: 'fitflow.challengeProgress',
+  theme: 'fitflow.theme',
 } as const
 
 // ---------------------------------------------------------------------------
@@ -216,6 +218,18 @@ export function saveSettings(s: UserSettings): void {
   writeJSON(KEY.settings, s)
   writeJSON(KEY.settingsMeta, { updatedAt: now(), dirty: true })
   emitWrite()
+}
+
+// Color theme is a device-local display preference (like nothing else syncs it).
+// Stored as a bare JSON string under KEY.theme; the inline boot script in
+// index.html reads the same key to set <html data-theme> before first paint.
+export function getThemePref(): ThemePref {
+  const t = readJSON<ThemePref>(KEY.theme, 'dark')
+  return t === 'light' || t === 'system' || t === 'dark' ? t : 'dark'
+}
+
+export function setThemePref(pref: ThemePref): void {
+  writeJSON(KEY.theme, pref)
 }
 
 type SettingsMeta = { updatedAt: string; dirty: boolean }

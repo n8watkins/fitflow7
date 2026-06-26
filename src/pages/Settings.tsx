@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { type UserSettings, DEFAULT_SETTINGS } from '../types'
+import { type ThemePref, type UserSettings, DEFAULT_SETTINGS } from '../types'
 import {
   getSettings,
+  getThemePref,
   saveSettings,
+  setThemePref,
   clearSessions,
   exportData,
   importData,
   isExportBundle,
 } from '../lib/storage'
+import { applyTheme } from '../lib/theme'
 import { dayKey } from '../lib/format'
 import { useSyncStore } from '../store/syncStore'
 import { loginWith, logout, requestAccessToken } from '../lib/sync'
@@ -186,6 +189,7 @@ function Stepper({ label, description, value, min, max, step = 1, unit, onChange
 
 export default function Settings() {
   const [settings, setSettings] = useState<UserSettings>(() => getSettings())
+  const [theme, setTheme] = useState<ThemePref>(() => getThemePref())
   const [savedVisible, setSavedVisible] = useState(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -209,6 +213,14 @@ export default function Settings() {
 
   function update<K extends keyof UserSettings>(key: K, value: UserSettings[K]) {
     setSettings((prev) => ({ ...prev, [key]: value }))
+  }
+
+  // Theme is a device-local display pref (not in UserSettings / not synced):
+  // persist + apply to the DOM immediately so the switch is instant.
+  function chooseTheme(pref: ThemePref) {
+    setThemePref(pref)
+    setTheme(pref)
+    applyTheme(pref)
   }
 
   function handleClearHistory() {
@@ -363,6 +375,34 @@ export default function Settings() {
                 />
               </button>
             </label>
+          </div>
+        </div>
+      </section>
+
+      {/* Appearance */}
+      <section>
+        <div className="rounded-2xl border border-edge bg-card">
+          <div className="border-b border-edge px-5 py-4">
+            <h2 className="font-semibold text-slate-200">Appearance</h2>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Color theme. “System” follows your device setting. Saved on this device.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 px-5 py-4">
+            {(['system', 'light', 'dark'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => chooseTheme(t)}
+                aria-pressed={theme === t}
+                className={`rounded-lg border px-4 py-2 text-sm font-medium capitalize transition ${
+                  theme === t
+                    ? 'border-accent bg-accent text-slate-900'
+                    : 'border-edge bg-card text-slate-300 hover:bg-card-hover'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
           </div>
         </div>
       </section>

@@ -26,6 +26,8 @@ const Insights = lazy(() => import('./pages/Insights'))
 const Community = lazy(() => import('./pages/Community'))
 const Settings = lazy(() => import('./pages/Settings'))
 import { bootstrapAuth, startSyncListeners } from './lib/sync'
+import { getThemePref } from './lib/storage'
+import { applyTheme } from './lib/theme'
 import { useSyncStore } from './store/syncStore'
 
 type NavItem = { to: string; label: string; Icon: ComponentType<{ className?: string }> }
@@ -251,6 +253,14 @@ export default function App() {
   useEffect(() => {
     startSyncListeners()
     void bootstrapAuth()
+    // Keep the DOM theme in sync with the stored preference, and re-resolve when
+    // the OS preference changes (only affects the 'system' setting). The inline
+    // boot script in index.html already set it once to avoid a flash.
+    applyTheme(getThemePref())
+    const mq = window.matchMedia('(prefers-color-scheme: light)')
+    const onChange = () => applyTheme(getThemePref())
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
   }, [])
 
   return (
