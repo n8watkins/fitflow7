@@ -330,11 +330,15 @@ export function applyRemoteSessions(remote: WorkoutSession[]): void {
 }
 
 export function applyRemoteSettings(value: UserSettings, updatedAt: string): void {
+  // Empty string sorts before any ISO timestamp, so it loses LWW ties as the
+  // "oldest" value — which is what we want for a never-stamped record.
   if (updatedAt >= getSettingsMeta().updatedAt) {
     // unitSystem is device-local (not persisted server-side); keep ours so a
     // remote pull never resets the chosen display units.
     writeJSON(KEY.settings, { ...value, unitSystem: getSettings().unitSystem })
-    writeJSON(KEY.settingsMeta, { updatedAt, dirty: false })
+    // Never persist an empty timestamp — that would leave local settings with no
+    // real updatedAt and make them perpetually losable on the next merge.
+    writeJSON(KEY.settingsMeta, { updatedAt: updatedAt || now(), dirty: false })
   }
 }
 

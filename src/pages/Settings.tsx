@@ -249,6 +249,7 @@ export default function Settings() {
         const extras: string[] = []
         if (result.weightEntries) extras.push(`${result.weightEntries} weigh-in${result.weightEntries === 1 ? '' : 's'}`)
         if (result.challenges) extras.push(`${result.challenges} challenge${result.challenges === 1 ? '' : 's'}`)
+        if (result.bodyProfile) extras.push('your body profile')
         setImportMsg({
           text: `Imported ${result.routines} routine${result.routines === 1 ? '' : 's'} and ${result.sessions} session${result.sessions === 1 ? '' : 's'}${extras.length ? `, plus ${extras.join(' and ')}` : ''}.`,
           ok: true,

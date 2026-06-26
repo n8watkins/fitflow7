@@ -162,10 +162,15 @@ export default function Player() {
   }, [routineId, roundsParam])
 
   // ---------------------------------------------------------------------------
-  // Finding 5: Screen Wake Lock — acquire on mount, release on complete/unmount
+  // Finding 5: Screen Wake Lock. Keyed on whether the workout is *active* (not
+  // idle/complete) rather than `phase`, so it acquires once when the workout
+  // starts and releases once when it completes or unmounts — instead of churning
+  // the lock + listener on every work/rest transition. Re-acquires on "Go Again"
+  // (active flips back true) and when the tab returns to the foreground.
   // ---------------------------------------------------------------------------
+  const wakeActive = phase !== 'idle' && phase !== 'complete'
   useEffect(() => {
-    if (!('wakeLock' in navigator)) return
+    if (!('wakeLock' in navigator) || !wakeActive) return
 
     const acquireWakeLock = async () => {
       try {
@@ -176,25 +181,17 @@ export default function Player() {
     }
 
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && phase !== 'complete') {
-        void acquireWakeLock()
-      }
+      if (document.visibilityState === 'visible') void acquireWakeLock()
     }
 
-    if (phase !== 'complete') {
-      void acquireWakeLock()
-    } else {
-      wakeLockRef.current?.release().catch(() => {})
-      wakeLockRef.current = null
-    }
-
+    void acquireWakeLock()
     document.addEventListener('visibilitychange', handleVisibility)
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility)
       wakeLockRef.current?.release().catch(() => {})
       wakeLockRef.current = null
     }
-  }, [phase])
+  }, [wakeActive])
 
   // ---------------------------------------------------------------------------
   // Audio cue subscription
@@ -304,11 +301,16 @@ export default function Player() {
   // Finding 20: Update document title during workout
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    const exercise = exercises[currentIndex]
-    if (phase !== 'idle' && exercise) {
-      document.title = `${PHASE_LABEL[phase]} — ${exercise.name} | FitFlow 7`
-    } else if (phase === 'complete') {
+    // Check `complete` first — at completion the last exercise is still the
+    // current one, so the generic branch would otherwise win and the "Done"
+    // title was never reached.
+    if (phase === 'complete') {
       document.title = 'Done | FitFlow 7'
+    } else {
+      const exercise = exercises[currentIndex]
+      if (phase !== 'idle' && exercise) {
+        document.title = `${PHASE_LABEL[phase]} — ${exercise.name} | FitFlow 7`
+      }
     }
     return () => {
       document.title = 'FitFlow 7'

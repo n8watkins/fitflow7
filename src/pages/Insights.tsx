@@ -182,7 +182,7 @@ export default function Insights() {
         <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
           <span>Less</span>
           {[0.07, 0.35, 0.6, 0.85, 1].map((o) => (
-            <span key={o} className="inline-block h-3 w-3 rounded-sm fill-accent" style={{ backgroundColor: 'var(--color-accent)', opacity: o }} />
+            <span key={o} className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: 'var(--color-accent)', opacity: o }} />
           ))}
           <span>More</span>
         </div>
