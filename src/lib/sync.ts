@@ -126,15 +126,55 @@ export function loginWith(provider: 'github' | 'google'): void {
   window.location.href = `/api/auth/login?provider=${provider}&returnTo=${returnTo}`
 }
 
-/** Requests a personal access token for the MCP server (signed-in users only). */
-export async function requestAccessToken(): Promise<string | null> {
+/** Token metadata returned by GET /api/token (never includes the secret). */
+export interface AccessTokenInfo {
+  id: string
+  label: string | null
+  scope: string
+  createdAt: string
+  lastUsedAt: string | null
+  revoked: boolean
+}
+
+/** Mints a personal access token for the MCP server (signed-in users only).
+ *  Returns the secret once; it is never retrievable afterward. */
+export async function requestAccessToken(opts?: { scope?: 'read' | 'readwrite'; label?: string }): Promise<string | null> {
   try {
-    const res = await fetch('/api/token', { method: 'POST', credentials: 'include' })
+    const res = await fetch('/api/token', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: opts?.scope ?? 'readwrite', label: opts?.label ?? null }),
+    })
     if (!res.ok) return null
     const data = (await res.json()) as { token: string }
     return data.token
   } catch {
     return null
+  }
+}
+
+/** Lists the signed-in user's tokens (metadata only). */
+export async function listAccessTokens(): Promise<AccessTokenInfo[]> {
+  try {
+    const res = await fetch('/api/token', { method: 'GET', credentials: 'include' })
+    if (!res.ok) return []
+    return ((await res.json()) as { tokens?: AccessTokenInfo[] }).tokens ?? []
+  } catch {
+    return []
+  }
+}
+
+/** Revokes one of the user's tokens by id (jti). */
+export async function revokeAccessToken(jti: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/token?jti=${encodeURIComponent(jti)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    })
+    return res.ok
+  } catch {
+    return false
   }
 }
 

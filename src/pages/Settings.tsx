@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { type ThemePref, type UserSettings, DEFAULT_SETTINGS } from '../types'
 import {
   getSettings,
@@ -13,7 +13,14 @@ import {
 import { applyTheme } from '../lib/theme'
 import { dayKey } from '../lib/format'
 import { useSyncStore } from '../store/syncStore'
-import { loginWith, logout, requestAccessToken } from '../lib/sync'
+import {
+  loginWith,
+  logout,
+  requestAccessToken,
+  listAccessTokens,
+  revokeAccessToken,
+  type AccessTokenInfo,
+} from '../lib/sync'
 
 // ---------------------------------------------------------------------------
 // Account / cloud sync
@@ -24,14 +31,52 @@ function AccountSection() {
   const authLoaded = useSyncStore((s) => s.authLoaded)
   const lastSyncedAt = useSyncStore((s) => s.lastSyncedAt)
   const providers = useSyncStore((s) => s.providers)
-  const [token, setToken] = useState<string | null>(null)
+  const [minted, setMinted] = useState<string | null>(null)
   const [tokenBusy, setTokenBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [label, setLabel] = useState('')
+  const [scope, setScope] = useState<'read' | 'readwrite'>('readwrite')
+  const [tokens, setTokens] = useState<AccessTokenInfo[]>([])
+
+  const refreshTokens = useCallback(() => {
+    void listAccessTokens().then(setTokens)
+  }, [])
+
+  // Load the token list once signed in (async — not a synchronous effect setState).
+  useEffect(() => {
+    if (!user) return
+    let alive = true
+    void listAccessTokens().then((t) => {
+      if (alive) setTokens(t)
+    })
+    return () => {
+      alive = false
+    }
+  }, [user])
 
   async function handleGenerateToken() {
     setTokenBusy(true)
-    const t = await requestAccessToken()
+    const t = await requestAccessToken({ scope, label: label.trim() || undefined })
     setTokenBusy(false)
-    setToken(t ?? 'Could not create a token — try signing in again.')
+    setMinted(t ?? 'Could not create a token — try signing in again.')
+    setCopied(false)
+    setLabel('')
+    refreshTokens()
+  }
+
+  async function handleCopy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // Clipboard may be blocked — the user can still select the text manually.
+    }
+  }
+
+  async function handleRevoke(jti: string) {
+    await revokeAccessToken(jti)
+    refreshTokens()
   }
 
   return (
@@ -68,30 +113,104 @@ function AccountSection() {
                 </button>
               </div>
 
-              {/* MCP access token */}
-              <div className="border-t border-edge pt-4">
-                <div className="font-medium text-slate-200">AI access token</div>
-                <p className="mt-0.5 text-sm text-slate-500">
-                  For the private MCP server, so an AI assistant can read your stats and log
-                  workouts. Treat it like a password.
-                </p>
-                {token ? (
-                  <textarea
-                    readOnly
-                    value={token}
-                    onFocus={(e) => e.currentTarget.select()}
-                    rows={3}
-                    className="mt-3 w-full resize-none rounded-lg border border-edge bg-surface px-3 py-2 font-mono text-xs break-all text-slate-300 focus:border-accent focus:outline-none"
+              {/* MCP access tokens */}
+              <div className="space-y-3 border-t border-edge pt-4">
+                <div>
+                  <div className="font-medium text-slate-200">AI access tokens</div>
+                  <p className="mt-0.5 text-sm text-slate-500">
+                    For the private MCP server, so an AI assistant can read your stats and (with
+                    read &amp; write) log workouts. Treat each like a password — the secret is shown
+                    once. Revoke any token here.
+                  </p>
+                </div>
+
+                {/* Freshly minted secret (shown once) */}
+                {minted && (
+                  <div className="rounded-lg border border-accent/40 bg-accent/5 p-3">
+                    <p className="text-xs font-semibold text-accent">
+                      Copy this now — it won't be shown again.
+                    </p>
+                    <textarea
+                      readOnly
+                      value={minted}
+                      onFocus={(e) => e.currentTarget.select()}
+                      rows={3}
+                      className="mt-2 w-full resize-none rounded-lg border border-edge bg-surface px-3 py-2 font-mono text-xs break-all text-slate-300 focus:border-accent focus:outline-none"
+                    />
+                    <button
+                      onClick={() => void handleCopy(minted)}
+                      className="mt-2 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-slate-900 transition hover:brightness-110 active:scale-95"
+                    >
+                      {copied ? 'Copied ✓' : 'Copy'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Existing tokens */}
+                {tokens.length > 0 && (
+                  <ul className="divide-y divide-edge overflow-hidden rounded-lg border border-edge">
+                    {tokens.map((t) => (
+                      <li key={t.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`truncate text-sm font-medium ${t.revoked ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
+                              {t.label || 'Access token'}
+                            </span>
+                            <span className="shrink-0 rounded-full border border-edge px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-400">
+                              {t.scope === 'read' ? 'read' : 'read+write'}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 text-xs text-slate-500">
+                            {t.revoked
+                              ? 'Revoked'
+                              : t.lastUsedAt
+                                ? `Last used ${new Date(t.lastUsedAt).toLocaleDateString()}`
+                                : 'Never used'}{' '}
+                            · created {new Date(t.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        {!t.revoked && (
+                          <button
+                            onClick={() => void handleRevoke(t.id)}
+                            className="shrink-0 rounded-lg border border-red-900/60 px-3 py-1.5 text-xs font-medium text-red-400 transition hover:bg-red-900/30 active:scale-95"
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {/* Mint a new token */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    value={label}
+                    onChange={(e) => setLabel(e.target.value)}
+                    placeholder="Label (e.g. Laptop MCP)"
+                    maxLength={60}
+                    className="min-w-0 flex-1 rounded-lg border border-edge bg-surface px-3 py-2 text-sm text-slate-200 placeholder-slate-600 outline-none focus:border-accent"
                   />
-                ) : (
+                  <div className="flex overflow-hidden rounded-lg border border-edge text-xs font-medium">
+                    {(['readwrite', 'read'] as const).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setScope(s)}
+                        className={`px-3 py-2 transition ${scope === s ? 'bg-accent text-slate-900' : 'bg-card text-slate-300 hover:bg-card-hover'}`}
+                      >
+                        {s === 'readwrite' ? 'Read + write' : 'Read only'}
+                      </button>
+                    ))}
+                  </div>
                   <button
                     onClick={() => void handleGenerateToken()}
                     disabled={tokenBusy}
-                    className="mt-3 rounded-lg border border-edge bg-card px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-card-hover disabled:opacity-50"
+                    className="rounded-lg border border-edge bg-card px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-card-hover disabled:opacity-50"
                   >
-                    {tokenBusy ? 'Generating…' : 'Generate access token'}
+                    {tokenBusy ? 'Generating…' : 'Generate'}
                   </button>
-                )}
+                </div>
               </div>
             </div>
           ) : providers.length === 0 ? (
