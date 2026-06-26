@@ -13,16 +13,16 @@ import type { InStatement } from '@libsql/client'
 
 // POST /api/sync — authenticated bidirectional sync.
 //
-// Body:  { since?, routines?, sessions?, settings? }
+// Body:  { since?, routines?, sessions?, settings?, weightLog?, bodyProfile?, challengeProgress? }
 //   since     ISO cursor; server returns records with updated_at > since.
-//   routines/ dirty local records to push. Upserts are last-write-wins by
-//   sessions  updated_at and scoped to the authenticated user (a client cannot
-//   settings  overwrite another user's row).
+//   the rest  dirty local records to push. Upserts are last-write-wins by
+//             updated_at and scoped to the authenticated user (a client cannot
+//             overwrite another user's row). A read-scoped token may only pull.
 //
-// Reply: { serverTime, routines, sessions, settings }
+// Reply: { serverTime, routines, sessions, settings, weightLog, challengeProgress, bodyProfile }
 //   serverTime  the new cursor to send as `since` next time.
-//   routines/sessions  server records changed since `since` (tombstones included
-//   so deletes propagate). settings is the server row if newer, else omitted.
+//   collections  server records changed since `since` (tombstones included so
+//   deletes propagate). settings/bodyProfile are the row if newer, else null.
 
 interface SyncBody {
   since?: string
