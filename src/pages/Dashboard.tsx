@@ -59,14 +59,29 @@ function activeChallenge() {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function StatChip({ to, value, label, icon, tint }: { to: string; value: string | number; label: string; icon: ReactNode; tint: string }) {
+function StatChip({
+  to,
+  value,
+  label,
+  icon,
+  tint,
+  accent,
+}: {
+  to: string
+  value: string | number
+  label: string
+  icon: ReactNode
+  tint: string
+  /** Color the value with the accent (used for empty-state call-to-action chips). */
+  accent?: boolean
+}) {
   return (
     <Link
       to={to}
       className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-edge bg-card px-2 py-4 text-center transition active:scale-95 hover:bg-card-hover"
     >
       <span className={`flex h-8 w-8 items-center justify-center rounded-full ${tint}`}>{icon}</span>
-      <span className="text-lg font-bold leading-none tabular-nums text-slate-100">{value}</span>
+      <span className={`text-lg font-bold leading-none tabular-nums ${accent ? 'text-accent' : 'text-slate-100'}`}>{value}</span>
       <span className="text-[11px] leading-tight text-slate-400">{label}</span>
     </Link>
   )
@@ -191,9 +206,21 @@ export default function Dashboard() {
   const allRoutines = [...SYSTEM_ROUTINES, ...userRoutines]
   const weightLabel = latestWeight ? formatWeight(latestWeight.weightKg, settings.unitSystem) : '—'
   const openExercise = openId ? EXERCISE_MAP[openId] : undefined
+  // Brand-new user: no workouts logged and no weigh-ins. Used to nudge a first action.
+  const isFresh = sessions.length === 0 && !latestWeight
 
   return (
     <div className="space-y-6">
+      {/* ---- First-run welcome (vanishes after the first workout or weigh-in) ---- */}
+      {isFresh && (
+        <div className="rounded-2xl border border-accent/30 bg-accent/10 p-4">
+          <div className="font-semibold text-slate-100">👋 Welcome to FitFlow 7</div>
+          <p className="mt-1 text-sm text-slate-400">
+            Tap <span className="font-semibold text-accent">Start</span> below for a 7-minute workout, or log a weigh-in to track your progress.
+          </p>
+        </div>
+      )}
+
       {/* ---- Featured workout: dark card with accent glow + bright Start ---- */}
       <Link
         to={`/workout/${featured.id}`}
@@ -223,13 +250,24 @@ export default function Dashboard() {
           icon={<IconFlame className="h-4 w-4" />}
           tint="bg-amber-500/15 text-amber-400"
         />
-        <StatChip
-          to="/stats"
-          value={weightLabel}
-          label="weight"
-          icon={<IconScale className="h-4 w-4" />}
-          tint="bg-accent/15 text-accent"
-        />
+        {latestWeight ? (
+          <StatChip
+            to="/stats"
+            value={weightLabel}
+            label="weight"
+            icon={<IconScale className="h-4 w-4" />}
+            tint="bg-accent/15 text-accent"
+          />
+        ) : (
+          <StatChip
+            to="/stats"
+            value="Log"
+            label="add weight"
+            icon={<IconPlus className="h-4 w-4" />}
+            tint="bg-accent/15 text-accent"
+            accent
+          />
+        )}
         <StatChip
           to="/history"
           value={stats.workoutsThisWeek}

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useSyncStore } from '../store/syncStore'
 import {
   getBodyProfile,
@@ -157,6 +157,16 @@ export default function Stats() {
           Track your weight, BMI, and workout activity. Stored on this device; switch units in Settings.
         </p>
       </div>
+
+      {/* First-run prompt: no height + no weigh-ins yet. */}
+      {!profile.heightCm && weights.length === 0 && (
+        <div className="rounded-2xl border border-accent/30 bg-accent/10 p-4 text-sm text-slate-300">
+          <span className="font-semibold text-slate-100">Set up your stats.</span> Add your height and a
+          first weigh-in below to unlock BMI and weight trends. You're in{' '}
+          <span className="font-medium text-accent">{unit === 'imperial' ? 'imperial (lb / ft·in)' : 'metric (kg / cm)'}</span>{' '}
+          — <Link to="/settings" className="font-medium text-accent hover:underline">switch units</Link> any time.
+        </div>
+      )}
 
       {/* key on unit so the inputs re-seed (and re-convert) if units change. */}
       <BodySection key={unit} unit={unit} onChange={refresh} />
