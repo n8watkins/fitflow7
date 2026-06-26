@@ -5,7 +5,7 @@ Forward-looking work list, written to be picked up **with zero prior context**. 
 ## Orientation (read once)
 - **Stack:** Vite + React 19 + TypeScript + Tailwind v4 (CSS-first `@theme` in `src/index.css`; tokens: `accent`, `surface`, `card`, `card-hover`, `edge`; **light theme** via `html[data-theme='light']` overrides) + Zustand + react-router-dom v7. Backend = Vercel `/api` + Turso (libSQL). Private MCP server in `mcp/`.
 - **Local-first:** `src/lib/storage.ts` is the single localStorage seam (CRUD + `dirty`/`deletedAt` tombstones + export/import). Pure logic in `src/lib/*` with Vitest in `test/`. Pages re-read storage via a `useSyncStore` `dataVersion` + `location.key` memo idiom.
-- **Verify (must stay green):** `npx tsc -b && npm run lint && npm run test && npm run build` (+ `cd mcp && npm run typecheck`). **107 tests** today. CI (`.github/workflows/ci.yml`) runs the whole pipeline on push/PR.
+- **Verify (must stay green):** `npx tsc -b && npm run lint && npm run test && npm run build` (+ `cd mcp && npm run typecheck`). **116 tests** today. CI (`.github/workflows/ci.yml`) runs the whole pipeline on push/PR.
 - **Lint gotchas:** the repo enforces `react-hooks/set-state-in-effect` (don't `setState` directly in an effect — derive, or do it in an async callback) and `react-hooks/exhaustive-deps` (storage-read memos use an inline `// eslint-disable-next-line`). `/api` ESM imports need explicit `.js`.
 - **Invariants:** signed-out app is fully offline; cloud tables are `user_id`-scoped, sync is LWW by `updatedAt` with `deletedAt` tombstones. Routines, sessions, settings, **and now body profile / weight log / challenge progress** all sync (B1). Don't widen `/api/sync` to serve other users.
 - **Auth/tokens (post-S1):** PATs carry a `jti` and live in the `access_tokens` registry — valid only while a non-revoked row exists; `scope` is `read`|`readwrite`. `api/_lib/tokens.ts` `resolveAuth(req)` is the single auth entry for sync/publish/report (cookie = full access, PAT = registry-checked). Manage tokens via `/api/token` GET/POST/DELETE (cookie-authed) and Settings → Account.
@@ -38,6 +38,7 @@ Forward-looking work list, written to be picked up **with zero prior context**. 
 ---
 
 ### Suggested order for a fresh session
-1. **F1** (owner) → then **B1** (cloud-sync body/weight/challenge, now testable via the /api harness).
-2. **F3** to ship everything that's accumulated locally (this work isn't deployed yet).
-3. **Phase 4** only on a product go; **challenge variety** any time after.
+There is **no agent-completable code work queued** — the backlog's coding items are all done. What's left is owner-gated or decision-gated:
+1. **F3** — deploy; none of the recent work (B1, S1/S2, light theme, images, CI) is live yet.
+2. **F1** — real two-browser sign-in check; confirm routines/sessions **and** B1 data (weigh-ins / body / challenge) propagate; agent confirms in Turso.
+3. **Phase 4** only on a product go; **challenge variety** any time after; light-theme visual pass + more images are low-priority polish.
