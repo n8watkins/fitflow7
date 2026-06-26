@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { ensureSchema, getDb } from '../../api/_lib/db.ts'
-import { createAccessToken } from '../../api/_lib/auth.ts'
+import { createAccessToken, createSessionToken } from '../../api/_lib/auth.ts'
 import { recordToken, revokeToken, type AuthResult } from '../../api/_lib/tokens.ts'
 import syncHandler from '../../api/sync.ts'
 import meHandler from '../../api/me.ts'
@@ -64,10 +64,10 @@ async function mint(userId: string, scope: Scope = 'readwrite') {
 async function bearer(userId: string, scope: Scope = 'readwrite') {
   return (await mint(userId, scope)).headers
 }
-// A forged session cookie: getUserId only checks the cookie's signed uid, so a
-// signed token doubles as a session for cookie-authed endpoints in tests.
+// A real session cookie (sid-tagged) — getUserId now rejects PATs in the cookie,
+// so we mint a genuine session token for cookie-authed endpoints in tests.
 function cookieFor(userId: string): Record<string, string> {
-  return { cookie: `ff_session=${createAccessToken(userId).token}` }
+  return { cookie: `ff_session=${createSessionToken(userId)}` }
 }
 
 function routine(over: Record<string, unknown> = {}) {
@@ -83,7 +83,8 @@ beforeEach(async () => {
   await ensureSchema()
   await getDb().batch(
     ['DELETE FROM routines', 'DELETE FROM sessions', 'DELETE FROM settings', 'DELETE FROM public_routines',
-      'DELETE FROM users', 'DELETE FROM access_tokens', 'DELETE FROM routine_reports'],
+      'DELETE FROM users', 'DELETE FROM access_tokens', 'DELETE FROM routine_reports',
+      'DELETE FROM weight_log', 'DELETE FROM body_profile', 'DELETE FROM challenge_progress'],
     'write',
   )
 })
@@ -195,6 +196,14 @@ describe('S1 — token management endpoint (cookie-authed)', () => {
     await call(tokenHandler, { method: 'POST', headers: cookieFor('userA'), body: {} })
     const listB = await call(tokenHandler, { method: 'GET', headers: cookieFor('userB') })
     expect((listB.body as { tokens: unknown[] }).tokens).toHaveLength(0)
+  })
+
+  it('a PAT replayed via the session cookie does not authenticate (no scope/revocation bypass)', async () => {
+    const { token } = createAccessToken('userA', 'read')
+    // A PAT in ff_session must be rejected by the cookie path — otherwise it would
+    // act as a full readwrite session that skips the revocation registry.
+    const res = await call(tokenHandler, { method: 'GET', headers: { cookie: `ff_session=${token}` } })
+    expect(res.statusCode).toBe(401)
   })
 })
 

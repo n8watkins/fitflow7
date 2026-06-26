@@ -218,20 +218,29 @@ function appendCookie(res: VercelResponse, cookie: string): void {
 // ---------------------------------------------------------------------------
 // Session API
 // ---------------------------------------------------------------------------
+/** Signs a browser-session token. `sid: true` marks it as a session (vs a
+ *  `pat: true` access token); getUserId requires it, so a PAT can never be
+ *  replayed via the cookie to gain a full session (bypassing scope/revocation). */
+export function createSessionToken(userId: string): string {
+  return encodeToken({ uid: userId, sid: true, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS })
+}
+
 export function setSession(res: VercelResponse, userId: string): void {
-  const token = encodeToken({ uid: userId, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS })
-  appendCookie(res, serializeCookie(SESSION_COOKIE, token, SESSION_TTL_SECONDS))
+  appendCookie(res, serializeCookie(SESSION_COOKIE, createSessionToken(userId), SESSION_TTL_SECONDS))
 }
 
 export function clearSession(res: VercelResponse): void {
   appendCookie(res, serializeCookie(SESSION_COOKIE, '', 0))
 }
 
-/** Returns the authenticated user id from the session cookie, or null. */
+/** Returns the authenticated user id from the session cookie, or null. Only
+ *  accepts genuine session tokens (`sid`) — a PAT (`pat`) presented via the
+ *  cookie is rejected, so it can't bypass token scope/revocation. */
 export function getUserId(req: VercelRequest): string | null {
   const token = parseCookies(req)[SESSION_COOKIE]
-  const payload = decodeToken<{ uid: string }>(token)
-  return payload?.uid ?? null
+  const payload = decodeToken<{ uid?: string; sid?: boolean; pat?: boolean }>(token)
+  if (!payload?.sid || payload.pat) return null
+  return payload.uid ?? null
 }
 
 const PAT_TTL_SECONDS = 60 * 60 * 24 * 365 // 1 year

@@ -33,23 +33,33 @@ export async function resolveAuth(req: VercelRequest): Promise<AuthResult | null
   const pat = decodePat(req)
   if (!pat) return null
 
-  await ensureSchema()
-  const db = getDb()
-  const row = (
-    await db.execute({
-      sql: `SELECT scope, revoked_at FROM access_tokens WHERE jti = ? AND user_id = ?`,
-      args: [pat.jti, pat.uid],
-    })
-  ).rows[0]
-  if (!row || row.revoked_at) return null // unknown or revoked
+  // Fail closed: any DB error (e.g. TURSO unconfigured/down) resolves to "not
+  // authenticated" rather than throwing out of the caller. Callers invoke this
+  // before their own try/catch, so a throw here would surface as an opaque 500.
+  try {
+    await ensureSchema()
+    const db = getDb()
+    const row = (
+      await db.execute({
+        sql: `SELECT scope, revoked_at FROM access_tokens WHERE jti = ? AND user_id = ?`,
+        args: [pat.jti, pat.uid],
+      })
+    ).rows[0]
+    if (!row || row.revoked_at) return null // unknown or revoked
 
-  // Best-effort "last used" stamp for the Settings token list.
-  await db.execute({
-    sql: `UPDATE access_tokens SET last_used_at = ? WHERE jti = ?`,
-    args: [new Date().toISOString(), pat.jti],
-  })
+    // Best-effort "last used" stamp for the Settings token list — never let a
+    // failure here reject an already-validated token.
+    await db
+      .execute({
+        sql: `UPDATE access_tokens SET last_used_at = ? WHERE jti = ?`,
+        args: [new Date().toISOString(), pat.jti],
+      })
+      .catch(() => {})
 
-  return { userId: pat.uid, scope: (row.scope as string) === 'read' ? 'read' : 'readwrite' }
+    return { userId: pat.uid, scope: (row.scope as string) === 'read' ? 'read' : 'readwrite' }
+  } catch {
+    return null
+  }
 }
 
 export async function recordToken(
