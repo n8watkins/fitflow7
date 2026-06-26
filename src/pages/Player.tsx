@@ -42,6 +42,26 @@ const PHASE_BG: Record<WorkoutPhase, string> = {
   complete: 'bg-violet-950/40 border-violet-500/30',
 }
 
+// Light-theme variants. The dark phase tints (*-950/40) + the slate-100 heading
+// (which the light remap turns near-black) would be dark-text-on-dark-panel; in
+// light mode use pale tints + darker phase text instead. Picked at render via
+// the resolved theme so a toggle takes effect on the next tick.
+const PHASE_BG_LIGHT: Record<WorkoutPhase, string> = {
+  idle: 'bg-card',
+  prepare: 'bg-amber-100 border-amber-300',
+  work: 'bg-cyan-100 border-cyan-300',
+  rest: 'bg-emerald-100 border-emerald-300',
+  complete: 'bg-violet-100 border-violet-300',
+}
+
+const PHASE_COLOR_LIGHT: Record<WorkoutPhase, string> = {
+  idle: 'text-slate-400',
+  prepare: 'text-amber-600',
+  work: 'text-accent',
+  rest: 'text-emerald-600',
+  complete: 'text-violet-600',
+}
+
 // ---------------------------------------------------------------------------
 // Progress segment bar
 // ---------------------------------------------------------------------------
@@ -341,6 +361,12 @@ export default function Player() {
   // so later JSX comparisons against it remain valid to the type checker.
   const currentPhase: WorkoutPhase = phase
 
+  // Phase colors/tints depend on the resolved theme (read at render — re-evaluated
+  // each timer tick, so a theme toggle is reflected within ~1s).
+  const isLight = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'light'
+  const phaseColor = isLight ? PHASE_COLOR_LIGHT : PHASE_COLOR
+  const phaseBg = isLight ? PHASE_BG_LIGHT : PHASE_BG
+
   // ---------------------------------------------------------------------------
   // Empty-routine guard — nothing playable resolved, so we never started the
   // timer (and never logged a session). Offer a way out.
@@ -440,13 +466,13 @@ export default function Player() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-surface px-4">
         {/* Phase label */}
-        <p className={`mb-2 text-lg font-bold tracking-widest ${PHASE_COLOR[phase]}`}>
+        <p className={`mb-2 text-lg font-bold tracking-widest ${phaseColor[phase]}`}>
           {PHASE_LABEL[phase]}
         </p>
 
         {/* Giant timer */}
         <div
-          className={`font-mono text-9xl font-black tabular-nums leading-none transition-colors ${PHASE_COLOR[phase]} ${isPaused ? 'opacity-40' : ''}`}
+          className={`font-mono text-9xl font-black tabular-nums leading-none transition-colors ${phaseColor[phase]} ${isPaused ? 'opacity-40' : ''}`}
         >
           {secondsLeft}
         </div>
@@ -516,7 +542,7 @@ export default function Player() {
       {/* ---- Phase label + timer ---- */}
       <div className="flex flex-col items-center">
         <p
-          className={`mb-1 text-sm font-bold tracking-[0.2em] uppercase ${PHASE_COLOR[phase]}`}
+          className={`mb-1 text-sm font-bold tracking-[0.2em] uppercase ${phaseColor[phase]}`}
         >
           {PHASE_LABEL[phase]}
         </p>
@@ -524,7 +550,7 @@ export default function Player() {
         <div
           className={`relative font-mono font-black tabular-nums leading-none transition-colors
             text-8xl sm:text-9xl
-            ${PHASE_COLOR[phase]}
+            ${phaseColor[phase]}
             ${isPaused ? 'opacity-40' : ''}
           `}
         >
@@ -541,7 +567,7 @@ export default function Player() {
       {currentExercise && phase !== 'complete' && (
         <div className="mx-auto mt-6 w-full max-w-sm">
           <div
-            className={`rounded-2xl border p-5 text-center transition-colors ${PHASE_BG[phase]}`}
+            className={`rounded-2xl border p-5 text-center transition-colors ${phaseBg[phase]}`}
           >
             <ExerciseVisual
               exercise={currentExercise}

@@ -403,8 +403,11 @@ function WeightSummary({ entries, goalKg, unit }: { entries: WeightEntry[]; goal
   }
   if (items.length === 0) return null
 
+  // Match the column count to the items so 1–2 entries don't leave an empty cell.
+  const cols = items.length === 1 ? 'grid-cols-1' : items.length === 2 ? 'grid-cols-2' : 'grid-cols-3'
+
   return (
-    <div className="mb-4 grid grid-cols-3 gap-3">
+    <div className={`mb-4 grid ${cols} gap-3`}>
       {items.map((it) => (
         <div key={it.label} className="rounded-xl border border-edge bg-surface px-3 py-2.5 text-center">
           <div className={`text-base font-bold leading-tight tabular-nums ${it.tone}`}>{it.value}</div>
