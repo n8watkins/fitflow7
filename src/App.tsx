@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType } from 'react'
+import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react'
 import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import {
   IconBook,
@@ -11,17 +11,20 @@ import {
   IconTrophy,
   IconUsers,
 } from './components/icons'
+// Dashboard + the primary bottom-tab routes load eagerly so the landing page and
+// tab switches never flash a fallback. The rest are code-split (C2) to shrink the
+// initial bundle for a faster first mobile paint.
 import Dashboard from './pages/Dashboard'
-import Player from './pages/Player'
-import RoutineEditor from './pages/RoutineEditor'
-import Library from './pages/Library'
-import History from './pages/History'
-import Insights from './pages/Insights'
-import Community from './pages/Community'
-import Settings from './pages/Settings'
 import Stats from './pages/Stats'
 import Calendar from './pages/Calendar'
 import Challenges from './pages/Challenges'
+const Player = lazy(() => import('./pages/Player'))
+const RoutineEditor = lazy(() => import('./pages/RoutineEditor'))
+const Library = lazy(() => import('./pages/Library'))
+const History = lazy(() => import('./pages/History'))
+const Insights = lazy(() => import('./pages/Insights'))
+const Community = lazy(() => import('./pages/Community'))
+const Settings = lazy(() => import('./pages/Settings'))
 import { bootstrapAuth, startSyncListeners } from './lib/sync'
 import { useSyncStore } from './store/syncStore'
 
@@ -89,20 +92,22 @@ function Shell() {
       )}
 
       <main className={inWorkout ? '' : 'mx-auto max-w-5xl px-4 py-8 pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-8'}>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/workout/:routineId" element={<Player />} />
-          <Route path="/routines/:routineId/edit" element={<RoutineEditorRoute />} />
-          <Route path="/calendar" element={<Calendar />} />
-          <Route path="/stats" element={<Stats />} />
-          <Route path="/challenges" element={<Challenges />} />
-          <Route path="/library" element={<Library />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/insights" element={<Insights />} />
-          <Route path="/community" element={<Community />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/workout/:routineId" element={<Player />} />
+            <Route path="/routines/:routineId/edit" element={<RoutineEditorRoute />} />
+            <Route path="/calendar" element={<Calendar />} />
+            <Route path="/stats" element={<Stats />} />
+            <Route path="/challenges" element={<Challenges />} />
+            <Route path="/library" element={<Library />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/insights" element={<Insights />} />
+            <Route path="/community" element={<Community />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </main>
 
       {!inWorkout && <MobileNav />}
@@ -213,6 +218,16 @@ function SyncBadge() {
       <span className={`h-2 w-2 rounded-full ${dot}`} />
       {label}
     </span>
+  )
+}
+
+// Suspense fallback for code-split routes. Minimal + centered so it doesn't
+// shift layout; respects reduced-motion.
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center" role="status" aria-label="Loading">
+      <span className="h-6 w-6 animate-spin rounded-full border-2 border-edge border-t-accent motion-reduce:animate-none" />
+    </div>
   )
 }
 
