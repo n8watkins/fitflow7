@@ -381,7 +381,13 @@ export function applyRemoteSessions(remote: WorkoutSession[]): void {
 }
 
 /** Merges server weight entries into local storage, LWW by updatedAt keyed by id
- *  (tombstones win like any other newer write). Merged rows are marked clean. */
+ *  (tombstones win like any other newer write). Merged rows are marked clean.
+ *  Then collapses any duplicate LIVE entries for the same date — two devices can
+ *  each create a row for one day with a different random id, and the local
+ *  one-per-day invariant is by `date`, not `id`. The survivor is chosen
+ *  deterministically (newest updatedAt, then highest id) so concurrent merges on
+ *  different devices pick the SAME winner and converge; the rest are tombstoned
+ *  (dirty) so the delete propagates. */
 export function applyRemoteWeightLog(remote: WeightEntry[]): void {
   if (remote.length === 0) return
   const byId = new Map(readJSON<WeightEntry[]>(KEY.weightLog, []).map((e) => [e.id, e]))
@@ -391,10 +397,32 @@ export function applyRemoteWeightLog(remote: WeightEntry[]): void {
       byId.set(e.id, { ...e, dirty: false })
     }
   }
+  // Deterministic survivor per date among live entries.
+  const keepByDate = new Map<string, WeightEntry>()
+  for (const e of byId.values()) {
+    if (e.deletedAt) continue
+    const cur = keepByDate.get(e.date)
+    const wins =
+      !cur || (e.updatedAt ?? '') > (cur.updatedAt ?? '') || ((e.updatedAt ?? '') === (cur.updatedAt ?? '') && e.id > cur.id)
+    if (wins) keepByDate.set(e.date, e)
+  }
+  const stamp = now()
+  for (const e of byId.values()) {
+    if (e.deletedAt) continue
+    if (keepByDate.get(e.date)!.id !== e.id) {
+      byId.set(e.id, { ...e, deletedAt: stamp, updatedAt: stamp, dirty: true })
+    }
+  }
   writeJSON(KEY.weightLog, [...byId.values()])
 }
 
-/** Merges server challenge-progress records, LWW by updatedAt keyed by challengeId. */
+/** Merges server challenge-progress records keyed by challengeId. For two LIVE
+ *  records the `completedDays` maps are UNIONED (keeping the earliest timestamp
+ *  per day) so a day marked on one device can't clobber a day marked on another
+ *  — whole-record LWW would silently drop one. A reset (tombstone) is handled by
+ *  plain LWW on `updatedAt` so a deliberate clear isn't undone by stale days.
+ *  When the union adds anything the server lacked, the record is left dirty (with
+ *  a fresh updatedAt) so it re-pushes and other devices converge. */
 export function applyRemoteChallengeProgress(remote: ChallengeProgress[]): void {
   if (remote.length === 0) return
   const byId = new Map(
@@ -402,9 +430,37 @@ export function applyRemoteChallengeProgress(remote: ChallengeProgress[]): void 
   )
   for (const c of remote) {
     const existing = byId.get(c.challengeId)
-    if (!existing || (c.updatedAt ?? '') > (existing.updatedAt ?? '')) {
+    if (!existing) {
       byId.set(c.challengeId, { ...c, dirty: false })
+      continue
     }
+    // Either side a tombstone → LWW (don't merge old completions into a reset).
+    if (c.deletedAt || existing.deletedAt) {
+      if ((c.updatedAt ?? '') > (existing.updatedAt ?? '')) byId.set(c.challengeId, { ...c, dirty: false })
+      continue
+    }
+    // Both live → union completed days (earliest timestamp wins per day).
+    const merged: Record<number, string> = { ...c.completedDays }
+    let addedLocal = false
+    for (const [dayStr, ts] of Object.entries(existing.completedDays)) {
+      const day = Number(dayStr)
+      if (!(day in merged)) {
+        merged[day] = ts
+        addedLocal = true
+      } else if (ts < merged[day]) {
+        merged[day] = ts
+      }
+    }
+    const startedAt = existing.startedAt < c.startedAt ? existing.startedAt : c.startedAt
+    byId.set(c.challengeId, {
+      ...c,
+      completedDays: merged,
+      startedAt,
+      // If we contributed days the server didn't have, bump updatedAt + stay
+      // dirty so the union re-pushes and wins the server's LWW guard.
+      updatedAt: addedLocal ? now() : c.updatedAt,
+      dirty: addedLocal,
+    })
   }
   writeJSON(KEY.challengeProgress, [...byId.values()])
 }

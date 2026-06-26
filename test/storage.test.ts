@@ -346,3 +346,41 @@ describe('export/import of body + challenge data', () => {
     expect(storage.getChallengeProgressFor('thirty-day')?.completedDays[1]).toBeTruthy()
   })
 })
+
+describe('applyRemoteWeightLog dedup-by-date (B1 multi-device)', () => {
+  const w = (id: string, date: string, weightKg: number, updatedAt: string) => ({
+    id, date, weightKg, createdAt: updatedAt, updatedAt,
+  })
+
+  it('collapses two devices logging the same day into one live entry', () => {
+    storage.applyRemoteWeightLog([w('AAA', '2026-06-01', 80, '2026-06-01T00:00:00.000Z')])
+    storage.applyRemoteWeightLog([w('BBB', '2026-06-01', 78, '2026-06-02T00:00:00.000Z')])
+    const live = storage.getWeightEntries().filter((e) => e.date === '2026-06-01')
+    expect(live).toHaveLength(1)
+    expect(live[0].weightKg).toBe(78) // newest survivor
+    // the loser is tombstoned + dirty so the delete propagates to other devices
+    expect(storage.getPendingSync().weightLog.some((e) => e.id === 'AAA' && e.deletedAt)).toBe(true)
+  })
+})
+
+describe('applyRemoteChallengeProgress union (B1 multi-device)', () => {
+  const c = (over: Record<string, unknown> = {}) => ({
+    challengeId: 'c30', completedDays: {} as Record<number, string>,
+    startedAt: '2026-06-01T00:00:00.000Z', updatedAt: '2026-06-01T00:00:00.000Z', ...over,
+  })
+
+  it('unions completedDays instead of clobbering one device’s marks', () => {
+    storage.applyRemoteChallengeProgress([c({ completedDays: { 3: '2026-06-03T00:00:00.000Z' }, updatedAt: '2026-06-03T00:00:00.000Z' })])
+    storage.applyRemoteChallengeProgress([c({ completedDays: { 5: '2026-06-05T00:00:00.000Z' }, updatedAt: '2026-06-05T00:00:00.000Z' })])
+    const row = storage.getChallengeProgressFor('c30')
+    expect(Object.keys(row?.completedDays ?? {}).sort()).toEqual(['3', '5'])
+    // day 3 was local-only → record stays dirty so the union re-pushes
+    expect(storage.getPendingSync().challengeProgress.some((x) => x.challengeId === 'c30')).toBe(true)
+  })
+
+  it('a newer reset (tombstone) wins over stale completions', () => {
+    storage.applyRemoteChallengeProgress([c({ completedDays: { 1: '2026-06-01T00:00:00.000Z' } })])
+    storage.applyRemoteChallengeProgress([c({ deletedAt: '2026-06-10T00:00:00.000Z', updatedAt: '2026-06-10T00:00:00.000Z' })])
+    expect(storage.getChallengeProgressFor('c30')).toBeUndefined() // reset
+  })
+})
