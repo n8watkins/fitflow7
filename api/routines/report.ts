@@ -29,6 +29,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     await ensureSchema()
     const db = getDb()
+    // Only accept reports for a routine that actually exists — otherwise a caller
+    // could write unbounded orphan rows into routine_reports for arbitrary slugs.
+    const exists = await db.execute({
+      sql: `SELECT 1 FROM public_routines WHERE slug = ?`,
+      args: [slug],
+    })
+    if (exists.rows.length === 0) return res.status(404).json({ error: 'not found' })
     // One report per user per routine (dedup). Re-reporting is a no-op.
     await db.execute({
       sql: `INSERT OR IGNORE INTO routine_reports (slug, user_id, created_at) VALUES (?, ?, ?)`,

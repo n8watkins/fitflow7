@@ -44,10 +44,14 @@ interface SyncResponse {
 
 let inFlight = false
 let rerunQueued = false
+// Set if the server forbids this client from pushing (403 — a read-scoped token).
+// The web client is always cookie/readwrite so this is defensive; once set we stop
+// retrying for the session rather than re-pushing on every focus/write.
+let pushForbidden = false
 
 /** Pushes the dirty queue then pulls remote changes. Coalesces concurrent calls. */
 export async function sync(): Promise<void> {
-  if (!useSyncStore.getState().user) return
+  if (!useSyncStore.getState().user || pushForbidden) return
   if (inFlight) {
     rerunQueued = true
     return
@@ -77,6 +81,12 @@ export async function sync(): Promise<void> {
       // Session expired/absent — drop to signed-out.
       useSyncStore.getState().setUser(null)
       useSyncStore.getState().setStatus('idle')
+      return
+    }
+    if (res.status === 403) {
+      // Read-scoped credential can't push; don't keep retrying (terminal).
+      pushForbidden = true
+      useSyncStore.getState().setStatus('error')
       return
     }
     if (!res.ok) {

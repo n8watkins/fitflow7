@@ -240,6 +240,15 @@ describe('routines/public — no PII, validation, report dedup', () => {
     expect((list.body as { routines: { slug: string }[] }).routines.some((x) => x.slug === slug)).toBe(false)
     expect((await call(publicHandler, { method: 'GET', query: { slug } })).statusCode).toBe(404)
   })
+
+  it('rejects a report for a non-existent routine (no orphan rows)', async () => {
+    const res = await call(reportHandler, { method: 'POST', headers: await bearer('userA'), body: { slug: 'nope' } })
+    expect(res.statusCode).toBe(404)
+    const n = Number(
+      (await getDb().execute(`SELECT COUNT(*) AS n FROM routine_reports`)).rows[0]?.n ?? -1,
+    )
+    expect(n).toBe(0)
+  })
 })
 
 describe('B1 — body/weight/challenge sync (LWW + tombstone + scoping)', () => {
