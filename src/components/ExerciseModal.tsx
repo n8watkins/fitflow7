@@ -41,6 +41,14 @@ export default function ExerciseModal({
   onJump?: (id: string) => void
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
+  // Keep the latest onClose without re-running the focus-trap effect — callers
+  // pass an inline arrow, so a parent re-render would otherwise re-fire the setup
+  // and steal focus / clobber the return-focus target.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
   useEffect(() => {
     const prevActive = document.activeElement as HTMLElement | null
     const getFocusable = () =>
@@ -55,7 +63,7 @@ export default function ExerciseModal({
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose()
+        onCloseRef.current()
         return
       }
       if (e.key !== 'Tab') return
@@ -79,7 +87,8 @@ export default function ExerciseModal({
       document.body.style.overflow = ''
       prevActive?.focus?.() // return focus to whatever opened the modal
     }
-  }, [onClose])
+    // Mount/unmount only — onClose is read through a ref so this never re-runs.
+  }, [])
 
   const variations = [
     ex.easierVariationId ? { label: 'Easier', id: ex.easierVariationId } : null,

@@ -44,14 +44,15 @@ interface SyncResponse {
 
 let inFlight = false
 let rerunQueued = false
-// Set if the server forbids this client from pushing (403 — a read-scoped token).
-// The web client is always cookie/readwrite so this is defensive; once set we stop
-// retrying for the session rather than re-pushing on every focus/write.
+// Set if the server rejects a push with 403 (a read-scoped credential). The web
+// client is always cookie/readwrite so this is defensive; once set we fall back
+// to pull-only so the client still receives remote changes instead of either
+// spinning on a doomed push or going dark.
 let pushForbidden = false
 
 /** Pushes the dirty queue then pulls remote changes. Coalesces concurrent calls. */
 export async function sync(): Promise<void> {
-  if (!useSyncStore.getState().user || pushForbidden) return
+  if (!useSyncStore.getState().user) return
   if (inFlight) {
     rerunQueued = true
     return
@@ -59,6 +60,8 @@ export async function sync(): Promise<void> {
   inFlight = true
   const store = useSyncStore.getState()
   store.setStatus('syncing')
+  // Pull-only once a push has been forbidden; otherwise drain the dirty queue.
+  const pushed = !pushForbidden
   try {
     const pending = getPendingSync()
     const pendingSettings = getPendingSettings()
@@ -68,12 +71,16 @@ export async function sync(): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         since: getSyncCursor(),
-        routines: pending.routines,
-        sessions: pending.sessions,
-        settings: pendingSettings,
-        weightLog: pending.weightLog,
-        challengeProgress: pending.challengeProgress,
-        bodyProfile: pending.bodyProfile ?? null,
+        ...(pushed
+          ? {
+              routines: pending.routines,
+              sessions: pending.sessions,
+              settings: pendingSettings,
+              weightLog: pending.weightLog,
+              challengeProgress: pending.challengeProgress,
+              bodyProfile: pending.bodyProfile ?? null,
+            }
+          : {}),
       }),
     })
 
@@ -84,9 +91,10 @@ export async function sync(): Promise<void> {
       return
     }
     if (res.status === 403) {
-      // Read-scoped credential can't push; don't keep retrying (terminal).
+      // Read-scoped credential can't push — switch to pull-only and re-run so we
+      // still pull remote changes (the dirty queue simply never pushes).
       pushForbidden = true
-      useSyncStore.getState().setStatus('error')
+      rerunQueued = true
       return
     }
     if (!res.ok) {
@@ -96,15 +104,17 @@ export async function sync(): Promise<void> {
 
     const data = (await res.json()) as SyncResponse
 
-    // The push succeeded — clear dirty flags on what we sent.
-    markSynced({
-      routines: pending.routines,
-      sessions: pending.sessions,
-      weightLog: pending.weightLog,
-      challengeProgress: pending.challengeProgress,
-      bodyProfile: pending.bodyProfile,
-    })
-    if (pendingSettings) markSettingsSynced()
+    // The push succeeded — clear dirty flags on what we sent (skip in pull-only).
+    if (pushed) {
+      markSynced({
+        routines: pending.routines,
+        sessions: pending.sessions,
+        weightLog: pending.weightLog,
+        challengeProgress: pending.challengeProgress,
+        bodyProfile: pending.bodyProfile,
+      })
+      if (pendingSettings) markSettingsSynced()
+    }
 
     // Merge what the server sent back (last-write-wins, tombstones included).
     applyRemoteRoutines(data.routines)

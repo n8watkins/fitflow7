@@ -94,7 +94,7 @@ function Shell() {
       )}
 
       <main className={inWorkout ? '' : 'mx-auto max-w-5xl px-4 py-8 pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-8'}>
-        <Suspense fallback={<RouteFallback />}>
+        <Suspense fallback={<RouteFallback fullHeight={inWorkout} />}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/workout/:routineId" element={<Player />} />
@@ -225,9 +225,13 @@ function SyncBadge() {
 
 // Suspense fallback for code-split routes. Minimal + centered so it doesn't
 // shift layout; respects reduced-motion.
-function RouteFallback() {
+function RouteFallback({ fullHeight = false }: { fullHeight?: boolean }) {
   return (
-    <div className="flex min-h-[40vh] items-center justify-center" role="status" aria-label="Loading">
+    <div
+      className={`flex items-center justify-center ${fullHeight ? 'min-h-screen' : 'min-h-[40vh]'}`}
+      role="status"
+      aria-label="Loading"
+    >
       <span className="h-6 w-6 animate-spin rounded-full border-2 border-edge border-t-accent motion-reduce:animate-none" />
     </div>
   )

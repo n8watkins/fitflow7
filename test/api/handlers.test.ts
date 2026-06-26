@@ -205,6 +205,13 @@ describe('S1 — token management endpoint (cookie-authed)', () => {
     const res = await call(tokenHandler, { method: 'GET', headers: { cookie: `ff_session=${token}` } })
     expect(res.statusCode).toBe(401)
   })
+
+  it('cannot revoke another user’s token', async () => {
+    const t = await mint('userA')
+    await call(tokenHandler, { method: 'DELETE', headers: cookieFor('userB'), query: { jti: t.jti } })
+    // userA's token still authenticates — userB's revoke was scoped out.
+    expect((await call(syncHandler, { method: 'POST', headers: t.headers, body: { since: EPOCH } })).statusCode).toBe(200)
+  })
 })
 
 describe('routines/public — no PII, validation, report dedup', () => {
@@ -225,6 +232,13 @@ describe('routines/public — no PII, validation, report dedup', () => {
     expect(item).not.toHaveProperty('owner_id')
     expect(item).not.toHaveProperty('email')
     expect(JSON.stringify(item)).not.toContain('userA')
+  })
+
+  it('rate-limits a burst of publishes (429 after 10/hr)', async () => {
+    for (let i = 0; i < 10; i++) {
+      expect((await publish('owner', { routine: goodRoutine })).statusCode).toBe(200)
+    }
+    expect((await publish('owner', { routine: goodRoutine })).statusCode).toBe(429)
   })
 
   it('rejects malformed exercise ids server-side', async () => {

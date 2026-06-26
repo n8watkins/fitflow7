@@ -192,9 +192,16 @@ export default function Player() {
   useEffect(() => {
     if (!('wakeLock' in navigator) || !wakeActive) return
 
+    // `released` guards the async race: if cleanup runs while a request() is
+    // still pending, the resolved sentinel would otherwise be stored after the
+    // cleanup's release() ran (a no-op on the then-null ref) and leak. When
+    // released, drop any late-arriving sentinel immediately.
+    let released = false
     const acquireWakeLock = async () => {
       try {
-        wakeLockRef.current = await navigator.wakeLock.request('screen')
+        const sentinel = await navigator.wakeLock.request('screen')
+        if (released) void sentinel.release().catch(() => {})
+        else wakeLockRef.current = sentinel
       } catch {
         // Ignore — wake lock is a best-effort feature
       }
@@ -207,6 +214,7 @@ export default function Player() {
     void acquireWakeLock()
     document.addEventListener('visibilitychange', handleVisibility)
     return () => {
+      released = true
       document.removeEventListener('visibilitychange', handleVisibility)
       wakeLockRef.current?.release().catch(() => {})
       wakeLockRef.current = null
