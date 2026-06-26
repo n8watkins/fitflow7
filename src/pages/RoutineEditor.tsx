@@ -278,6 +278,16 @@ export default function RoutineEditor() {
   // on a route change and this initial state is always for the current routine.
   const [routine, setRoutine] = useState<Routine | null>(initialRoutine)
 
+  // Stable per-row ids, kept index-parallel to routine.exerciseIds. exerciseIds
+  // allows duplicates, so neither the id nor the index is a stable React key on
+  // reorder; these uids let a moved row reconcile as a move (and keep any future
+  // row-local state attached to the right row). Mutated in lockstep below.
+  const [rowUids, setRowUids] = useState<string[]>(() => initialRoutine?.exerciseIds.map(() => newId()) ?? [])
+
+  // Mobile only: below lg the picker lives in a collapsible panel above the list
+  // (instead of far below it in the desktop sidebar). See C5.
+  const [showPicker, setShowPicker] = useState(false)
+
   const isNew = routineId === 'new' || isSystemCopy
   const canDelete = !isNew && routine !== null && !routine.isSystem
 
@@ -289,34 +299,33 @@ export default function RoutineEditor() {
   const setRest = useCallback((v: number) => setRoutine((r) => r ? { ...r, restSeconds: v } : r), [])
   const setRounds = useCallback((v: number) => setRoutine((r) => r ? { ...r, rounds: v } : r), [])
 
+  // Swap two adjacent entries in any index-parallel array.
+  const swap = <T,>(arr: T[], i: number, j: number): T[] => {
+    const next = [...arr]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    return next
+  }
+
   const moveUp = useCallback((idx: number) => {
-    setRoutine((r) => {
-      if (!r || idx <= 0) return r
-      const ids = [...r.exerciseIds]
-      ;[ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]]
-      return { ...r, exerciseIds: ids }
-    })
+    setRoutine((r) => (!r || idx <= 0 ? r : { ...r, exerciseIds: swap(r.exerciseIds, idx - 1, idx) }))
+    setRowUids((u) => (idx <= 0 ? u : swap(u, idx - 1, idx)))
   }, [])
 
   const moveDown = useCallback((idx: number) => {
-    setRoutine((r) => {
-      if (!r || idx >= r.exerciseIds.length - 1) return r
-      const ids = [...r.exerciseIds]
-      ;[ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]]
-      return { ...r, exerciseIds: ids }
-    })
+    setRoutine((r) =>
+      !r || idx >= r.exerciseIds.length - 1 ? r : { ...r, exerciseIds: swap(r.exerciseIds, idx, idx + 1) },
+    )
+    setRowUids((u) => (idx >= u.length - 1 ? u : swap(u, idx, idx + 1)))
   }, [])
 
   const removeExercise = useCallback((idx: number) => {
-    setRoutine((r) => {
-      if (!r) return r
-      const ids = r.exerciseIds.filter((_, i) => i !== idx)
-      return { ...r, exerciseIds: ids }
-    })
+    setRoutine((r) => (r ? { ...r, exerciseIds: r.exerciseIds.filter((_, i) => i !== idx) } : r))
+    setRowUids((u) => u.filter((_, i) => i !== idx))
   }, [])
 
   const addExercise = useCallback((id: string) => {
-    setRoutine((r) => r ? { ...r, exerciseIds: [...r.exerciseIds, id] } : r)
+    setRoutine((r) => (r ? { ...r, exerciseIds: [...r.exerciseIds, id] } : r))
+    setRowUids((u) => [...u, newId()])
   }, [])
 
   const resetToClassic = useCallback(() => {
@@ -327,6 +336,7 @@ export default function RoutineEditor() {
       restSeconds: CLASSIC_7.restSeconds,
       rounds: CLASSIC_7.rounds,
     } : r)
+    setRowUids(CLASSIC_7.exerciseIds.map(() => newId()))
   }, [])
 
   const handleSave = useCallback(() => {
@@ -472,16 +482,36 @@ export default function RoutineEditor() {
               </button>
             </div>
 
+            {/* Mobile-only collapsible picker, so it's reachable above the list
+                (the desktop sidebar picker is hidden below lg). */}
+            <div className="lg:hidden">
+              <button
+                type="button"
+                onClick={() => setShowPicker((s) => !s)}
+                aria-expanded={showPicker}
+                className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-accent/50 bg-accent/10 py-2.5 text-sm font-semibold text-accent transition active:scale-[0.99]"
+              >
+                {showPicker ? 'Close' : '+ Add exercise'}
+              </button>
+              {showPicker && (
+                <div className="mb-4">
+                  <ExercisePicker onAdd={addExercise} />
+                </div>
+              )}
+            </div>
+
             {noExercises && (
               <div className="rounded-xl border border-dashed border-edge py-8 text-center text-sm text-slate-500">
-                No exercises — add some below.
+                No exercises — {' '}
+                <span className="lg:hidden">tap “Add exercise” above.</span>
+                <span className="hidden lg:inline">add some from the panel on the right.</span>
               </div>
             )}
 
             <div className="space-y-2">
               {routine.exerciseIds.map((id, idx) => (
                 <ExerciseRow
-                  key={`${id}-${idx}`}
+                  key={rowUids[idx] ?? `${id}-${idx}`}
                   exId={id}
                   index={idx}
                   total={routine.exerciseIds.length}
@@ -494,9 +524,11 @@ export default function RoutineEditor() {
           </div>
         </div>
 
-        {/* Right column: picker + actions */}
+        {/* Right column: picker (desktop only) + actions */}
         <div className="space-y-4">
-          <ExercisePicker onAdd={addExercise} />
+          <div className="hidden lg:block">
+            <ExercisePicker onAdd={addExercise} />
+          </div>
 
           {/* Action buttons */}
           <div className="rounded-2xl border border-edge bg-card p-4 space-y-3">
