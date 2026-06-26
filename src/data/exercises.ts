@@ -1763,11 +1763,18 @@ const RAW_EXERCISES: Exercise[] = [
 ]
 
 // Exercises with a bundled real-movement photo in public/exercises/<slug>.jpg
-// (licensed public-domain, from free-exercise-db). The rest keep their emoji.
+// (two frames that animate start↔end). Source: free-exercise-db (Unlicense /
+// public-domain — no attribution required). The rest keep their emoji fallback.
 const IMAGE_SLUGS = new Set([
+  // Original 13
   'push-ups', 'crunches', 'step-ups', 'squats', 'triceps-dips', 'plank', 'lunges',
   'side-plank', 'mountain-climbers', 'glute-bridge', 'dead-bug', 'incline-push-up',
   'reverse-lunges',
+  // Added (Session 7): matched to bodyweight free-exercise-db movements
+  'reverse-crunches', 'russian-twist', 'split-squat-right', 'split-squat-left',
+  'shoulder-stretch', 'arm-circles', 'tricep-stretch-left', 'tricep-stretch-right',
+  'child-pose', 'bicycle-crunches', 'jumping-squats', 'donkey-kick-left',
+  'donkey-kick-right', 'cat-cow-pose', 'diamond-push-ups', 'long-arm-crunches',
 ])
 
 // Concise (≤8-word) cues for outline rows + the exercise modal. Kept here as a
