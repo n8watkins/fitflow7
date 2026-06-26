@@ -94,3 +94,54 @@ export function formatHeight(cm: number, unit: UnitSystem): string {
 export function weightUnitLabel(unit: UnitSystem): string {
   return unit === 'imperial' ? 'lb' : 'kg'
 }
+
+/** Signed weight delta -> display string with a leading sign, e.g. "+1.1 kg" /
+ *  "−2.3 lb" (a real minus sign). Exactly-zero shows as "±0.0". */
+export function formatWeightDelta(deltaKg: number, unit: UnitSystem): string {
+  const v = unit === 'imperial' ? kgToLb(deltaKg) : deltaKg
+  const rounded = Math.round(v * 10) / 10
+  const sign = rounded > 0 ? '+' : rounded < 0 ? '−' : '±'
+  return `${sign}${Math.abs(rounded).toFixed(1)} ${weightUnitLabel(unit)}`
+}
+
+// ---------------------------------------------------------------------------
+// Trend + goal progress (pure; operates on {date,weightKg} measurements)
+// ---------------------------------------------------------------------------
+
+/** Shift a 'YYYY-MM-DD' day key by `deltaDays` (may be negative), local calendar. */
+function shiftDayKey(date: string, deltaDays: number): string {
+  const [y, m, d] = date.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() + deltaDays)
+  const yy = dt.getFullYear()
+  const mm = String(dt.getMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
+}
+
+/** Signed weight change (kg) over the trailing `days` window: the latest
+ *  measurement minus the baseline. The baseline is the most recent entry at or
+ *  before the window start; if every entry is newer than that (all data falls
+ *  inside the window), the earliest entry is used. Negative = weight lost.
+ *  Returns null when fewer than two measurements exist. */
+export function weightChangeKg(
+  entries: readonly { date: string; weightKg: number }[],
+  days: number,
+): number | null {
+  if (entries.length < 2) return null
+  const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date))
+  const latest = sorted[sorted.length - 1]
+  const cutoff = shiftDayKey(latest.date, -days)
+  let baseline = sorted[0]
+  for (const e of sorted) {
+    if (e.date <= cutoff) baseline = e
+    else break
+  }
+  return latest.weightKg - baseline.weightKg
+}
+
+/** Signed remaining distance to the goal weight (kg): latest minus goal.
+ *  Positive = still above goal; ≤0 = goal reached or passed. */
+export function weightToGoalKg(latestKg: number, goalKg: number): number {
+  return latestKg - goalKg
+}

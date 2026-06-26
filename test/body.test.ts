@@ -10,6 +10,9 @@ import {
   formatWeight,
   formatHeight,
   weightUnitLabel,
+  formatWeightDelta,
+  weightChangeKg,
+  weightToGoalKg,
 } from '../src/lib/body'
 
 describe('weight conversions', () => {
@@ -81,5 +84,48 @@ describe('formatters', () => {
   it('labels the weight unit', () => {
     expect(weightUnitLabel('imperial')).toBe('lb')
     expect(weightUnitLabel('metric')).toBe('kg')
+  })
+  it('formats a signed weight delta with a real minus sign', () => {
+    expect(formatWeightDelta(-1, 'metric')).toBe('−1.0 kg')
+    expect(formatWeightDelta(2, 'metric')).toBe('+2.0 kg')
+    expect(formatWeightDelta(0, 'metric')).toBe('±0.0 kg')
+    expect(formatWeightDelta(-1, 'imperial')).toBe('−2.2 lb')
+  })
+})
+
+describe('weightChangeKg', () => {
+  const e = (date: string, weightKg: number) => ({ date, weightKg })
+
+  it('returns null with fewer than two entries', () => {
+    expect(weightChangeKg([], 30)).toBeNull()
+    expect(weightChangeKg([e('2026-06-01', 80)], 30)).toBeNull()
+  })
+
+  it('measures latest minus the entry at/before the window start', () => {
+    const entries = [
+      e('2026-05-01', 82), // older than the 30-day window from the latest
+      e('2026-05-27', 80), // ~30 days before latest -> baseline
+      e('2026-06-26', 78), // latest
+    ]
+    // latest (78) - baseline at/before cutoff 2026-05-27 (80) = -2
+    expect(weightChangeKg(entries, 30)).toBeCloseTo(-2, 6)
+  })
+
+  it('falls back to the earliest entry when all data is inside the window', () => {
+    const entries = [e('2026-06-20', 79), e('2026-06-26', 77)]
+    expect(weightChangeKg(entries, 30)).toBeCloseTo(-2, 6)
+  })
+
+  it('is order-independent', () => {
+    const entries = [e('2026-06-26', 77), e('2026-06-20', 79)]
+    expect(weightChangeKg(entries, 7)).toBeCloseTo(-2, 6)
+  })
+})
+
+describe('weightToGoalKg', () => {
+  it('is positive above goal and negative below', () => {
+    expect(weightToGoalKg(80, 75)).toBe(5)
+    expect(weightToGoalKg(73, 75)).toBe(-2)
+    expect(weightToGoalKg(75, 75)).toBe(0)
   })
 })

@@ -15,12 +15,15 @@ import {
   bmiCategory,
   cmToFtIn,
   computeBmi,
+  formatWeightDelta,
   ftInToCm,
   formatHeight,
   formatWeight,
   healthyWeightRangeKg,
   kgToLb,
   lbToKg,
+  weightChangeKg,
+  weightToGoalKg,
   weightUnitLabel,
 } from '../lib/body'
 import { dayKey } from '../lib/format'
@@ -194,6 +197,7 @@ export default function Stats() {
 
       {/* Weight trend */}
       <Card title="Weight trend">
+        <WeightSummary entries={weights} goalKg={profile.goalWeightKg} unit={unit} />
         {weights.length >= 2 ? (
           <WeightChart entries={weights} unit={unit} />
         ) : (
@@ -368,6 +372,38 @@ function BodySection({ unit, onChange }: { unit: UnitSystem; onChange: () => voi
 // ---------------------------------------------------------------------------
 // Healthy range + goal progress
 // ---------------------------------------------------------------------------
+
+/** Trailing weight deltas + distance to goal. Renders nothing with no data. */
+function WeightSummary({ entries, goalKg, unit }: { entries: WeightEntry[]; goalKg?: number; unit: UnitSystem }) {
+  const latest = entries.length ? entries[entries.length - 1] : undefined
+  const change7 = weightChangeKg(entries, 7)
+  const change30 = weightChangeKg(entries, 30)
+  const toGoal = latest && goalKg ? weightToGoalKg(latest.weightKg, goalKg) : null
+
+  const items: { label: string; value: string; tone: string }[] = []
+  if (change7 !== null) items.push({ label: '7-day', value: formatWeightDelta(change7, unit), tone: 'text-slate-100' })
+  if (change30 !== null) items.push({ label: '30-day', value: formatWeightDelta(change30, unit), tone: 'text-slate-100' })
+  if (toGoal !== null) {
+    const reached = Math.abs(toGoal) < 0.05
+    items.push({
+      label: 'to goal',
+      value: reached ? 'Reached 🎉' : `${formatWeight(Math.abs(toGoal), unit)} ${toGoal > 0 ? 'to go' : 'under'}`,
+      tone: reached ? 'text-emerald-400' : 'text-slate-100',
+    })
+  }
+  if (items.length === 0) return null
+
+  return (
+    <div className="mb-4 grid grid-cols-3 gap-3">
+      {items.map((it) => (
+        <div key={it.label} className="rounded-xl border border-edge bg-surface px-3 py-2.5 text-center">
+          <div className={`text-base font-bold leading-tight tabular-nums ${it.tone}`}>{it.value}</div>
+          <div className="mt-0.5 text-[11px] text-slate-500">{it.label}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function HealthyRange({ heightCm, goalKg, unit }: { heightCm: number; goalKg?: number; unit: UnitSystem }) {
   const { minKg, maxKg } = healthyWeightRangeKg(heightCm)
