@@ -164,6 +164,10 @@ export type ChallengeProgress = {
   challengeId: string
   /** Day-number (1-based) -> ISO timestamp it was completed. */
   completedDays: Record<number, string>
+  /** Per-day tombstones: day-number -> ISO timestamp it was un-marked. Lets a
+   *  deliberate unmark survive the cross-device union merge (the later of a day's
+   *  mark vs clear timestamp wins) instead of being resurrected. See Finding M2. */
+  clearedDays?: Record<number, string>
   startedAt: string
   updatedAt?: string
   /** Soft-delete tombstone (used by resetChallenge). */

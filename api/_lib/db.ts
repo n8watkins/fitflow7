@@ -134,17 +134,28 @@ const SCHEMA = [
      goal_weight_kg REAL,
      updated_at     TEXT NOT NULL
    )`,
-  // One row per challenge a user has started; completed_days is a JSON map.
+  // One row per challenge a user has started; completed_days/cleared_days are
+  // JSON maps (day-number -> ISO timestamp). cleared_days carries per-day unmark
+  // tombstones so a deliberate unmark survives the cross-device merge (M2).
   `CREATE TABLE IF NOT EXISTS challenge_progress (
      user_id        TEXT NOT NULL,
      challenge_id   TEXT NOT NULL,
      completed_days TEXT NOT NULL,
+     cleared_days   TEXT NOT NULL DEFAULT '{}',
      started_at     TEXT NOT NULL,
      updated_at     TEXT NOT NULL,
      deleted_at     TEXT,
      PRIMARY KEY (user_id, challenge_id)
    )`,
   `CREATE INDEX IF NOT EXISTS idx_challenge_progress_user_updated ON challenge_progress (user_id, updated_at)`,
+]
+
+// Idempotent ADD COLUMN migrations for tables that predate a column. CREATE TABLE
+// IF NOT EXISTS never alters an existing table, so columns added after a table
+// first shipped must be ALTERed in. Each runs once per warm instance and the
+// "duplicate column name" error (already applied) is swallowed.
+const ALTERS = [
+  `ALTER TABLE challenge_progress ADD COLUMN cleared_days TEXT NOT NULL DEFAULT '{}'`,
 ]
 
 /** Ensures the schema exists. Memoized so concurrent requests share one bootstrap. */
@@ -154,6 +165,14 @@ export function ensureSchema(): Promise<void> {
     schemaReady = (async () => {
       for (const stmt of SCHEMA) {
         await db.execute(stmt)
+      }
+      for (const stmt of ALTERS) {
+        try {
+          await db.execute(stmt)
+        } catch (err) {
+          // Already applied (column exists) → ignore; re-throw anything else.
+          if (!/duplicate column name/i.test(String((err as Error)?.message))) throw err
+        }
       }
     })().catch((err) => {
       // Reset so a transient failure can retry on the next request.

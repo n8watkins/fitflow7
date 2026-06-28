@@ -2,10 +2,12 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import { runMigrations } from './lib/storage'
+import { gcTombstones, runMigrations } from './lib/storage'
 
 // Upgrade any stored data to the current schema before the app reads it.
 runMigrations()
+// Reap old, already-synced soft-deletes so localStorage doesn't grow unbounded.
+gcTombstones()
 
 // Native (Capacitor) builds only: register the Health Connect writer. VITE_NATIVE
 // is unset in the web/Vercel build, so vite drops this branch and the native

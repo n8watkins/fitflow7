@@ -156,16 +156,19 @@ function weightUpsert(userId: string, e: WeightEntry): InStatement {
   }
 }
 
-function rowToChallenge(r: Record<string, unknown>): ChallengeProgress {
-  let completedDays: Record<number, string>
+function parseDayMap(raw: unknown): Record<number, string> {
   try {
-    completedDays = JSON.parse((r.completed_days as string) || '{}') as Record<number, string>
+    return JSON.parse((raw as string) || '{}') as Record<number, string>
   } catch {
-    completedDays = {}
+    return {}
   }
+}
+
+function rowToChallenge(r: Record<string, unknown>): ChallengeProgress {
   return {
     challengeId: r.challenge_id as string,
-    completedDays,
+    completedDays: parseDayMap(r.completed_days),
+    clearedDays: parseDayMap(r.cleared_days),
     startedAt: r.started_at as string,
     updatedAt: r.updated_at as string,
     deletedAt: (r.deleted_at as string) ?? undefined,
@@ -174,16 +177,18 @@ function rowToChallenge(r: Record<string, unknown>): ChallengeProgress {
 
 function challengeUpsert(userId: string, c: ChallengeProgress): InStatement {
   return {
-    sql: `INSERT INTO challenge_progress (user_id, challenge_id, completed_days, started_at, updated_at, deleted_at)
-          VALUES (?, ?, ?, ?, ?, ?)
+    sql: `INSERT INTO challenge_progress (user_id, challenge_id, completed_days, cleared_days, started_at, updated_at, deleted_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(user_id, challenge_id) DO UPDATE SET
-            completed_days = excluded.completed_days, started_at = excluded.started_at,
+            completed_days = excluded.completed_days, cleared_days = excluded.cleared_days,
+            started_at = excluded.started_at,
             updated_at = excluded.updated_at, deleted_at = excluded.deleted_at
           WHERE excluded.updated_at > challenge_progress.updated_at`,
     args: [
       userId,
       c.challengeId,
       JSON.stringify(c.completedDays ?? {}),
+      JSON.stringify(c.clearedDays ?? {}),
       c.startedAt,
       c.updatedAt ?? new Date().toISOString(),
       c.deletedAt ?? null,

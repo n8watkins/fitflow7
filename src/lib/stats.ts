@@ -1,4 +1,5 @@
 import type { Stats, WorkoutSession } from '../types'
+import { dayKey, parseDayKey, shiftDayKey, todayKey } from './format'
 
 // ---------------------------------------------------------------------------
 // Insights (Phase 3a) — richer aggregations for the /insights page. Derived
@@ -33,41 +34,10 @@ export interface Insights {
 }
 
 // ---------------------------------------------------------------------------
-// Date helpers (local time, not UTC)
+// Date helpers (local time, not UTC). dayKey/todayKey/parseDayKey/shiftDayKey
+// are shared from lib/format.ts (Finding L10); only the ISO-week helper, which
+// is stats-specific, lives here.
 // ---------------------------------------------------------------------------
-
-/** Returns a 'YYYY-MM-DD' string using local time. */
-function dayKey(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-/** Returns today's local date key. */
-function todayKey(): string {
-  return dayKey(new Date())
-}
-
-/** Returns yesterday's local date key. */
-function yesterdayKey(): string {
-  const d = new Date()
-  d.setDate(d.getDate() - 1)
-  return dayKey(d)
-}
-
-/** Parse a date-key 'YYYY-MM-DD' back into a JS Date (local midnight). */
-function parseKey(key: string): Date {
-  const [y, m, d] = key.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
-
-/** Subtract one calendar day from a date key, returns new key. */
-function prevDayKey(key: string): string {
-  const d = parseKey(key)
-  d.setDate(d.getDate() - 1)
-  return dayKey(d)
-}
 
 /**
  * Returns the ISO week number (Monday-start) for a local date.
@@ -151,7 +121,7 @@ export function computeStats(sessions: WorkoutSession[]): Stats {
   // If no workout today but there was one yesterday, count from yesterday backward.
   // -------------------------------------------------------------------------
   const today = todayKey()
-  const yesterday = yesterdayKey()
+  const yesterday = shiftDayKey(today, -1)
 
   const streakStart = workoutDays.has(today)
     ? today
@@ -164,7 +134,7 @@ export function computeStats(sessions: WorkoutSession[]): Stats {
     let cursor = streakStart
     while (workoutDays.has(cursor)) {
       currentStreak++
-      cursor = prevDayKey(cursor)
+      cursor = shiftDayKey(cursor, -1)
     }
   }
 
@@ -180,7 +150,7 @@ export function computeStats(sessions: WorkoutSession[]): Stats {
     let run = 0
     let prev: string | null = null
     for (const key of sortedDays) {
-      if (prev === null || prevDayKey(prev) === key) {
+      if (prev === null || shiftDayKey(prev, -1) === key) {
         run++
       } else {
         longestStreak = Math.max(longestStreak, run)
@@ -244,7 +214,7 @@ export function computeStats(sessions: WorkoutSession[]): Stats {
 
 /** The last `count` Monday date-keys, oldest → newest (this week's Monday last). */
 function weekStarts(count: number): string[] {
-  const monday = parseKey(isoWeekKey(new Date()))
+  const monday = parseDayKey(isoWeekKey(new Date()))
   const out: string[] = []
   for (let i = count - 1; i >= 0; i--) {
     const d = new Date(monday)
@@ -257,7 +227,7 @@ function weekStarts(count: number): string[] {
 /** Day-keys from the Monday `weeks-1` weeks ago through today (week-aligned). */
 function heatmapDayKeys(weeks: number): string[] {
   const today = new Date()
-  const start = parseKey(isoWeekKey(today))
+  const start = parseDayKey(isoWeekKey(today))
   start.setDate(start.getDate() - (weeks - 1) * 7)
   const out: string[] = []
   const cursor = new Date(start)

@@ -320,6 +320,20 @@ describe('B1 — body/weight/challenge sync (LWW + tombstone + scoping)', () => 
     expect((await pull('userB')).challengeProgress.some((x) => x.challengeId === 'c30')).toBe(false)
   })
 
+  it('challenge progress: cleared_days (per-day unmark tombstones) round-trip (M2)', async () => {
+    await push('userA', {
+      challengeProgress: [{
+        challengeId: 'c30', completedDays: { 2: '2026-06-02T00:00:00.000Z' },
+        clearedDays: { 1: '2026-06-03T00:00:00.000Z' },
+        startedAt: '2026-06-01T00:00:00.000Z', updatedAt: '2026-06-03T00:00:00.000Z',
+      }],
+    })
+    const row = (await pull('userA')).challengeProgress.find((x) => x.challengeId === 'c30') as
+      { completedDays: Record<number, string>; clearedDays?: Record<number, string> } | undefined
+    expect(row?.completedDays).toEqual({ 2: '2026-06-02T00:00:00.000Z' })
+    expect(row?.clearedDays).toEqual({ 1: '2026-06-03T00:00:00.000Z' })
+  })
+
   it('a read-only token cannot push body data', async () => {
     const ro = await bearer('userA', 'read')
     const res = await call(syncHandler, { method: 'POST', headers: ro, body: { weightLog: [{ id: 'w', date: '2026-06-01', weightKg: 80, createdAt: 'x', updatedAt: 'x' }] } })

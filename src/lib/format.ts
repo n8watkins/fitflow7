@@ -15,6 +15,24 @@ export function dayKey(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
+/** Today's local day key, 'YYYY-MM-DD'. */
+export function todayKey(): string {
+  return dayKey(new Date())
+}
+
+/** Parse a day key 'YYYY-MM-DD' back into a Date at local midnight. */
+export function parseDayKey(key: string): Date {
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+/** Shift a day key by `deltaDays` (may be negative), local calendar. */
+export function shiftDayKey(key: string, deltaDays: number): string {
+  const d = parseDayKey(key)
+  d.setDate(d.getDate() + deltaDays)
+  return dayKey(d)
+}
+
 /** Friendly date + time, e.g. "Mon, Jun 9 · 7:42 AM". */
 export function formatDateTime(iso: string): string {
   const d = new Date(iso)

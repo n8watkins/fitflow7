@@ -122,6 +122,41 @@ export function runMigrations(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Tombstone garbage collection (Finding M4)
+// ---------------------------------------------------------------------------
+// Soft-deletes otherwise accumulate forever: every deleted routine/session/
+// weight entry and every reset challenge stays in localStorage (clearSessions
+// turns the entire history into permanent tombstones), so reads stay correct but
+// the raw blobs grow without bound until writeJSON silently hits the quota and
+// new data is dropped. A tombstone that is already synced (dirty:false) AND older
+// than the retention window is safe to drop locally — other devices receive it
+// from the server, not from this device. Recent and unsynced tombstones are kept
+// so pending deletes still propagate.
+const TOMBSTONE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000 // 90 days
+
+/** Drops synced tombstones older than the retention window across all
+ *  collections. Idempotent; call once at startup. Returns the number removed. */
+export function gcTombstones(nowMs: number = Date.now()): number {
+  const cutoff = nowMs - TOMBSTONE_RETENTION_MS
+  let removed = 0
+  const sweep = <T extends { deletedAt?: string; dirty?: boolean }>(key: string): void => {
+    const arr = readJSON<T[]>(key, [])
+    const kept = arr.filter(
+      (r) => !(r.deletedAt && !r.dirty && new Date(r.deletedAt).getTime() < cutoff),
+    )
+    if (kept.length !== arr.length) {
+      removed += arr.length - kept.length
+      writeJSON(key, kept)
+    }
+  }
+  sweep<Routine>(KEY.routines)
+  sweep<WorkoutSession>(KEY.sessions)
+  sweep<WeightEntry>(KEY.weightLog)
+  sweep<ChallengeProgress>(KEY.challengeProgress)
+  return removed
+}
+
+// ---------------------------------------------------------------------------
 // Routines
 // ---------------------------------------------------------------------------
 
@@ -155,12 +190,16 @@ export function saveRoutine(r: Routine): void {
   emitWrite()
 }
 
-/** Soft-delete: tombstones the routine (deletedAt + dirty) so the delete can sync. */
+/** Soft-delete: tombstones the routine (deletedAt + dirty) so the delete can sync.
+ *  Bumps updatedAt too — otherwise the tombstone shares the live record's
+ *  timestamp and the server's `excluded.updated_at > current` LWW guard rejects
+ *  it, so the delete would never propagate to other devices. */
 export function deleteRoutine(id: string): void {
   const routines = getRoutinesRaw()
   const idx = routines.findIndex((r) => r.id === id)
   if (idx < 0) return
-  routines[idx] = { ...routines[idx], deletedAt: now(), dirty: true }
+  const stamp = now()
+  routines[idx] = { ...routines[idx], deletedAt: stamp, updatedAt: stamp, dirty: true }
   writeJSON(KEY.routines, routines)
   emitWrite()
 }
@@ -328,8 +367,15 @@ export function getPendingSettings(): { value: UserSettings; updatedAt: string }
   return { value: getSettings(), updatedAt: meta.updatedAt || now() }
 }
 
-export function markSettingsSynced(): void {
-  writeJSON(KEY.settingsMeta, { ...getSettingsMeta(), dirty: false })
+/** Clears the settings dirty flag after a successful push — but only if settings
+ *  weren't edited again during the round-trip. Mirrors markSynced for every other
+ *  record type; without this an edit made mid-sync was silently marked clean and
+ *  never pushed (Finding M1). */
+export function markSettingsSynced(pushedUpdatedAt: string): void {
+  const meta = getSettingsMeta()
+  if (meta.updatedAt === pushedUpdatedAt) {
+    writeJSON(KEY.settingsMeta, { ...meta, dirty: false })
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -417,12 +463,14 @@ export function applyRemoteWeightLog(remote: WeightEntry[]): void {
 }
 
 /** Merges server challenge-progress records keyed by challengeId. For two LIVE
- *  records the `completedDays` maps are UNIONED (keeping the earliest timestamp
- *  per day) so a day marked on one device can't clobber a day marked on another
- *  — whole-record LWW would silently drop one. A reset (tombstone) is handled by
- *  plain LWW on `updatedAt` so a deliberate clear isn't undone by stale days.
- *  When the union adds anything the server lacked, the record is left dirty (with
- *  a fresh updatedAt) so it re-pushes and other devices converge. */
+ *  records the per-day mark/clear events are merged so concurrent devices
+ *  converge: per day we keep the latest mark (completedDays) and the latest clear
+ *  (clearedDays); a day is effectively complete only if its mark is newer than
+ *  its clear. This lets a day marked on one device survive AND a day deliberately
+ *  un-marked on another device survive (the later action wins) — Finding M2.
+ *  A reset (tombstone) is handled by plain LWW on `updatedAt`. When the local
+ *  side contributed anything the server lacked, the record is left dirty (with a
+ *  fresh updatedAt) so it re-pushes and other devices converge. */
 export function applyRemoteChallengeProgress(remote: ChallengeProgress[]): void {
   if (remote.length === 0) return
   const byId = new Map(
@@ -439,30 +487,64 @@ export function applyRemoteChallengeProgress(remote: ChallengeProgress[]): void 
       if ((c.updatedAt ?? '') > (existing.updatedAt ?? '')) byId.set(c.challengeId, { ...c, dirty: false })
       continue
     }
-    // Both live → union completed days (earliest timestamp wins per day).
-    const merged: Record<number, string> = { ...c.completedDays }
-    let addedLocal = false
-    for (const [dayStr, ts] of Object.entries(existing.completedDays)) {
-      const day = Number(dayStr)
-      if (!(day in merged)) {
-        merged[day] = ts
-        addedLocal = true
-      } else if (ts < merged[day]) {
-        merged[day] = ts
-      }
-    }
+    // Both live → reconcile per-day mark vs clear events (latest wins per day).
+    const merged = mergeChallengeDays(existing, c)
     const startedAt = existing.startedAt < c.startedAt ? existing.startedAt : c.startedAt
+    // Did the local side contribute anything the server's record lacked?
+    const localContributed =
+      !shallowEqualMap(merged.completedDays, c.completedDays) ||
+      !shallowEqualMap(merged.clearedDays, c.clearedDays ?? {})
     byId.set(c.challengeId, {
       ...c,
-      completedDays: merged,
+      completedDays: merged.completedDays,
+      clearedDays: merged.clearedDays,
       startedAt,
-      // If we contributed days the server didn't have, bump updatedAt + stay
-      // dirty so the union re-pushes and wins the server's LWW guard.
-      updatedAt: addedLocal ? now() : c.updatedAt,
-      dirty: addedLocal,
+      // If we contributed, bump updatedAt + stay dirty so the merge re-pushes and
+      // wins the server's LWW guard; otherwise adopt the server's record as-is.
+      updatedAt: localContributed ? now() : c.updatedAt,
+      dirty: localContributed,
     })
   }
   writeJSON(KEY.challengeProgress, [...byId.values()])
+}
+
+/** Reconciles two live challenge records' per-day mark/clear events. For each
+ *  day the latest mark and latest clear are kept; the day is "complete" iff its
+ *  mark timestamp is strictly newer than its clear timestamp. */
+function mergeChallengeDays(
+  a: ChallengeProgress,
+  b: ChallengeProgress,
+): { completedDays: Record<number, string>; clearedDays: Record<number, string> } {
+  const latestMark: Record<number, string> = {}
+  const latestClear: Record<number, string> = {}
+  const take = (into: Record<number, string>, from?: Record<number, string>) => {
+    for (const [k, ts] of Object.entries(from ?? {})) {
+      const day = Number(k)
+      if (!(day in into) || ts > into[day]) into[day] = ts
+    }
+  }
+  take(latestMark, a.completedDays)
+  take(latestMark, b.completedDays)
+  take(latestClear, a.clearedDays)
+  take(latestClear, b.clearedDays)
+
+  const completedDays: Record<number, string> = {}
+  const clearedDays: Record<number, string> = {}
+  for (const k of new Set([...Object.keys(latestMark), ...Object.keys(latestClear)])) {
+    const day = Number(k)
+    const mark = latestMark[day]
+    const clear = latestClear[day]
+    if (mark && (!clear || mark > clear)) completedDays[day] = mark
+    else if (clear) clearedDays[day] = clear
+  }
+  return { completedDays, clearedDays }
+}
+
+/** Shallow equality for day-number -> timestamp maps. */
+function shallowEqualMap(a: Record<number, string>, b: Record<number, string>): boolean {
+  const ak = Object.keys(a)
+  if (ak.length !== Object.keys(b).length) return false
+  return ak.every((k) => a[k as unknown as number] === b[k as unknown as number])
 }
 
 /** Applies the server's body profile (singleton) if it's newer than the local one. */
@@ -707,7 +789,8 @@ function writeChallengeProgress(next: ChallengeProgress): void {
   emitWrite()
 }
 
-/** Mark a day complete in a challenge (creating the progress record if needed). */
+/** Mark a day complete in a challenge (creating the progress record if needed).
+ *  Clears any per-day tombstone for that day so a re-mark supersedes an unmark. */
 export function markChallengeDay(challengeId: string, day: number): void {
   if (!Number.isInteger(day) || day < 1) return
   const stamp = now()
@@ -717,22 +800,35 @@ export function markChallengeDay(challengeId: string, day: number): void {
     completedDays: {},
     startedAt: stamp,
   }
+  const clearedDays = { ...(base.clearedDays ?? {}) }
+  delete clearedDays[day]
   writeChallengeProgress({
     ...base,
     completedDays: { ...base.completedDays, [day]: stamp },
+    clearedDays,
     deletedAt: undefined,
     updatedAt: stamp,
     dirty: true,
   })
 }
 
-/** Un-mark a previously completed challenge day. */
+/** Un-mark a previously completed challenge day. Records a per-day tombstone
+ *  (clearedDays[day]) so the unmark survives the cross-device union merge instead
+ *  of being resurrected by a device that still has the day marked (Finding M2). */
 export function unmarkChallengeDay(challengeId: string, day: number): void {
   const existing = getChallengeProgressFor(challengeId)
   if (!existing) return
+  if (!(day in existing.completedDays)) return
+  const stamp = now()
   const completedDays = { ...existing.completedDays }
   delete completedDays[day]
-  writeChallengeProgress({ ...existing, completedDays, updatedAt: now(), dirty: true })
+  writeChallengeProgress({
+    ...existing,
+    completedDays,
+    clearedDays: { ...(existing.clearedDays ?? {}), [day]: stamp },
+    updatedAt: stamp,
+    dirty: true,
+  })
 }
 
 /** Reset (tombstone) a challenge's progress so the user can start over. */

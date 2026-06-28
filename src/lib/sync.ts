@@ -113,7 +113,7 @@ export async function sync(): Promise<void> {
         challengeProgress: pending.challengeProgress,
         bodyProfile: pending.bodyProfile,
       })
-      if (pendingSettings) markSettingsSynced()
+      if (pendingSettings) markSettingsSynced(pendingSettings.updatedAt)
     }
 
     // Merge what the server sent back (last-write-wins, tombstones included).

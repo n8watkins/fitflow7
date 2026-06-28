@@ -3,6 +3,7 @@
 // Canonical storage is metric (kg/cm); these helpers convert for display + input.
 
 import type { UnitSystem } from '../types'
+import { shiftDayKey } from './format'
 
 const LB_PER_KG = 2.2046226218
 const CM_PER_IN = 2.54
@@ -107,17 +108,6 @@ export function formatWeightDelta(deltaKg: number, unit: UnitSystem): string {
 // ---------------------------------------------------------------------------
 // Trend + goal progress (pure; operates on {date,weightKg} measurements)
 // ---------------------------------------------------------------------------
-
-/** Shift a 'YYYY-MM-DD' day key by `deltaDays` (may be negative), local calendar. */
-function shiftDayKey(date: string, deltaDays: number): string {
-  const [y, m, d] = date.split('-').map(Number)
-  const dt = new Date(y, m - 1, d)
-  dt.setDate(dt.getDate() + deltaDays)
-  const yy = dt.getFullYear()
-  const mm = String(dt.getMonth() + 1).padStart(2, '0')
-  const dd = String(dt.getDate()).padStart(2, '0')
-  return `${yy}-${mm}-${dd}`
-}
 
 /** Signed weight change (kg) over the trailing `days` window: the latest
  *  measurement minus the baseline. The baseline is the most recent entry at or

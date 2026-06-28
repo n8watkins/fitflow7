@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as storage from '../src/lib/storage'
 import { DEFAULT_SETTINGS, type Routine, type WorkoutSession } from '../src/types'
+
+const DAY_MS = 24 * 60 * 60 * 1000
 
 function makeRoutine(over: Partial<Routine> = {}): Routine {
   return {
@@ -382,5 +384,122 @@ describe('applyRemoteChallengeProgress union (B1 multi-device)', () => {
     storage.applyRemoteChallengeProgress([c({ completedDays: { 1: '2026-06-01T00:00:00.000Z' } })])
     storage.applyRemoteChallengeProgress([c({ deletedAt: '2026-06-10T00:00:00.000Z', updatedAt: '2026-06-10T00:00:00.000Z' })])
     expect(storage.getChallengeProgressFor('c30')).toBeUndefined() // reset
+  })
+})
+
+describe('deleteRoutine propagation (updatedAt bumped)', () => {
+  it('a routine tombstone carries a newer updatedAt than the live record', () => {
+    storage.saveRoutine(makeRoutine({ id: 'a', updatedAt: '2026-01-01T00:00:00.000Z' }))
+    storage.deleteRoutine('a')
+    const tomb = storage.getPendingSync().routines.find((r) => r.id === 'a')!
+    expect(tomb.deletedAt).toBeTruthy()
+    // Must be > the original 2026-01-01 stamp, or the server LWW guard drops it.
+    expect((tomb.updatedAt ?? '') > '2026-01-01T00:00:00.000Z').toBe(true)
+  })
+})
+
+describe('markSettingsSynced (updatedAt-aware) — Finding M1', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('keeps settings dirty when edited mid-sync (no silent drop)', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-01T00:00:00.000Z'))
+    storage.saveSettings({ ...DEFAULT_SETTINGS, defaultWorkSeconds: 45 })
+    const pushed = storage.getPendingSettings()! // snapshot at t0
+    vi.setSystemTime(new Date('2026-06-01T00:00:01.000Z'))
+    storage.saveSettings({ ...DEFAULT_SETTINGS, defaultWorkSeconds: 50 }) // edit mid-round-trip
+    storage.markSettingsSynced(pushed.updatedAt) // ack the t0 push
+
+    const still = storage.getPendingSettings()
+    expect(still).toBeDefined() // the mid-sync edit must NOT be silently cleared
+    expect(still?.value.defaultWorkSeconds).toBe(50)
+  })
+
+  it('clears dirty when settings are unchanged through the round-trip', () => {
+    storage.saveSettings({ ...DEFAULT_SETTINGS, defaultWorkSeconds: 45 })
+    const pushed = storage.getPendingSettings()!
+    storage.markSettingsSynced(pushed.updatedAt)
+    expect(storage.getPendingSettings()).toBeUndefined()
+  })
+})
+
+describe('applyRemoteChallengeProgress unmark survival — Finding M2', () => {
+  const c = (over: Record<string, unknown> = {}) => ({
+    challengeId: 'c30', completedDays: {} as Record<number, string>,
+    startedAt: '2026-06-01T00:00:00.000Z', updatedAt: '2026-06-01T00:00:00.000Z', ...over,
+  })
+
+  it('a deliberate unmark survives a device that still has the day marked', () => {
+    // Device starts with day 5 marked (synced from the server).
+    storage.applyRemoteChallengeProgress([c({ completedDays: { 5: '2026-06-05T00:00:00.000Z' }, updatedAt: '2026-06-05T00:00:00.000Z' })])
+    // User un-marks day 5 locally (clear timestamp is "now", newer than the mark).
+    storage.unmarkChallengeDay('c30', 5)
+    expect(storage.getChallengeProgressFor('c30')!.completedDays[5]).toBeUndefined()
+
+    // Another device, still holding the old mark, pushes day 5 back.
+    storage.applyRemoteChallengeProgress([c({ completedDays: { 5: '2026-06-05T00:00:00.000Z' }, updatedAt: '2026-06-06T00:00:00.000Z' })])
+    // The unmark wins — day 5 is NOT resurrected.
+    expect(storage.getChallengeProgressFor('c30')!.completedDays[5]).toBeUndefined()
+  })
+
+  it('a re-mark after an unmark wins (latest per-day action)', () => {
+    storage.applyRemoteChallengeProgress([c({ completedDays: { 5: '2026-06-05T00:00:00.000Z' }, updatedAt: '2026-06-05T00:00:00.000Z' })])
+    storage.unmarkChallengeDay('c30', 5)
+    storage.markChallengeDay('c30', 5) // newest action -> complete again
+    expect(storage.getChallengeProgressFor('c30')!.completedDays[5]).toBeTruthy()
+  })
+})
+
+describe('sync merge convergence edge cases — Finding L9', () => {
+  it('challenge same-day: the later mark timestamp wins', () => {
+    storage.applyRemoteChallengeProgress([{ challengeId: 'cx', completedDays: { 1: '2026-06-01T00:00:00.000Z' }, startedAt: 'x', updatedAt: '2026-06-01T00:00:00.000Z' }])
+    storage.applyRemoteChallengeProgress([{ challengeId: 'cx', completedDays: { 1: '2026-06-09T00:00:00.000Z' }, startedAt: 'x', updatedAt: '2026-06-09T00:00:00.000Z' }])
+    expect(storage.getChallengeProgressFor('cx')!.completedDays[1]).toBe('2026-06-09T00:00:00.000Z')
+  })
+
+  it('weight dedup: equal updatedAt breaks the tie by higher id (order-independent)', () => {
+    const eq = '2026-06-01T00:00:00.000Z'
+    storage.applyRemoteWeightLog([{ id: 'AAA', date: '2026-06-01', weightKg: 80, createdAt: eq, updatedAt: eq }])
+    storage.applyRemoteWeightLog([{ id: 'ZZZ', date: '2026-06-01', weightKg: 78, createdAt: eq, updatedAt: eq }])
+    const live = storage.getWeightEntries().filter((e) => e.date === '2026-06-01')
+    expect(live).toHaveLength(1)
+    expect(live[0].id).toBe('ZZZ') // higher id is the deterministic survivor
+    expect(live[0].weightKg).toBe(78)
+  })
+
+  it('applyRemoteSessions is LWW and applies a remote tombstone', () => {
+    storage.saveSession(makeSession({ id: 's' })) // updatedAt stamped to now()
+    storage.applyRemoteSessions([makeSession({ id: 's', durationSeconds: 1, updatedAt: '2000-01-01T00:00:00.000Z' })])
+    expect(storage.getSessions().find((x) => x.id === 's')?.durationSeconds).toBe(420) // stale ignored
+    storage.applyRemoteSessions([makeSession({ id: 's', updatedAt: '2999-01-01T00:00:00.000Z', deletedAt: '2999-01-01T00:00:00.000Z' })])
+    expect(storage.getSessions().find((x) => x.id === 's')).toBeUndefined() // newer tombstone wins
+  })
+})
+
+describe('gcTombstones — Finding M4', () => {
+  it('reaps synced, aged tombstones but keeps recent + unsynced ones and live records', () => {
+    // a: synced tombstone (dirty cleared) -> eligible for reaping once aged.
+    storage.saveRoutine(makeRoutine({ id: 'a' }))
+    storage.deleteRoutine('a')
+    storage.markSynced({ routines: storage.getPendingSync().routines })
+    // b: unsynced tombstone -> must be kept so the delete still propagates.
+    storage.saveRoutine(makeRoutine({ id: 'b' }))
+    storage.deleteRoutine('b')
+    // c: live, synced record -> must be kept.
+    storage.saveRoutine(makeRoutine({ id: 'c' }))
+    storage.markSynced({ routines: storage.getPendingSync().routines.filter((r) => r.id === 'c') })
+
+    // Simulate 100 days elapsing so a's tombstone is past the 90-day window.
+    const removed = storage.gcTombstones(Date.now() + 100 * DAY_MS)
+    expect(removed).toBe(1)
+    const raw = JSON.parse(localStorage.getItem('fitflow.routines')!) as Routine[]
+    expect(raw.map((r) => r.id).sort()).toEqual(['b', 'c'])
+  })
+
+  it('does not reap a tombstone within the retention window', () => {
+    storage.saveRoutine(makeRoutine({ id: 'a' }))
+    storage.deleteRoutine('a')
+    storage.markSynced({ routines: storage.getPendingSync().routines })
+    expect(storage.gcTombstones(Date.now())).toBe(0) // deleted just now -> kept
   })
 })
