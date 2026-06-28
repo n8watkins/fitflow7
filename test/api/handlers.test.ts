@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { ensureSchema, getDb } from '../../api/_lib/db.ts'
-import { createAccessToken, createSessionToken } from '../../api/_lib/auth.ts'
+import { PROVIDERS, createAccessToken, createSessionToken, setOAuthState } from '../../api/_lib/auth.ts'
 import { recordToken, revokeToken, type AuthResult } from '../../api/_lib/tokens.ts'
 import syncHandler from '../../api/sync.ts'
 import meHandler from '../../api/me.ts'
 import tokenHandler from '../../api/token.ts'
+import callbackHandler from '../../api/auth/callback.ts'
 import publishHandler from '../../api/routines/publish.ts'
 import publicHandler from '../../api/routines/public.ts'
 import reportHandler from '../../api/routines/report.ts'
@@ -22,6 +23,7 @@ interface MockRes {
   status(c: number): MockRes
   json(b: unknown): MockRes
   send(b: unknown): MockRes
+  redirect(code: number, url: string): MockRes
   setHeader(k: string, v: string | string[]): MockRes
   getHeader(k: string): string | string[] | undefined
   end(): MockRes
@@ -32,10 +34,22 @@ function mockRes(): MockRes {
   res.status = (c) => { res.statusCode = c; return res }
   res.json = (b) => { res.body = b; return res }
   res.send = (b) => { res.body = b; return res }
+  res.redirect = (code, url) => { res.statusCode = code; res.headers['Location'] = url; return res }
   res.setHeader = (k, v) => { res.headers[k] = v; return res }
   res.getHeader = (k) => res.headers[k]
   res.end = () => res
   return res
+}
+
+/** Builds a valid signed OAuth state cookie + its matching `state` value, the way
+ *  setOAuthState would set it on a real login. */
+function oauthStateCookie(provider: 'github' | 'google' = 'github', returnTo = '/'): { cookie: string; state: string } {
+  const r = mockRes()
+  const state = setOAuthState(r, provider, returnTo)
+  const setCookie = r.headers['Set-Cookie'] as string[]
+  const ff = setCookie.map(String).find((c) => c.startsWith('ff_oauth='))!
+  const value = ff.split(';')[0].slice('ff_oauth='.length)
+  return { cookie: `ff_oauth=${value}`, state }
 }
 
 interface CallOpts {
@@ -373,5 +387,114 @@ describe('B1 — body/weight/challenge sync (LWW + tombstone + scoping)', () => 
     const ro = await bearer('userA', 'read')
     const res = await call(syncHandler, { method: 'POST', headers: ro, body: { weightLog: [{ id: 'w', date: '2026-06-01', weightKg: 80, createdAt: 'x', updatedAt: 'x' }] } })
     expect(res.statusCode).toBe(403)
+  })
+})
+
+describe('publish validation + atomic caps (L2, L4)', () => {
+  const good = { name: 'X', exerciseIds: ['push-ups'], workSeconds: 30, restSeconds: 10, rounds: 2 }
+  const pub = async (over: Record<string, unknown>) =>
+    call(publishHandler, { method: 'POST', headers: await bearer('u'), body: { routine: { ...good, ...over } } })
+
+  it('rejects out-of-range numeric fields (L2)', async () => {
+    expect((await pub({ rounds: 0 })).statusCode).toBe(400)
+    expect((await pub({ workSeconds: -5 })).statusCode).toBe(400)
+    expect((await pub({ workSeconds: 1e12 })).statusCode).toBe(400)
+    expect((await pub({ rounds: 999 })).statusCode).toBe(400)
+    expect((await pub({})).statusCode).toBe(200) // the valid baseline still passes
+  })
+
+  it('enforces the per-owner cap atomically — 429 when already at the limit (L4)', async () => {
+    const stmts = Array.from({ length: 25 }, (_, i) => ({
+      sql: `INSERT INTO public_routines (slug, owner_id, name, exercise_ids, work_seconds, rest_seconds, rounds, created_at, reports, blocked)
+            VALUES (?, ?, 'n', '["push-ups"]', 30, 10, 1, ?, 0, 0)`,
+      args: [`seed${i}`, 'capped', '2020-01-01T00:00:00.000Z'], // old created_at -> not an hourly-burst case
+    }))
+    await getDb().batch(stmts, 'write')
+    const res = await call(publishHandler, { method: 'POST', headers: await bearer('capped'), body: { routine: good } })
+    expect(res.statusCode).toBe(429)
+  })
+})
+
+describe('cookie parsing fails closed (L5)', () => {
+  it('a malformed cookie resolves to unauthenticated rather than a 500', async () => {
+    // `%` is an invalid percent-escape; decodeURIComponent throws on it.
+    const me = await call(meHandler, { method: 'GET', headers: { cookie: 'ff_session=%' } })
+    expect(me.statusCode).toBe(200)
+    expect((me.body as { user: unknown }).user).toBeNull()
+    const sync = await call(syncHandler, { method: 'POST', headers: { cookie: 'ff_session=%' }, body: {} })
+    expect(sync.statusCode).toBe(401) // resolveAuth fail-closed, not an opaque 500
+  })
+})
+
+describe('/api/me authenticated branch (L11)', () => {
+  it('maps the user row for a valid session and returns null for a missing row', async () => {
+    await getDb().execute({
+      sql: `INSERT INTO users (id, provider, provider_id, email, name, avatar_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      args: ['u-me', 'github', 'gh-9', 'me@x.com', 'Me', 'http://a/v.png', '2026-01-01T00:00:00.000Z'],
+    })
+    const ok = await call(meHandler, { method: 'GET', headers: cookieFor('u-me') })
+    expect(ok.statusCode).toBe(200)
+    expect((ok.body as { user: Record<string, unknown> }).user).toMatchObject({
+      id: 'u-me', email: 'me@x.com', name: 'Me', avatarUrl: 'http://a/v.png',
+    })
+    const missing = await call(meHandler, { method: 'GET', headers: cookieFor('ghost') })
+    expect((missing.body as { user: unknown }).user).toBeNull()
+  })
+})
+
+describe('OAuth callback (M6, L6)', () => {
+  const realFetch = globalThis.fetch
+  const realProfile = PROVIDERS.github.fetchProfile
+  const realClientId = PROVIDERS.github.clientId
+  const realSecret = PROVIDERS.github.clientSecret
+
+  afterEach(() => {
+    globalThis.fetch = realFetch
+    PROVIDERS.github.fetchProfile = realProfile
+    // PROVIDERS reads its client id/secret from env at import time, so tests must
+    // mutate the object directly; restore it here.
+    PROVIDERS.github.clientId = realClientId
+    PROVIDERS.github.clientSecret = realSecret
+    delete process.env.ALLOWED_EMAILS
+    delete process.env.ALLOWED_PROVIDER_IDS
+  })
+
+  const stubGithub = (profile: { providerId: string; email: string | null; name: string | null; avatarUrl: string | null }) => {
+    PROVIDERS.github.clientId = 'id'
+    PROVIDERS.github.clientSecret = 'secret'
+    globalThis.fetch = (async () => ({ ok: true, json: async () => ({ access_token: 'tok' }) })) as unknown as typeof fetch
+    PROVIDERS.github.fetchProfile = async () => profile
+  }
+  const userCount = async () =>
+    Number((await getDb().execute('SELECT COUNT(*) AS n FROM users')).rows[0]?.n ?? -1)
+
+  it('rejects a missing/mismatched state with 400 and writes no user (CSRF guard)', async () => {
+    const res = await call(callbackHandler, { method: 'GET', query: { code: 'x', state: 'nope' } })
+    expect(res.statusCode).toBe(400)
+    expect(await userCount()).toBe(0)
+  })
+
+  it('upserts a user, sets a session, and reuses the id on a second sign-in', async () => {
+    stubGithub({ providerId: 'gh-1', email: 'a@b.com', name: 'A', avatarUrl: null })
+    const s1 = oauthStateCookie('github', '/stats')
+    const r1 = await call(callbackHandler, { method: 'GET', headers: { cookie: s1.cookie }, query: { code: 'c', state: s1.state } })
+    expect(r1.statusCode).toBe(302)
+    expect((r1.headers['Set-Cookie'] as string[]).map(String).join(';')).toContain('ff_session=')
+    const id1 = (await getDb().execute('SELECT id FROM users')).rows[0]?.id
+
+    const s2 = oauthStateCookie('github', '/')
+    await call(callbackHandler, { method: 'GET', headers: { cookie: s2.cookie }, query: { code: 'c', state: s2.state } })
+    const rows = (await getDb().execute('SELECT id FROM users')).rows
+    expect(rows).toHaveLength(1) // same provider_id -> exactly one row
+    expect(rows[0]?.id).toBe(id1)
+  })
+
+  it('rejects an identity not on the allow-list when one is configured (L6)', async () => {
+    stubGithub({ providerId: 'gh-2', email: 'stranger@evil.com', name: 'X', avatarUrl: null })
+    process.env.ALLOWED_EMAILS = 'owner@example.com'
+    const s = oauthStateCookie()
+    const res = await call(callbackHandler, { method: 'GET', headers: { cookie: s.cookie }, query: { code: 'c', state: s.state } })
+    expect(res.statusCode).toBe(403)
+    expect(await userCount()).toBe(0)
   })
 })

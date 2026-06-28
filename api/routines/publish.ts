@@ -69,6 +69,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   ) {
     return res.status(400).json({ error: 'invalid routine' })
   }
+  // Range guard (L2): without this, rounds=0 (non-runnable) or absurd values like
+  // 1e12 pass Number.isFinite and pollute the community feed every user browses.
+  // Bounds mirror what the in-app routine editor enforces.
+  const workR = Math.round(workSeconds)
+  const restR = Math.round(restSeconds)
+  const roundsR = Math.round(rounds)
+  if (
+    workR < 1 || workR > 3600 ||
+    restR < 0 || restR > 3600 ||
+    roundsR < 1 || roundsR > 100
+  ) {
+    return res.status(400).json({ error: 'routine values out of range' })
+  }
 
   const ownerName = typeof body.ownerName === 'string' ? body.ownerName.trim() || null : null
 
@@ -90,30 +103,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await ensureSchema()
     const db = getDb()
 
-    // Abuse cap: refuse if this owner is already at the per-owner limit.
-    const countRes = await db.execute({
-      sql: `SELECT COUNT(*) AS n FROM public_routines WHERE owner_id = ?`,
-      args: [userId],
-    })
-    const count = Number(countRes.rows[0]?.n ?? 0)
-    if (count >= MAX_PER_OWNER) {
-      return res.status(429).json({ error: 'publish limit reached' })
-    }
-
-    // Burst guard: cap publishes in the trailing hour (S1 rate limiting).
+    // Abuse caps enforced ATOMICALLY (L4): both the per-owner total and the
+    // trailing-hour burst are evaluated inside the INSERT...SELECT...WHERE, so
+    // concurrent publishes can't each read a count below the limit and all insert
+    // (overshooting the cap). rowsAffected = 0 means a cap blocked the write.
     const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-    const recentRes = await db.execute({
-      sql: `SELECT COUNT(*) AS n FROM public_routines WHERE owner_id = ? AND created_at > ?`,
-      args: [userId, hourAgo],
-    })
-    if (Number(recentRes.rows[0]?.n ?? 0) >= MAX_PER_HOUR) {
-      return res.status(429).json({ error: 'too many publishes — try again later' })
-    }
-
-    await db.execute({
+    const ins = await db.execute({
       sql: `INSERT INTO public_routines
               (slug, owner_id, owner_name, name, description, exercise_ids, work_seconds, rest_seconds, rounds, created_at, reports, blocked)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0
+            WHERE (SELECT COUNT(*) FROM public_routines WHERE owner_id = ?) < ?
+              AND (SELECT COUNT(*) FROM public_routines WHERE owner_id = ? AND created_at > ?) < ?`,
       args: [
         slug,
         userId,
@@ -121,12 +121,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         name,
         description,
         JSON.stringify(exerciseIds),
-        Math.round(workSeconds),
-        Math.round(restSeconds),
-        Math.round(rounds),
+        workR,
+        restR,
+        roundsR,
         createdAt,
+        userId,
+        MAX_PER_OWNER,
+        userId,
+        hourAgo,
+        MAX_PER_HOUR,
       ],
     })
+
+    if (ins.rowsAffected === 0) {
+      return res.status(429).json({ error: 'publish limit reached' })
+    }
 
     res.status(200).json({ slug })
   } catch {

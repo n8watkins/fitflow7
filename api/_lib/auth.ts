@@ -111,11 +111,32 @@ export function getConfiguredProviders(): Provider[] {
   )
 }
 
+/** Optional single-tenant lockdown (L6). When ALLOWED_EMAILS or
+ *  ALLOWED_PROVIDER_IDS is set, only matching identities may register/sign in;
+ *  when BOTH are unset, registration is open (the default — never locks the owner
+ *  out). Provider ids may be listed bare ("123") or scoped ("github:123"). */
+export function isAllowedIdentity(provider: Provider, profile: NormalizedProfile): boolean {
+  const list = (v: string | undefined) =>
+    (v ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  const emails = list(process.env.ALLOWED_EMAILS).map((s) => s.toLowerCase())
+  const ids = list(process.env.ALLOWED_PROVIDER_IDS)
+  if (emails.length === 0 && ids.length === 0) return true
+  const email = profile.email?.toLowerCase()
+  if (email && emails.includes(email)) return true
+  return ids.includes(profile.providerId) || ids.includes(`${provider}:${profile.providerId}`)
+}
+
 // ---------------------------------------------------------------------------
 // Base URL + redirect URI
 // ---------------------------------------------------------------------------
 export function getBaseUrl(req: VercelRequest): string {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, '')
+  // Vercel sets this to the project's canonical production domain — server-trusted
+  // and not client-controllable. Prefer it over request headers so the OAuth
+  // redirect_uri can't be influenced by a spoofed Host header (L3). Set APP_URL
+  // to pin a specific origin (e.g. a custom domain or preview).
+  const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  if (vercelHost) return `https://${vercelHost.replace(/\/$/, '')}`
   const proto = (req.headers['x-forwarded-proto'] as string) || 'https'
   const host = req.headers['x-forwarded-host'] || req.headers.host
   return `${proto}://${host}`
@@ -189,12 +210,21 @@ function decodeToken<T>(token: string | undefined): T | null {
 function parseCookies(req: VercelRequest): Record<string, string> {
   const header = req.headers.cookie
   if (!header) return {}
-  return Object.fromEntries(
-    header.split(';').map((c) => {
-      const idx = c.indexOf('=')
-      return [c.slice(0, idx).trim(), decodeURIComponent(c.slice(idx + 1))]
-    }),
-  )
+  const out: Record<string, string> = {}
+  for (const c of header.split(';')) {
+    const idx = c.indexOf('=')
+    if (idx < 0) continue
+    const key = c.slice(0, idx).trim()
+    if (!key) continue
+    try {
+      out[key] = decodeURIComponent(c.slice(idx + 1))
+    } catch {
+      // A malformed percent-escape (e.g. `ff_session=%`) must not throw: getUserId
+      // /readOAuthState run before the caller's try/catch, so an unguarded throw
+      // here would surface as an opaque 500 instead of "unauthenticated" (L5).
+    }
+  }
+  return out
 }
 
 function serializeCookie(name: string, value: string, maxAgeSeconds: number): string {

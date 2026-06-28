@@ -4,6 +4,7 @@ import {
   PROVIDERS,
   clearOAuthState,
   getRedirectUri,
+  isAllowedIdentity,
   readOAuthState,
   sanitizeReturnTo,
   setSession,
@@ -47,6 +48,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const profile = await config.fetchProfile(tokenJson.access_token)
+
+    // Optional single-tenant lock-down: if an allow-list is configured, reject
+    // identities that aren't on it before creating any account (L6).
+    if (!isAllowedIdentity(saved.provider, profile)) {
+      return res.status(403).send('This deployment is private — your account is not permitted.')
+    }
 
     // Upsert the user; keep the existing id on conflict.
     await ensureSchema()

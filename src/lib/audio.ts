@@ -13,10 +13,15 @@ function getCtx(): AudioContext {
   return ctx
 }
 
-// Finding 19: close the AudioContext on page unload to avoid hitting the browser limit
-window.addEventListener('beforeunload', () => {
-  ctx?.close().catch(() => {})
-})
+// Finding 19: close the AudioContext on page unload to avoid hitting the browser
+// limit. Guarded with `typeof window` (Finding L12) so importing this module under
+// a non-browser env (node tests / any future SSR) can't throw at import time,
+// matching the guards in theme.ts / healthConnect.ts.
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    ctx?.close().catch(() => {})
+  })
+}
 
 async function ensureResumed(): Promise<AudioContext> {
   const ac = getCtx()
