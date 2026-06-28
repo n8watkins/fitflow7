@@ -6,6 +6,24 @@
 
 ---
 
+## 0. Resolution status (2026-06-27)
+
+**All 20 distinct findings below are fixed**, in five commits, each with tests + green CI (build/lint/tsc + 154 vitest tests):
+
+| Commit | Findings |
+|---|---|
+| `4e96ea3` fix(timer) | H1, M3, L1, L7 |
+| `a7ec0ba` fix(sync/storage) | M1, M2, M4, L9, L10 (+ a `deleteRoutine` tombstone-propagation bug found while testing) |
+| `0bd768d` fix(sync) | **H2** |
+| `c9e7270` fix(api) | L2, L3, L4, L5, L6, L12 |
+| `af6111d` test(sync)+refactor(pages) | M5, L8 |
+
+(The 22 confirmed findings include two that were each reported by two dimensions — the OAuth host-header item, fixed as L3, and tombstone-GC, fixed as M4 — so 20 distinct fixes.) The detail below is retained as the record of what was found and why.
+
+> **Note on exercise photos:** the inventory states 29/71 exercises have real photos. As of this date that is still accurate in code — `IMAGE_SLUGS` wires 29 slugs and `public/exercises/` holds 58 files (29 two-frame pairs); the other 42 use the emoji fallback. Wiring up the rest needs the image files on disk + the slugs added to `IMAGE_SLUGS`.
+
+---
+
 ## 1. Executive summary
 
 FitFlow 7 is a **local-first 7-minute-workout PWA** (Vite + React 19 + TypeScript + Tailwind v4 + Zustand) with an **optional cloud-sync backend** (Vercel `/api` + Turso/libSQL), a **private MCP server**, and **Android/Health Connect** packaging via Capacitor. It is **feature-complete and deployed to production** at `fitflow7.vercel.app`; the build/lint/typecheck/test pipeline is green (123 vitest tests) and CI runs it on every push.
