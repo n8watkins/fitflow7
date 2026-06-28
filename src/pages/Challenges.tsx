@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { useSyncStore } from '../store/syncStore'
+import { Link } from 'react-router-dom'
+import { useLiveData } from '../hooks/useLiveData'
 import { CHALLENGES, CHALLENGE_MAP } from '../data/challenges'
 import { SYSTEM_ROUTINES } from '../data/routines'
 import {
@@ -54,22 +54,15 @@ function completedCount(challengeId: string): number {
 // ---------------------------------------------------------------------------
 
 export default function Challenges() {
-  const location = useLocation()
-  const dataVersion = useSyncStore((s) => s.dataVersion)
   const [rev, setRev] = useState(0)
   const refresh = () => setRev((r) => r + 1)
   const [openId, setOpenId] = useState<string | null>(null)
 
-  // List view — recompute counts on rev/dataVersion/navigation. Computed
+  // List view — recompute counts on rev + navigation + background sync. Computed
   // unconditionally (before any early return) to satisfy the rules of hooks.
-  const cards = useMemo(
-    () =>
-      CHALLENGES.map((c) => ({
-        challenge: c,
-        done: completedCount(c.id),
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rev, dataVersion, location.key],
+  const cards = useLiveData(
+    () => CHALLENGES.map((c) => ({ challenge: c, done: completedCount(c.id) })),
+    [rev],
   )
 
   const open = openId ? CHALLENGE_MAP[openId] : undefined

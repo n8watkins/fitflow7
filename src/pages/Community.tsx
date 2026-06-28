@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { useSyncStore } from '../store/syncStore'
+import { useLiveData } from '../hooks/useLiveData'
 import { getRoutines, newId, saveRoutine } from '../lib/storage'
 import { EXERCISE_MAP } from '../data/exercises'
 import {
@@ -146,15 +146,12 @@ function PublicRow({ routine }: { routine: PublicRoutine }) {
 // ---------------------------------------------------------------------------
 
 export default function Community() {
-  const location = useLocation()
-  const dataVersion = useSyncStore((s) => s.dataVersion)
   const user = useSyncStore((s) => s.user)
 
   const [loading, setLoading] = useState(true)
   const [publicRoutines, setPublicRoutines] = useState<PublicRoutine[]>([])
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const myRoutines = useMemo(() => getRoutines().filter((r) => !r.isSystem), [location.key, dataVersion])
+  const myRoutines = useLiveData(() => getRoutines().filter((r) => !r.isSystem))
 
   useEffect(() => {
     let active = true

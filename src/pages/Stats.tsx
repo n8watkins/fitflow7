@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { useSyncStore } from '../store/syncStore'
+import { Link } from 'react-router-dom'
+import { useLiveData } from '../hooks/useLiveData'
 import {
   getBodyProfile,
   getSessions,
@@ -124,21 +124,15 @@ function num(v: string): number {
 // ---------------------------------------------------------------------------
 
 export default function Stats() {
-  const location = useLocation()
-  const dataVersion = useSyncStore((s) => s.dataVersion)
   // Local bump forces a storage re-read after our own writes.
   const [rev, setRev] = useState(0)
   const refresh = () => setRev((r) => r + 1)
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const settings = useMemo(() => getSettings(), [rev, dataVersion])
+  const settings = useLiveData(() => getSettings(), [rev])
   const unit = settings.unitSystem
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const profile = useMemo(() => getBodyProfile(), [rev, dataVersion, location.key])
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const weights = useMemo(() => getWeightEntries(), [rev, dataVersion, location.key])
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sessions = useMemo(() => getSessions(), [rev, dataVersion, location.key])
+  const profile = useLiveData(() => getBodyProfile(), [rev])
+  const weights = useLiveData(() => getWeightEntries(), [rev])
+  const sessions = useLiveData(() => getSessions(), [rev])
 
   const latest = weights.length ? weights[weights.length - 1] : undefined
   const stats = useMemo(() => computeStats(sessions), [sessions])

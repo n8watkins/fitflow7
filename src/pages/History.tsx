@@ -1,9 +1,8 @@
 import { useMemo } from 'react'
-import { useLocation } from 'react-router-dom'
 import { getSessions } from '../lib/storage'
 import { computeStats } from '../lib/stats'
 import { fmtDuration, formatDateTime } from '../lib/format'
-import { useSyncStore } from '../store/syncStore'
+import { useLiveData } from '../hooks/useLiveData'
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -23,11 +22,8 @@ function SummaryTile({ label, value }: { label: string; value: string | number }
 // ---------------------------------------------------------------------------
 
 export default function History() {
-  const location = useLocation()
-  // Re-read on navigation (location.key) and after a background sync (dataVersion).
-  const dataVersion = useSyncStore((s) => s.dataVersion)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sessions = useMemo(() => getSessions(), [location.key, dataVersion])
+  // Re-reads on navigation and after a background sync (see useLiveData).
+  const sessions = useLiveData(() => getSessions())
   const stats = useMemo(() => computeStats(sessions), [sessions])
 
   return (

@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useLocation } from 'react-router-dom'
-import { useSyncStore } from '../store/syncStore'
+import { useLiveData } from '../hooks/useLiveData'
 import { getSessions } from '../lib/storage'
 import { dayKey, fmtDuration } from '../lib/format'
 import type { WorkoutSession } from '../types'
@@ -44,10 +43,7 @@ function lastNMonths(n: number): { year: number; month: number }[] {
 // ---------------------------------------------------------------------------
 
 export default function Calendar() {
-  const location = useLocation()
-  const dataVersion = useSyncStore((s) => s.dataVersion)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sessions = useMemo(() => getSessions(), [location.key, dataVersion])
+  const sessions = useLiveData(() => getSessions())
 
   // date -> sessions that started that local day
   const byDay = useMemo(() => {

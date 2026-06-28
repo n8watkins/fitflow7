@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { useSyncStore } from '../store/syncStore'
+import { Link } from 'react-router-dom'
+import { useLiveData } from '../hooks/useLiveData'
 import { CLASSIC_7, SYSTEM_ROUTINES } from '../data/routines'
 import { CHALLENGE_MAP } from '../data/challenges'
 import { EXERCISE_MAP } from '../data/exercises'
@@ -170,25 +170,19 @@ function OutlineRow({ index, exercise, onOpen }: { index: number; exercise: Exer
 // ---------------------------------------------------------------------------
 
 export default function Dashboard() {
-  const location = useLocation()
-  const dataVersion = useSyncStore((s) => s.dataVersion)
   const [openId, setOpenId] = useState<string | null>(null)
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sessions = useMemo(() => getSessions(), [location.key, dataVersion])
+  const sessions = useLiveData(() => getSessions())
   const stats = useMemo(() => computeStats(sessions), [sessions])
-  const settings = useMemo(() => getSettings(), [location.key, dataVersion]) // eslint-disable-line react-hooks/exhaustive-deps
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const latestWeight = useMemo(() => getLatestWeight(), [location.key, dataVersion])
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const userRoutines = useMemo(() => getRoutines(), [location.key, dataVersion])
+  const settings = useLiveData(() => getSettings())
+  const latestWeight = useLiveData(() => getLatestWeight())
+  const userRoutines = useLiveData(() => getRoutines())
 
   // Featured workout: the last one played, else Classic 7.
-  const featured = useMemo(() => {
+  const featured = useLiveData(() => {
     const lastId = getLastRoutineId()
     return (lastId && getRoutine(lastId)) || CLASSIC_7
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.key, dataVersion])
+  })
 
   // Unique exercises of the featured workout, in order, for the outline.
   const outline = useMemo(() => {

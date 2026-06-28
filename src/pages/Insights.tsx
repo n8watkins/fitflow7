@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { useSyncStore } from '../store/syncStore'
+import { Link } from 'react-router-dom'
+import { useLiveData } from '../hooks/useLiveData'
 import { getSessions } from '../lib/storage'
 import { computeStats, computeInsights, type HeatmapDay } from '../lib/stats'
 
@@ -124,11 +124,7 @@ function StatTile({ label, value }: { label: string; value: string | number }) {
 // ---------------------------------------------------------------------------
 
 export default function Insights() {
-  const location = useLocation()
-  const dataVersion = useSyncStore((s) => s.dataVersion)
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sessions = useMemo(() => getSessions(), [location.key, dataVersion])
+  const sessions = useLiveData(() => getSessions())
   const stats = useMemo(() => computeStats(sessions), [sessions])
   const insights = useMemo(() => computeInsights(sessions), [sessions])
 
