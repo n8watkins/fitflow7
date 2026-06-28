@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { ensureSchema, getDb } from '../../api/_lib/db.ts'
 import { createAccessToken, createSessionToken } from '../../api/_lib/auth.ts'
 import { recordToken, revokeToken, type AuthResult } from '../../api/_lib/tokens.ts'
@@ -147,6 +147,41 @@ describe('sync — LWW + tombstones + user scoping', () => {
     await push('userA', { routines: [routine({ name: 'A2', updatedAt: '2026-02-01T00:00:00.000Z' })] })
     await push('userB', { routines: [routine({ id: 'r1', name: 'HACK', updatedAt: '2027-01-01T00:00:00.000Z' })] })
     expect((await pull('userA')).find((x) => x.id === 'r1')?.name).toBe('A2')
+  })
+})
+
+describe('sync watermark is server-authoritative (H2)', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('a behind-clock device’s writes survive the cursor (not lost)', async () => {
+    vi.useFakeTimers()
+    // Device A's clock is years behind: it stamps client updatedAt in 2020.
+    vi.setSystemTime(new Date('2026-06-27T00:00:00.000Z'))
+    await call(syncHandler, { method: 'POST', headers: await bearer('userA'), body: { routines: [routine({ id: 'r1', updatedAt: '2020-01-01T00:00:00.000Z' })] } })
+    const first = await call(syncHandler, { method: 'POST', headers: await bearer('userA'), body: { since: EPOCH } })
+    const cursor = (first.body as { serverTime: string }).serverTime
+    expect((first.body as { routines: { id: string }[] }).routines.some((r) => r.id === 'r1')).toBe(true)
+
+    // A second behind-clock write (still 2020) AFTER that cursor was taken.
+    vi.setSystemTime(new Date('2026-06-27T00:01:00.000Z'))
+    await call(syncHandler, { method: 'POST', headers: await bearer('userA'), body: { routines: [routine({ id: 'r2', updatedAt: '2020-01-02T00:00:00.000Z' })] } })
+
+    // Pulling from the advanced cursor must STILL deliver r2 — the watermark is
+    // the server clock, not the client's. The old code lost this row forever.
+    const second = await call(syncHandler, { method: 'POST', headers: await bearer('userA'), body: { since: cursor } })
+    expect((second.body as { routines: { id: string }[] }).routines.some((r) => r.id === 'r2')).toBe(true)
+  })
+
+  it('clamps a runaway-future client updatedAt so it cannot freeze the row', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-27T00:00:00.000Z'))
+    // A bogus far-future timestamp would otherwise win LWW forever.
+    await call(syncHandler, { method: 'POST', headers: await bearer('userA'), body: { routines: [routine({ id: 'r1', name: 'FUTURE', updatedAt: '2999-01-01T00:00:00.000Z' })] } })
+    // A later, legitimately-stamped edit must still be able to win.
+    vi.setSystemTime(new Date('2026-06-27T00:00:30.000Z'))
+    await call(syncHandler, { method: 'POST', headers: await bearer('userA'), body: { routines: [routine({ id: 'r1', name: 'FIXED', updatedAt: '2026-06-27T00:00:30.000Z' })] } })
+    const pulled = (await call(syncHandler, { method: 'POST', headers: await bearer('userA'), body: { since: EPOCH } })).body as { routines: { id: string; name: string }[] }
+    expect(pulled.routines.find((r) => r.id === 'r1')?.name).toBe('FIXED')
   })
 })
 

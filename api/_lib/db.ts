@@ -23,8 +23,12 @@ export function getDb(): Client {
 }
 
 // CREATE TABLE IF NOT EXISTS — cheap, idempotent, runs once per warm instance.
-// Records are owned per user; routines/sessions carry updated_at (LWW cursor)
-// and deleted_at (tombstone). settings is one row per user.
+// Records are owned per user; routines/sessions carry updated_at (the CLIENT
+// clock, used only for LWW conflict resolution) plus server_updated_at (the
+// SERVER clock, stamped on every write and used as the sync watermark) and
+// deleted_at (tombstone). settings is one row per user. Pulls filter and the
+// cursor advance on server_updated_at so a skewed client clock can never make a
+// row sort before a cursor another device already saved (H2).
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users (
      id           TEXT PRIMARY KEY,
@@ -47,6 +51,7 @@ const SCHEMA = [
      rounds            INTEGER NOT NULL,
      created_at        TEXT NOT NULL,
      updated_at        TEXT NOT NULL,
+     server_updated_at TEXT,
      deleted_at        TEXT
    )`,
   `CREATE INDEX IF NOT EXISTS idx_routines_user_updated ON routines (user_id, updated_at)`,
@@ -62,6 +67,7 @@ const SCHEMA = [
      exercises_completed INTEGER NOT NULL,
      total_exercises     INTEGER NOT NULL,
      updated_at          TEXT NOT NULL,
+     server_updated_at   TEXT,
      deleted_at          TEXT
    )`,
   `CREATE INDEX IF NOT EXISTS idx_sessions_user_updated ON sessions (user_id, updated_at)`,
@@ -72,7 +78,8 @@ const SCHEMA = [
      default_rounds       INTEGER NOT NULL,
      countdown_seconds    INTEGER NOT NULL,
      audio_cues_enabled   INTEGER NOT NULL,
-     updated_at           TEXT NOT NULL
+     updated_at           TEXT NOT NULL,
+     server_updated_at    TEXT
    )`,
   // Phase 3c: bounded, content-only community routine library. Each row is an
   // immutable published snapshot of a routine. `reports` accumulates abuse flags;
@@ -124,6 +131,7 @@ const SCHEMA = [
      weight_kg   REAL NOT NULL,
      created_at  TEXT NOT NULL,
      updated_at  TEXT NOT NULL,
+     server_updated_at TEXT,
      deleted_at  TEXT
    )`,
   `CREATE INDEX IF NOT EXISTS idx_weight_log_user_updated ON weight_log (user_id, updated_at)`,
@@ -132,7 +140,8 @@ const SCHEMA = [
      user_id        TEXT PRIMARY KEY,
      height_cm      REAL,
      goal_weight_kg REAL,
-     updated_at     TEXT NOT NULL
+     updated_at     TEXT NOT NULL,
+     server_updated_at TEXT
    )`,
   // One row per challenge a user has started; completed_days/cleared_days are
   // JSON maps (day-number -> ISO timestamp). cleared_days carries per-day unmark
@@ -144,6 +153,7 @@ const SCHEMA = [
      cleared_days   TEXT NOT NULL DEFAULT '{}',
      started_at     TEXT NOT NULL,
      updated_at     TEXT NOT NULL,
+     server_updated_at TEXT,
      deleted_at     TEXT,
      PRIMARY KEY (user_id, challenge_id)
    )`,
@@ -154,9 +164,18 @@ const SCHEMA = [
 // IF NOT EXISTS never alters an existing table, so columns added after a table
 // first shipped must be ALTERed in. Each runs once per warm instance and the
 // "duplicate column name" error (already applied) is swallowed.
+const SYNCED_TABLES = ['routines', 'sessions', 'settings', 'weight_log', 'body_profile', 'challenge_progress']
 const ALTERS = [
   `ALTER TABLE challenge_progress ADD COLUMN cleared_days TEXT NOT NULL DEFAULT '{}'`,
+  // H2: server-stamped sync watermark on every synced table.
+  ...SYNCED_TABLES.map((t) => `ALTER TABLE ${t} ADD COLUMN server_updated_at TEXT`),
+  ...SYNCED_TABLES.map((t) => `CREATE INDEX IF NOT EXISTS idx_${t}_user_server ON ${t} (user_id, server_updated_at)`),
 ]
+// Backfill: existing rows (pre-watermark) get server_updated_at seeded from their
+// client updated_at so a fresh client (since=EPOCH) still pulls them. Idempotent.
+const BACKFILLS = SYNCED_TABLES.map(
+  (t) => `UPDATE ${t} SET server_updated_at = updated_at WHERE server_updated_at IS NULL`,
+)
 
 /** Ensures the schema exists. Memoized so concurrent requests share one bootstrap. */
 export function ensureSchema(): Promise<void> {
@@ -173,6 +192,9 @@ export function ensureSchema(): Promise<void> {
           // Already applied (column exists) → ignore; re-throw anything else.
           if (!/duplicate column name/i.test(String((err as Error)?.message))) throw err
         }
+      }
+      for (const stmt of BACKFILLS) {
+        await db.execute(stmt)
       }
     })().catch((err) => {
       // Reset so a transient failure can retry on the next request.

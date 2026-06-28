@@ -36,6 +36,22 @@ interface SyncBody {
 
 const EPOCH = '1970-01-01T00:00:00.000Z'
 
+// A client clock more than this far ahead of the server is treated as broken: its
+// updated_at is clamped to the server's now before storage, so a bogus far-future
+// timestamp can't permanently win LWW and freeze the row from edits/deletes on
+// every device (H2). Normal data (past, or minutes/hours ahead) is untouched.
+const FUTURE_GRACE_MS = 24 * 60 * 60 * 1000
+
+/** The client `updated_at` to store for LWW, clamped against a runaway client
+ *  clock. Falls back to the server clock when missing/unparseable. */
+function clampStamp(clientTs: string | undefined, serverNow: string): string {
+  if (!clientTs) return serverNow
+  const t = Date.parse(clientTs)
+  if (Number.isNaN(t)) return serverNow
+  if (t > Date.parse(serverNow) + FUTURE_GRACE_MS) return serverNow
+  return clientTs
+}
+
 function rowToRoutine(r: Record<string, unknown>): Routine {
   return {
     id: r.id as string,
@@ -68,16 +84,17 @@ function rowToSession(r: Record<string, unknown>): WorkoutSession {
   }
 }
 
-function routineUpsert(userId: string, r: Routine): InStatement {
+function routineUpsert(userId: string, r: Routine, serverNow: string): InStatement {
   return {
     sql: `INSERT INTO routines
-            (id, user_id, name, description, exercise_ids, work_seconds, rest_seconds, rounds, created_at, updated_at, deleted_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, user_id, name, description, exercise_ids, work_seconds, rest_seconds, rounds, created_at, updated_at, server_updated_at, deleted_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             name = excluded.name, description = excluded.description,
             exercise_ids = excluded.exercise_ids, work_seconds = excluded.work_seconds,
             rest_seconds = excluded.rest_seconds, rounds = excluded.rounds,
-            updated_at = excluded.updated_at, deleted_at = excluded.deleted_at
+            updated_at = excluded.updated_at, server_updated_at = excluded.server_updated_at,
+            deleted_at = excluded.deleted_at
           WHERE excluded.updated_at > routines.updated_at AND routines.user_id = excluded.user_id`,
     args: [
       r.id,
@@ -89,22 +106,24 @@ function routineUpsert(userId: string, r: Routine): InStatement {
       r.restSeconds,
       r.rounds,
       r.createdAt,
-      r.updatedAt ?? new Date().toISOString(),
+      clampStamp(r.updatedAt, serverNow),
+      serverNow,
       r.deletedAt ?? null,
     ],
   }
 }
 
-function sessionUpsert(userId: string, s: WorkoutSession): InStatement {
+function sessionUpsert(userId: string, s: WorkoutSession, serverNow: string): InStatement {
   return {
     sql: `INSERT INTO sessions
-            (id, user_id, routine_id, routine_name, started_at, completed_at, duration_seconds, completed, exercises_completed, total_exercises, updated_at, deleted_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, user_id, routine_id, routine_name, started_at, completed_at, duration_seconds, completed, exercises_completed, total_exercises, updated_at, server_updated_at, deleted_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             routine_name = excluded.routine_name, completed_at = excluded.completed_at,
             duration_seconds = excluded.duration_seconds, completed = excluded.completed,
             exercises_completed = excluded.exercises_completed, total_exercises = excluded.total_exercises,
-            updated_at = excluded.updated_at, deleted_at = excluded.deleted_at
+            updated_at = excluded.updated_at, server_updated_at = excluded.server_updated_at,
+            deleted_at = excluded.deleted_at
           WHERE excluded.updated_at > sessions.updated_at AND sessions.user_id = excluded.user_id`,
     args: [
       s.id,
@@ -117,7 +136,8 @@ function sessionUpsert(userId: string, s: WorkoutSession): InStatement {
       s.completed ? 1 : 0,
       s.exercisesCompleted,
       s.totalExercises,
-      s.updatedAt ?? new Date().toISOString(),
+      clampStamp(s.updatedAt, serverNow),
+      serverNow,
       s.deletedAt ?? null,
     ],
   }
@@ -136,13 +156,14 @@ function rowToWeight(r: Record<string, unknown>): WeightEntry {
   }
 }
 
-function weightUpsert(userId: string, e: WeightEntry): InStatement {
+function weightUpsert(userId: string, e: WeightEntry, serverNow: string): InStatement {
   return {
-    sql: `INSERT INTO weight_log (id, user_id, date, weight_kg, created_at, updated_at, deleted_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+    sql: `INSERT INTO weight_log (id, user_id, date, weight_kg, created_at, updated_at, server_updated_at, deleted_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             date = excluded.date, weight_kg = excluded.weight_kg,
-            updated_at = excluded.updated_at, deleted_at = excluded.deleted_at
+            updated_at = excluded.updated_at, server_updated_at = excluded.server_updated_at,
+            deleted_at = excluded.deleted_at
           WHERE excluded.updated_at > weight_log.updated_at AND weight_log.user_id = excluded.user_id`,
     args: [
       e.id,
@@ -150,7 +171,8 @@ function weightUpsert(userId: string, e: WeightEntry): InStatement {
       e.date,
       e.weightKg,
       e.createdAt,
-      e.updatedAt ?? new Date().toISOString(),
+      clampStamp(e.updatedAt, serverNow),
+      serverNow,
       e.deletedAt ?? null,
     ],
   }
@@ -175,14 +197,15 @@ function rowToChallenge(r: Record<string, unknown>): ChallengeProgress {
   }
 }
 
-function challengeUpsert(userId: string, c: ChallengeProgress): InStatement {
+function challengeUpsert(userId: string, c: ChallengeProgress, serverNow: string): InStatement {
   return {
-    sql: `INSERT INTO challenge_progress (user_id, challenge_id, completed_days, cleared_days, started_at, updated_at, deleted_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+    sql: `INSERT INTO challenge_progress (user_id, challenge_id, completed_days, cleared_days, started_at, updated_at, server_updated_at, deleted_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(user_id, challenge_id) DO UPDATE SET
             completed_days = excluded.completed_days, cleared_days = excluded.cleared_days,
             started_at = excluded.started_at,
-            updated_at = excluded.updated_at, deleted_at = excluded.deleted_at
+            updated_at = excluded.updated_at, server_updated_at = excluded.server_updated_at,
+            deleted_at = excluded.deleted_at
           WHERE excluded.updated_at > challenge_progress.updated_at`,
     args: [
       userId,
@@ -190,7 +213,8 @@ function challengeUpsert(userId: string, c: ChallengeProgress): InStatement {
       JSON.stringify(c.completedDays ?? {}),
       JSON.stringify(c.clearedDays ?? {}),
       c.startedAt,
-      c.updatedAt ?? new Date().toISOString(),
+      clampStamp(c.updatedAt, serverNow),
+      serverNow,
       c.deletedAt ?? null,
     ],
   }
@@ -220,28 +244,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     await ensureSchema()
     const db = getDb()
+    // One server-clock stamp per request — used both as every row's
+    // server_updated_at and as the returned cursor, so the watermark is entirely
+    // server-authoritative and immune to client clock skew (H2).
+    const serverTime = new Date().toISOString()
 
     // --- Push (one write transaction). System routines never sync. ---
     const writes: InStatement[] = []
     for (const r of body.routines ?? []) {
-      if (!r.isSystem) writes.push(routineUpsert(userId, r))
+      if (!r.isSystem) writes.push(routineUpsert(userId, r, serverTime))
     }
     for (const s of body.sessions ?? []) {
-      writes.push(sessionUpsert(userId, s))
+      writes.push(sessionUpsert(userId, s, serverTime))
     }
     if (body.settings) {
       const s = body.settings.value
       writes.push({
         sql: `INSERT INTO settings
-                (user_id, default_work_seconds, default_rest_seconds, default_rounds, countdown_seconds, audio_cues_enabled, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?)
+                (user_id, default_work_seconds, default_rest_seconds, default_rounds, countdown_seconds, audio_cues_enabled, updated_at, server_updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(user_id) DO UPDATE SET
                 default_work_seconds = excluded.default_work_seconds,
                 default_rest_seconds = excluded.default_rest_seconds,
                 default_rounds = excluded.default_rounds,
                 countdown_seconds = excluded.countdown_seconds,
                 audio_cues_enabled = excluded.audio_cues_enabled,
-                updated_at = excluded.updated_at
+                updated_at = excluded.updated_at, server_updated_at = excluded.server_updated_at
               WHERE excluded.updated_at > settings.updated_at`,
         args: [
           userId,
@@ -250,51 +278,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           s.defaultRounds,
           s.countdownSeconds,
           s.audioCuesEnabled ? 1 : 0,
-          body.settings.updatedAt,
+          clampStamp(body.settings.updatedAt, serverTime),
+          serverTime,
         ],
       })
     }
-    for (const e of body.weightLog ?? []) writes.push(weightUpsert(userId, e))
-    for (const c of body.challengeProgress ?? []) writes.push(challengeUpsert(userId, c))
+    for (const e of body.weightLog ?? []) writes.push(weightUpsert(userId, e, serverTime))
+    for (const c of body.challengeProgress ?? []) writes.push(challengeUpsert(userId, c, serverTime))
     if (body.bodyProfile) {
       const bp = body.bodyProfile
       writes.push({
-        sql: `INSERT INTO body_profile (user_id, height_cm, goal_weight_kg, updated_at)
-              VALUES (?, ?, ?, ?)
+        sql: `INSERT INTO body_profile (user_id, height_cm, goal_weight_kg, updated_at, server_updated_at)
+              VALUES (?, ?, ?, ?, ?)
               ON CONFLICT(user_id) DO UPDATE SET
                 height_cm = excluded.height_cm, goal_weight_kg = excluded.goal_weight_kg,
-                updated_at = excluded.updated_at
+                updated_at = excluded.updated_at, server_updated_at = excluded.server_updated_at
               WHERE excluded.updated_at > body_profile.updated_at`,
-        args: [userId, bp.heightCm ?? null, bp.goalWeightKg ?? null, bp.updatedAt],
+        args: [userId, bp.heightCm ?? null, bp.goalWeightKg ?? null, clampStamp(bp.updatedAt, serverTime), serverTime],
       })
     }
     if (writes.length > 0) await db.batch(writes, 'write')
 
-    // --- Pull everything changed since the cursor (tombstones included). ---
-    const serverTime = new Date().toISOString()
+    // --- Pull everything changed since the cursor (tombstones included). The
+    // filter is on server_updated_at (server clock), never the client updated_at,
+    // so a behind-clock device's writes can't sort before another device's cursor
+    // and be silently skipped forever (H2). ---
     const [routinesRes, sessionsRes, settingsRes, weightRes, challengeRes, bodyRes] = await Promise.all([
       db.execute({
-        sql: `SELECT * FROM routines WHERE user_id = ? AND updated_at > ?`,
+        sql: `SELECT * FROM routines WHERE user_id = ? AND server_updated_at > ?`,
         args: [userId, since],
       }),
       db.execute({
-        sql: `SELECT * FROM sessions WHERE user_id = ? AND updated_at > ?`,
+        sql: `SELECT * FROM sessions WHERE user_id = ? AND server_updated_at > ?`,
         args: [userId, since],
       }),
       db.execute({
-        sql: `SELECT * FROM settings WHERE user_id = ? AND updated_at > ?`,
+        sql: `SELECT * FROM settings WHERE user_id = ? AND server_updated_at > ?`,
         args: [userId, since],
       }),
       db.execute({
-        sql: `SELECT * FROM weight_log WHERE user_id = ? AND updated_at > ?`,
+        sql: `SELECT * FROM weight_log WHERE user_id = ? AND server_updated_at > ?`,
         args: [userId, since],
       }),
       db.execute({
-        sql: `SELECT * FROM challenge_progress WHERE user_id = ? AND updated_at > ?`,
+        sql: `SELECT * FROM challenge_progress WHERE user_id = ? AND server_updated_at > ?`,
         args: [userId, since],
       }),
       db.execute({
-        sql: `SELECT * FROM body_profile WHERE user_id = ? AND updated_at > ?`,
+        sql: `SELECT * FROM body_profile WHERE user_id = ? AND server_updated_at > ?`,
         args: [userId, since],
       }),
     ])
