@@ -71,6 +71,20 @@ function startTick(fn: () => void): void {
 }
 
 // ---------------------------------------------------------------------------
+// Module-level visibilitychange cleanup handle. A plain `let` (mirroring
+// intervalHandle) replaces the previous `as unknown as` cast that smuggled the
+// cleanup onto the store object. See Finding L7.
+// ---------------------------------------------------------------------------
+let visCleanup: (() => void) | null = null
+
+function clearVisListener(): void {
+  if (visCleanup) {
+    visCleanup()
+    visCleanup = null
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Seq counter for cue events
 // ---------------------------------------------------------------------------
 let cueSeq = 0
@@ -84,6 +98,66 @@ function nextCue(type: CueEventType): CueEvent {
 // ---------------------------------------------------------------------------
 function isLastExercise(exercises: Exercise[], index: number): boolean {
   return index >= exercises.length - 1
+}
+
+// ---------------------------------------------------------------------------
+// Pure phase-transition reducer (Findings H1 + M3).
+//
+// Both tick() (one step at the 1s cadence) and the visibilitychange catch-up
+// loop (looped until caught up) go through this single function, so the
+// work→rest→work→complete rules — and the exercisesCompleted increment — exist
+// in exactly one place and can never diverge between a foreground tab and a
+// backgrounded-then-restored one.
+//
+// Crucially, phaseEndsAt is ACCUMULATED (`+= duration`), not rebased onto a
+// fixed "now". That is what lets the catch-up loop walk through every elapsed
+// phase: rebasing onto a single nowMs made phaseEndsAt jump past nowMs after the
+// first transition, so the loop exited after one step and the timer stayed stuck
+// phases behind reality (the H1 bug).
+//
+// Index semantics match the canonical tick() encoding: currentIndex advances on
+// the rest→work transition, so during a rest phase currentIndex is the exercise
+// that just finished (relied on by previous()). On 'complete', currentIndex and
+// phaseEndsAt are left unchanged.
+// ---------------------------------------------------------------------------
+export interface PhaseStep {
+  phase: WorkoutPhase
+  currentIndex: number
+  exercisesCompleted: number
+  phaseEndsAt: number
+}
+
+export function advancePhase(prev: PhaseStep, routine: Routine, exerciseCount: number): PhaseStep {
+  switch (prev.phase) {
+    case 'prepare':
+      return {
+        phase: 'work',
+        currentIndex: 0,
+        exercisesCompleted: prev.exercisesCompleted,
+        phaseEndsAt: prev.phaseEndsAt + routine.workSeconds * 1000,
+      }
+    case 'work': {
+      const exercisesCompleted = prev.exercisesCompleted + 1
+      if (prev.currentIndex >= exerciseCount - 1) {
+        return { phase: 'complete', currentIndex: prev.currentIndex, exercisesCompleted, phaseEndsAt: prev.phaseEndsAt }
+      }
+      return {
+        phase: 'rest',
+        currentIndex: prev.currentIndex,
+        exercisesCompleted,
+        phaseEndsAt: prev.phaseEndsAt + routine.restSeconds * 1000,
+      }
+    }
+    case 'rest':
+      return {
+        phase: 'work',
+        currentIndex: prev.currentIndex + 1,
+        exercisesCompleted: prev.exercisesCompleted,
+        phaseEndsAt: prev.phaseEndsAt + routine.workSeconds * 1000,
+      }
+    default:
+      return prev
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -206,68 +280,58 @@ export const useTimerStore = create<TimerState>((set, get) => ({
 
     startTick(() => get().tick())
 
-    // Finding 4: visibility-change drift correction
+    // Finding H1: visibility-change drift correction. On return-to-foreground,
+    // fast-forward through EVERY phase whose boundary already passed. advancePhase
+    // accumulates phaseEndsAt, so the loop walks all elapsed phases (the old code
+    // rebased onto a fixed nowMs and exited after a single step).
     const handleVisibility = () => {
       if (document.visibilityState !== 'visible') return
       const s = get()
-      if (s.isPaused || s.phase === 'idle' || s.phase === 'complete') return
+      if (s.isPaused || s.phase === 'idle' || s.phase === 'complete' || !s.routine) return
 
-      let currentPhase = s.phase as WorkoutPhase
-      let { phaseEndsAt, currentIndex, exercisesCompleted } = s
       const nowMs = Date.now()
-
-      // Fast-forward through any overdue phases
-      while (phaseEndsAt <= nowMs && currentPhase !== 'complete' && s.routine) {
-        if (currentPhase === 'prepare') {
-          currentPhase = 'work'
-          phaseEndsAt = nowMs + s.routine.workSeconds * 1000
-        } else if (currentPhase === 'work') {
-          exercisesCompleted += 1
-          if (isLastExercise(s.exercises, currentIndex)) {
-            currentPhase = 'complete'
-            break
-          }
-          currentIndex += 1
-          currentPhase = 'rest'
-          phaseEndsAt = nowMs + s.routine.restSeconds * 1000
-        } else if (currentPhase === 'rest') {
-          currentPhase = 'work'
-          phaseEndsAt = nowMs + s.routine.workSeconds * 1000
-        } else {
-          break
-        }
+      let step: PhaseStep = {
+        phase: s.phase,
+        currentIndex: s.currentIndex,
+        exercisesCompleted: s.exercisesCompleted,
+        phaseEndsAt: s.phaseEndsAt,
+      }
+      while (step.phaseEndsAt <= nowMs && step.phase !== 'complete') {
+        step = advancePhase(step, s.routine, s.exercises.length)
       }
 
-      if (currentPhase === 'complete') {
+      if (step.phase === 'complete') {
         clearTick()
-        set({ phase: 'complete', secondsLeft: 0, exercisesCompleted, cueEvent: nextCue('complete') })
+        set({ phase: 'complete', secondsLeft: 0, exercisesCompleted: step.exercisesCompleted, cueEvent: nextCue('complete') })
+        // The full timeline elapsed while backgrounded — this is a genuine,
+        // natural completion (parity with tick()), so persist completed:true.
+        // Finding M3: the old handler passed `false` here, saving a finished
+        // workout as abandoned.
         maybeSaveSession(
-          { ...get(), exercisesCompleted },
-          false,
+          { ...get(), exercisesCompleted: step.exercisesCompleted },
+          true,
           (completedAt) => set({ sessionSaved: true, completedAt }),
         )
         return
       }
 
-      const newSecondsLeft = Math.max(0, Math.round((phaseEndsAt - nowMs) / 1000))
+      const phaseDuration = step.phase === 'rest' ? s.routine.restSeconds : s.routine.workSeconds
+      const newSecondsLeft = Math.max(0, Math.round((step.phaseEndsAt - nowMs) / 1000))
       set({
-        phase: currentPhase,
-        currentIndex,
-        exercisesCompleted,
+        phase: step.phase,
+        currentIndex: step.currentIndex,
+        exercisesCompleted: step.exercisesCompleted,
         secondsLeft: newSecondsLeft,
-        phaseEndsAt,
-        cueEvent: currentPhase !== s.phase
-          ? nextCue((currentPhase === 'work' || currentPhase === 'rest' ? currentPhase : 'work') as CueEventType)
-          : s.cueEvent,
+        totalSeconds: phaseDuration,
+        phaseEndsAt: step.phaseEndsAt,
+        cueEvent: step.phase !== s.phase ? nextCue(step.phase === 'rest' ? 'rest' : 'work') : s.cueEvent,
       })
     }
 
+    // Remove any stale listener from a prior start(), then register this one.
+    clearVisListener()
     document.addEventListener('visibilitychange', handleVisibility)
-    // Store cleanup fn so we can remove it on reset/start
-    ;(useTimerStore as unknown as { _visCleanup?: () => void })._visCleanup?.()
-    ;(useTimerStore as unknown as { _visCleanup?: () => void })._visCleanup = () => {
-      document.removeEventListener('visibilitychange', handleVisibility)
-    }
+    visCleanup = () => document.removeEventListener('visibilitychange', handleVisibility)
   },
 
   // -------------------------------------------------------------------------
@@ -283,9 +347,12 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     // Finding 4: re-derive from wall clock to avoid drift
     const newSecondsLeft = Math.max(0, Math.round((phaseEndsAt - Date.now()) / 1000))
 
-    // Last 3 seconds of work or rest — emit countdown cue
+    // Countdown cue for the last 3 seconds of a work/rest phase (3-2-1). The
+    // `> 0` guard below means this only fires at 3, 2, 1 — Finding L1: the old
+    // `>= 0 && <= 2` threshold produced only a 2-1 beep despite the "last 3
+    // seconds" intent.
     const isCountdownTick =
-      (phase === 'work' || phase === 'rest') && newSecondsLeft >= 0 && newSecondsLeft <= 2
+      (phase === 'work' || phase === 'rest') && newSecondsLeft <= 3
 
     if (newSecondsLeft > 0) {
       set({
@@ -295,72 +362,39 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       return
     }
 
-    // secondsLeft has hit 0 — advance phase
-    if (phase === 'prepare') {
-      // Prepare → first work phase
-      const workSecs = routine.workSeconds
-      const newPhaseEndsAt = Date.now() + workSecs * 1000
+    // secondsLeft has hit 0 — advance exactly one phase via the shared reducer.
+    const next = advancePhase(
+      { phase, currentIndex, exercisesCompleted: state.exercisesCompleted, phaseEndsAt },
+      routine,
+      exercises.length,
+    )
+
+    if (next.phase === 'complete') {
+      clearTick()
       set({
-        phase: 'work',
-        currentIndex: 0,
-        secondsLeft: workSecs,
-        totalSeconds: workSecs,
-        phaseEndsAt: newPhaseEndsAt,
-        cueEvent: nextCue('work'),
+        phase: 'complete',
+        exercisesCompleted: next.exercisesCompleted,
+        secondsLeft: 0,
+        cueEvent: nextCue('complete'),
       })
+      maybeSaveSession(
+        { ...state, exercisesCompleted: next.exercisesCompleted },
+        true,
+        (completedAt) => set({ sessionSaved: true, completedAt }),
+      )
       return
     }
 
-    if (phase === 'work') {
-      // Count this exercise as completed
-      const newCompleted = state.exercisesCompleted + 1
-
-      if (isLastExercise(exercises, currentIndex)) {
-        // Finished last exercise's work phase → complete
-        clearTick()
-        set({
-          phase: 'complete',
-          exercisesCompleted: newCompleted,
-          secondsLeft: 0,
-          cueEvent: nextCue('complete'),
-        })
-        maybeSaveSession(
-          { ...state, exercisesCompleted: newCompleted },
-          true,
-          (completedAt) => set({ sessionSaved: true, completedAt }),
-        )
-        return
-      }
-
-      // Not the last exercise — go to rest
-      const restSecs = routine.restSeconds
-      const newPhaseEndsAt = Date.now() + restSecs * 1000
-      set({
-        phase: 'rest',
-        exercisesCompleted: newCompleted,
-        secondsLeft: restSecs,
-        totalSeconds: restSecs,
-        phaseEndsAt: newPhaseEndsAt,
-        cueEvent: nextCue('rest'),
-      })
-      return
-    }
-
-    if (phase === 'rest') {
-      // Rest → next work
-      const nextIndex = currentIndex + 1
-      const workSecs = routine.workSeconds
-      const newPhaseEndsAt = Date.now() + workSecs * 1000
-      set({
-        phase: 'work',
-        currentIndex: nextIndex,
-        secondsLeft: workSecs,
-        totalSeconds: workSecs,
-        phaseEndsAt: newPhaseEndsAt,
-        cueEvent: nextCue('work'),
-      })
-      return
-    }
+    const phaseDuration = next.phase === 'rest' ? routine.restSeconds : routine.workSeconds
+    set({
+      phase: next.phase,
+      currentIndex: next.currentIndex,
+      exercisesCompleted: next.exercisesCompleted,
+      secondsLeft: phaseDuration,
+      totalSeconds: phaseDuration,
+      phaseEndsAt: next.phaseEndsAt,
+      cueEvent: nextCue(next.phase === 'rest' ? 'rest' : 'work'),
+    })
   },
 
   // -------------------------------------------------------------------------
@@ -531,8 +565,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   // -------------------------------------------------------------------------
   reset() {
     clearTick()
-    ;(useTimerStore as unknown as { _visCleanup?: () => void })._visCleanup?.()
-    ;(useTimerStore as unknown as { _visCleanup?: () => void })._visCleanup = undefined
+    clearVisListener()
     set({
       routine: undefined,
       exercises: [],

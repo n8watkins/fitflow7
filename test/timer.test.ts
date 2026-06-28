@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useTimerStore } from '../src/store/timerStore'
+import { useTimerStore, advancePhase, type PhaseStep } from '../src/store/timerStore'
 import { getSessions } from '../src/lib/storage'
 import { DEFAULT_SETTINGS } from '../src/types'
 import type { Routine } from '../src/types'
@@ -31,5 +31,62 @@ describe('timer store empty-routine guard (B3)', () => {
     expect(s.phase).toBe('idle')
     expect(s.exercises).toHaveLength(0)
     expect(getSessions()).toHaveLength(0)
+  })
+})
+
+// Findings H1 + M3: the phase reducer is shared by tick() and the visibility
+// catch-up loop. Testing it directly covers the multi-phase fast-forward that was
+// previously only reachable via a real visibilitychange event (and was broken).
+describe('advancePhase reducer (H1 + M3)', () => {
+  const routine: Routine = {
+    id: 'r', name: 'R', exerciseIds: ['a', 'b', 'c'],
+    workSeconds: 30, restSeconds: 10, rounds: 1, isSystem: false,
+    createdAt: 'x', updatedAt: 'x',
+  }
+  const count = 3 // 3 exercises -> timeline work30/rest10/work30/rest10/work30 = 110s
+
+  it('prepare -> work (index 0, boundary += workSeconds)', () => {
+    expect(advancePhase({ phase: 'prepare', currentIndex: 0, exercisesCompleted: 0, phaseEndsAt: 1000 }, routine, count))
+      .toEqual({ phase: 'work', currentIndex: 0, exercisesCompleted: 0, phaseEndsAt: 1000 + 30000 })
+  })
+
+  it('work -> rest keeps index, increments completed, boundary += restSeconds', () => {
+    expect(advancePhase({ phase: 'work', currentIndex: 0, exercisesCompleted: 0, phaseEndsAt: 1000 }, routine, count))
+      .toEqual({ phase: 'rest', currentIndex: 0, exercisesCompleted: 1, phaseEndsAt: 1000 + 10000 })
+  })
+
+  it('rest -> work increments index, boundary += workSeconds', () => {
+    expect(advancePhase({ phase: 'rest', currentIndex: 0, exercisesCompleted: 1, phaseEndsAt: 1000 }, routine, count))
+      .toEqual({ phase: 'work', currentIndex: 1, exercisesCompleted: 1, phaseEndsAt: 1000 + 30000 })
+  })
+
+  it('work on the last exercise -> complete (index/boundary unchanged)', () => {
+    const r = advancePhase({ phase: 'work', currentIndex: 2, exercisesCompleted: 2, phaseEndsAt: 5000 }, routine, count)
+    expect(r.phase).toBe('complete')
+    expect(r.exercisesCompleted).toBe(3)
+    expect(r.phaseEndsAt).toBe(5000)
+  })
+
+  it('catch-up loop fast-forwards through ALL elapsed phases to complete (H1)', () => {
+    let step: PhaseStep = { phase: 'work', currentIndex: 0, exercisesCompleted: 0, phaseEndsAt: 30000 }
+    const nowMs = 120000 // past the 110s end of the whole workout
+    let iterations = 0
+    while (step.phaseEndsAt <= nowMs && step.phase !== 'complete') {
+      step = advancePhase(step, routine, count)
+      iterations++
+    }
+    expect(step.phase).toBe('complete')
+    expect(step.exercisesCompleted).toBe(3)
+    // The bug advanced exactly one phase; the fix walks every elapsed boundary.
+    expect(iterations).toBeGreaterThan(1)
+  })
+
+  it('catch-up stops mid-phase when now is between two boundaries', () => {
+    let step: PhaseStep = { phase: 'work', currentIndex: 0, exercisesCompleted: 0, phaseEndsAt: 30000 }
+    const nowMs = 55000 // inside exercise 1's work phase (40s..70s)
+    while (step.phaseEndsAt <= nowMs && step.phase !== 'complete') {
+      step = advancePhase(step, routine, count)
+    }
+    expect(step).toEqual({ phase: 'work', currentIndex: 1, exercisesCompleted: 1, phaseEndsAt: 70000 })
   })
 })
