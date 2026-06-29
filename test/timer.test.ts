@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useTimerStore, advancePhase, type PhaseStep } from '../src/store/timerStore'
 import { getSessions } from '../src/lib/storage'
 import { DEFAULT_SETTINGS } from '../src/types'
-import type { Routine } from '../src/types'
+import type { Routine, Exercise } from '../src/types'
 
 // B3: an all-unknown-exercise routine resolves to an empty exercise list. The
 // store must refuse to start it — otherwise the "last exercise" branch fires
@@ -88,5 +88,53 @@ describe('advancePhase reducer (H1 + M3)', () => {
       step = advancePhase(step, routine, count)
     }
     expect(step).toEqual({ phase: 'work', currentIndex: 1, exercisesCompleted: 1, phaseEndsAt: 70000 })
+  })
+
+  // M3 (the headline behavioral half of this block): when the WHOLE timeline
+  // elapses while the tab is backgrounded, returning to the foreground must
+  // persist the session as a natural completion (completed:true), not abandoned.
+  // The tests above only exercise the pure reducer, which reaches 'complete'
+  // regardless of the save flag — so they can't catch a regression of the
+  // naturalFinish argument. This drives the real visibilitychange handler end to
+  // end against a stubbed document and asserts the saved flag, so flipping
+  // timerStore's catch-up branch back to `false` fails here.
+  it('backgrounded finish saves the session as completed:true (M3)', () => {
+    const realNow = Date.now
+    const realDoc = (globalThis as { document?: unknown }).document
+    let visHandler: (() => void) | undefined
+    ;(globalThis as { document?: unknown }).document = {
+      visibilityState: 'visible',
+      addEventListener: (type: string, h: () => void) => {
+        if (type === 'visibilitychange') visHandler = h
+      },
+      removeEventListener: () => {},
+    }
+    try {
+      const exercises = [{}, {}, {}] as unknown as Exercise[]
+      // countdownSeconds:0 starts straight in 'work'; audio off (no DOM in node).
+      useTimerStore.getState().start(routine, exercises, {
+        ...DEFAULT_SETTINGS,
+        countdownSeconds: 0,
+        audioCuesEnabled: false,
+      })
+      // Jump far past the 110s timeline, then simulate return-to-foreground.
+      Date.now = () => realNow() + 10_000_000
+      visHandler?.()
+
+      const s = useTimerStore.getState()
+      expect(s.phase).toBe('complete')
+      const saved = getSessions()
+      expect(saved).toHaveLength(1)
+      expect(saved[0].completed).toBe(true) // guards the M3 false->true fix
+      expect(saved[0].exercisesCompleted).toBe(count)
+      expect(saved[0].totalExercises).toBe(count)
+    } finally {
+      Date.now = realNow
+      // reset() clears the interval AND removes the visibility listener, whose
+      // cleanup closure dereferences document — so run it before restoring it.
+      useTimerStore.getState().reset()
+      if (realDoc === undefined) delete (globalThis as { document?: unknown }).document
+      else (globalThis as { document?: unknown }).document = realDoc
+    }
   })
 })
