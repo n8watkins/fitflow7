@@ -10,7 +10,7 @@ Forward-looking work list, written to be picked up **with zero prior context**. 
 - **Invariants:** signed-out app is fully offline; cloud tables are `user_id`-scoped, sync is LWW by `updatedAt` with `deletedAt` tombstones. Routines, sessions, settings, **and now body profile / weight log / challenge progress** all sync (B1). Don't widen `/api/sync` to serve other users.
 - **Auth/tokens (post-S1):** PATs carry a `jti` and live in the `access_tokens` registry — valid only while a non-revoked row exists; `scope` is `read`|`readwrite`. `api/_lib/tokens.ts` `resolveAuth(req)` is the single auth entry for sync/publish/report (cookie = full access, PAT = registry-checked). Manage tokens via `/api/token` GET/POST/DELETE (cookie-authed) and Settings → Account.
 - **Testing /api:** handlers are Vercel-style `(req, res)`; `test/api/handlers.test.ts` drives them with hand-rolled stubs against an in-memory libSQL DB (`TURSO_DATABASE_URL=:memory:`). Page render smokes (`test/pages.smoke.test.tsx`) use `react-dom/server` (no jsdom).
-- **Exercise images:** `public/exercises/<slug>.jpg` (+ `-2.jpg`, two frames that animate); slugs registered in `IMAGE_SLUGS` (`src/data/exercises.ts`). Source: free-exercise-db (Unlicense). 29/71 covered; emoji is the fallback.
+- **Exercise images:** `public/exercises/<slug>.jpg` (+ `-2.jpg`, two frames that animate); slugs registered in `IMAGE_SLUGS` (`src/data/exercises.ts`). Source: free-exercise-db (Unlicense). 36/71 covered; emoji is the fallback.
 
 **Shipped recently (don't redo — see `git log`):** 71 exercises + cues, Stats/BMI, Calendar, Challenges + auto-completion, mobile-first Dashboard, responsive nav, exercise modal, first-run empty states, goal-weight/trend deltas, player empty-routine guard, route code-splitting, render + `/api` tests + CI, **29 real exercise images**, **light theme + toggle**, **revocable/scoped tokens + community hardening (S1)**, **token management UX (S2)**, **cloud sync for body/weight/challenge (B1)**, **full-project review + all 20 findings fixed (S8 — see `REVIEW.md`): server-authoritative sync watermark (H2), timer drift catch-up (H1), settings/challenge/tombstone-GC data-integrity, backend hardening, `useLiveData` hook, +31 tests**.
 
@@ -35,7 +35,7 @@ Forward-looking work list, written to be picked up **with zero prior context**. 
 
 ## Polish / nice-to-haves (low priority)
 - **Light-theme visual pass:** the palette is a token remap verified for contrast in code, not yet eyeballed on every screen. Flip System/Light/Dark in Settings → Appearance and tune any screen that reads off (owner is the taste authority).
-- **More exercise images:** 42 of 71 are still emoji (no confident bodyweight match in free-exercise-db). Could fill gaps with Everkinetic/wger (CC-BY-SA — needs a Credits line + ShareAlike) if desired.
+- **More exercise images:** 35 of 71 are still emoji. Session 9 added 7 more visually-QA'd free-exercise-db matches (jumping-jacks, one-leg-bridge, curtsy-lunges, kneeling-lunge-stretch L/R, calf-stretch L/R); the remainder genuinely have no confident bodyweight photo in free-exercise-db (side-specific unilateral moves, dynamic cardio like high-knees/burpees/march, wall-sit, fire-hydrant, bird-dog, punches — all absent or gym-only). Filling them further needs a CC-BY-SA source (Everkinetic/wger — Credits line + ShareAlike) and those are illustrations that would clash with the current photo style.
 
 ---
 

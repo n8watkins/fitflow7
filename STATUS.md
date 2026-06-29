@@ -76,7 +76,7 @@ A 29-agent multi-agent review (committed as `REVIEW.md`, commit `5abfe98`) inven
 | T5 | Player empty-routine guard | ✅ **DONE** — store refuses an empty list; Player shows a guard screen instead of logging a junk session. | me |
 | T6 | MCP token UX | ✅ **DONE (S2)** — copy button + token list/revoke/scope in Settings → Account. | me |
 | T7 | Phase 4 (deferred) | Full social: follows, leaderboards, public profiles. **No longer gated** (T4 done); still a big data-model + moderation jump. Only if the network direction is wanted. | decision |
-| — | (Optional) richer exercise images | 29/71 now have free 2-frame photos. Fill remaining emoji gaps with Everkinetic/wger (CC-BY-SA — needs Credits + ShareAlike), or pay for ExerciseDB GIFs. Current set may be enough. | decision |
+| — | (Optional) richer exercise images | 36/71 now have free 2-frame photos (S9 added 7 visually-QA'd free-exercise-db matches). Remaining 35 have no confident free-exercise-db bodyweight photo; fill with Everkinetic/wger (CC-BY-SA — Credits + ShareAlike, illustrations clash with photos) or pay for ExerciseDB GIFs. Current set may be enough. | decision |
 | — | (Optional) Google login | Intentionally off; add a Google OAuth app + 2 env vars to re-enable the button. | decision |
 
 ---

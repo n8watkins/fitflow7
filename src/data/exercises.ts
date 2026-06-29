@@ -1775,6 +1775,13 @@ const IMAGE_SLUGS = new Set([
   'shoulder-stretch', 'arm-circles', 'tricep-stretch-left', 'tricep-stretch-right',
   'child-pose', 'bicycle-crunches', 'jumping-squats', 'donkey-kick-left',
   'donkey-kick-right', 'cat-cow-pose', 'diamond-push-ups', 'long-arm-crunches',
+  // Added (Session 9): more free-exercise-db bodyweight matches, each visually
+  // QA'd against the movement. Kneeling/calf-stretch L+R reuse one source pair.
+  'jumping-jacks',          // Star Jump (mid-air spread)
+  'one-leg-bridge',         // Single Leg Glute Bridge
+  'curtsy-lunges',          // Crossover Reverse Lunge
+  'kneeling-lunge-stretch-left', 'kneeling-lunge-stretch-right', // Kneeling Hip Flexor
+  'calf-stretch-left', 'calf-stretch-right',                     // Calf Stretch (wall)
 ])
 
 // Concise (≤8-word) cues for outline rows + the exercise modal. Kept here as a
