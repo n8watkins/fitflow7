@@ -1,10 +1,10 @@
 # FitFlow 7 — Project Status
 
-Living snapshot: what's done, what's left, and what's on the owner. Updated 2026-06-26.
+Living snapshot: what's done, what's left, and what's on the owner. Updated 2026-06-29.
 
-- **Live:** https://fitflow7.vercel.app (public, deployed). Repo `main`, all pushed, working tree clean.
+- **Live:** https://fitflow7.vercel.app (public, deployed). Repo `main`; **7 commits ahead of `origin/main` (this session's review fixes) — NOT yet pushed.** Working tree clean.
 - **Cloud sync is now CONFIGURED + LIVE** — Turso DB + GitHub OAuth + `SESSION_SECRET` are set in Vercel and deployed. `…/api/auth/login?provider=github` returns 302 → GitHub. (Google OAuth intentionally **not** configured; its sign-in button is hidden.)
-- **Verify pipeline:** `npx tsc -b` + `npm run lint` + `npm run test` (**123 tests**) + `npm run build` — all green. `/api` type-checked via `tsconfig.api.json`; `mcp/` has its own `npm run typecheck`. **CI** (`.github/workflows/ci.yml`) now runs the full pipeline on push/PR.
+- **Verify pipeline:** `npx tsc -b` + `npm run lint` + `npm run test` (**154 tests**) + `npm run build` — all green. `/api` type-checked via `tsconfig.api.json`; `mcp/` has its own `npm run typecheck`. **CI** (`.github/workflows/ci.yml`) now runs the full pipeline on push/PR.
 - **Design principle still holds:** the signed-out app is byte-identical to the local-only MVP; cloud features only activate when signed in. (The "dormant when unconfigured" behavior remains the fail-closed default.)
 
 > **One thing unverified:** nobody has actually signed in yet — the Turso `users` table is still empty. The last open go-live step is the owner doing a real two-browser sign-in test (then I confirm the data landed server-side).
@@ -52,6 +52,12 @@ Capacitor 5 + `capacitor-health-connect`; `healthConnect.ts` seam (called on wor
 - **Cloud sync for body stats (B1):** body profile + weight log + challenge progress now sync (Turso `weight_log`/`body_profile`/`challenge_progress`, user-scoped LWW + tombstones) on the same dirty-queue contract as routines/sessions; read-only tokens can't push them.
 - **Deep-dive review + fixes (end of session 7):** a 5-agent review found and fixed — a **PAT-as-cookie auth bypass** (session tokens now `sid`-tagged; a PAT in the cookie no longer becomes a full readwrite session skipping revocation) + **fail-closed `resolveAuth`**; an **app-wide light-theme legibility pass** (a `light:` Tailwind variant adapts every dark tint — badges, session pills, BMI category, Player/Settings/Community/etc. — not just the Player phase tiles); **B1 multi-device convergence** (same-day weigh-in dedup; challenge-day **union** instead of clobber); 403 **pull-only** fallback; wake-lock + modal-focus-trap race fixes. Tests 77 → **123**. **Pushed to `main` + deployed to prod.**
 
+### Session 8 (2026-06-29) — full-project review + fix-everything — **shipped (local, NOT pushed)**
+A 29-agent multi-agent review (committed as `REVIEW.md`, commit `5abfe98`) inventoried the whole app and adversarially verified 22 findings; **all 20 distinct issues were then fixed** across 5 commits, tests 123 → **154**, CI-green. Two were genuinely high-severity:
+- **H2 — sync watermark made server-authoritative (`0bd768d`):** the pull cursor was the server clock but pulls filtered on the *client*-supplied `updatedAt`, so a device with a slow clock could write a row that sorted before another device's saved cursor and be **silently lost forever**. Every synced table now carries a server-stamped `server_updated_at`; pulls + the returned cursor use it (client `updatedAt` kept only for LWW). Also clamps a runaway-future client timestamp so it can't freeze a row. **This resolves the "LWW cursor skew (known)" caveat that used to be in §4.**
+- **H1 — timer drift catch-up (`4e96ea3`):** returning to a backgrounded workout only advanced ONE phase (it rebased on a fixed `now`); now a pure `advancePhase` reducer (shared by `tick()` + the visibility handler) fast-forwards through every elapsed phase, and a workout that finishes while backgrounded saves `completed:true`.
+- **Mediums/lows:** settings-edit-during-sync no longer dropped (M1); challenge-day unmark survives cross-device merge via per-day `clearedDays` tombstones + a new server `cleared_days` column (M2); tombstone GC reaps synced+aged soft-deletes so localStorage can't grow unbounded (M4); `deleteRoutine` now bumps `updatedAt` so routine deletes actually propagate (bonus bug); publish range-validation + atomic caps (L2/L4); OAuth redirect prefers a trusted host (L3); cookie parsing fails closed on a malformed cookie (L5); optional `ALLOWED_EMAILS`/`ALLOWED_PROVIDER_IDS` registration allow-list (L6); `audio.ts` window-guard (L12); a `useLiveData` hook replacing the per-page storage-read memo idiom (L8); + new tests for the client sync engine (M5), OAuth callback (M6), `/api/me` (L11), and merge edge cases (L9). Full ledger + commit map in `REVIEW.md` §0.
+
 ### Cross-cutting — shipped
 - **Vitest, 49 tests** (sync merge/tombstones/migrations, dirty queue, stats/insights, calendar, export/import, auth open-redirect, render smokes).
 - **JSON export/import** (Settings → Data).
@@ -91,7 +97,8 @@ Capacitor 5 + `capacitor-health-connect`; `healthConnect.ts` seam (called on wor
 - **Fail closed when unconfigured.** No env vars → clean 401 / `{user:null}` / "unavailable". Never commit `.env`.
 - **`/api` ESM imports need `.js`** (`type: module` + Vercel ESM runtime).
 - **PAT model (post-S1):** PATs carry a `jti` and are valid only while a non-revoked row exists in the `access_tokens` registry; `scope` is `read`|`readwrite`. Revoke from Settings → Account (or `DELETE /api/token`). `resolveAuth` (api/_lib/tokens.ts) is the single auth path for sync/publish/report.
-- **LWW cursor skew (known):** server-clock cursor vs client `updatedAt`; fine for one user's devices.
+- **Sync watermark is server-authoritative (S8/H2):** every synced table has a server-stamped `server_updated_at`; pulls filter and the cursor advances on *that*, never the client `updatedAt` (which is kept only for LWW tie-breaking). Added idempotently via CREATE + ALTER + backfill in `ensureSchema` (`api/_lib/db.ts`) — the deployed empty DB needs no manual migration. (Replaces the old "LWW cursor skew" caveat.) `challenge_progress` also gained a `cleared_days` column for per-day unmark tombstones (M2).
+- **Optional single-tenant lock-down (S8/L6):** set `ALLOWED_EMAILS` and/or `ALLOWED_PROVIDER_IDS` (comma-separated) to restrict who can register; **unset = open registration (default)**, so leaving them blank never locks the owner out.
 - **Verify** with `tsc -b` + `lint` + `test` + `build` (+ `mcp` typecheck); cloud changes get a local `vercel dev` + file-DB e2e before deploy.
 
 ---
@@ -106,5 +113,6 @@ Capacitor 5 + `capacitor-health-connect`; `healthConnect.ts` seam (called on wor
 - `src/lib/community.ts` · `src/pages/Community.tsx` — Phase 3c client.
 - `src/lib/healthConnect.ts` · `src/native-health.ts` · `capacitor.config.json` · `ANDROID.md` — Phase 2.
 - `api/_lib/{auth,db}.ts` · `api/{sync,me,token}.ts` · `api/auth/*` · `api/routines/*`.
+- `src/hooks/useLiveData.ts` — shared "read storage, recompute on nav + sync" hook (S8/L8); used by the data-display pages.
 - `mcp/` — MCP server (`src/server.ts`, `README.md`).
-- Docs: `ROADMAP.md` (phases + exploratory ideas), `SETUP_SYNC.md` / `UNBLOCK.md` (sync setup — now done), `HANDOFF.md` (historical, superseded by this file), `PHASE3.md` (on the `phase-3-draft` branch).
+- Docs: `HANDOFF.md` (current zero-context handoff — read first), `REVIEW.md` (full-project review + fix-resolution table), `ROADMAP.md` (phases + exploratory ideas), `SETUP_SYNC.md` / `UNBLOCK.md` (sync setup — now done), `PHASE3.md` (on the `phase-3-draft` branch).
