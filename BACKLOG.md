@@ -14,7 +14,7 @@ Forward-looking work list, written to be picked up **with zero prior context**. 
 
 **Shipped recently (don't redo — see `git log`):** 71 exercises + cues, Stats/BMI, Calendar, Challenges + auto-completion, mobile-first Dashboard, responsive nav, exercise modal, first-run empty states, goal-weight/trend deltas, player empty-routine guard, route code-splitting, render + `/api` tests + CI, **29 real exercise images**, **light theme + toggle**, **revocable/scoped tokens + community hardening (S1)**, **token management UX (S2)**, **cloud sync for body/weight/challenge (B1)**, **full-project review + all 20 findings fixed (S8 — see `REVIEW.md`): server-authoritative sync watermark (H2), timer drift catch-up (H1), settings/challenge/tombstone-GC data-integrity, backend hardening, `useLiveData` hook, +31 tests**.
 
-> ⚠️ **First thing for the next session: this session's 7 commits are local-only — `main` is ahead of `origin/main` by 7 and NOT pushed.** Decide whether to push (and `vercel --prod`) before/after the owner verifies the fixes.
+> ✅ **Session 9: all session-8 fixes + the session-9 work are pushed to `origin/main` and redeployed to prod (verified).** The only remaining go-live step is the owner's real two-browser sign-in test (F1) — the Turso `users` table is still empty.
 
 ---
 
