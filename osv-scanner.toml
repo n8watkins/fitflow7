@@ -2,16 +2,6 @@
 # exact version in package-lock.json, so an upgrade scans it again, and expires
 # on 2027-02-01 so it is looked at again either way.
 
-# tar 6 comes only from @capacitor/cli 5, run locally to sync the Android project.
-# Fixed by the Capacitor 8 upgrade (a separate migration).
-[[PackageOverrides]]
-name = "tar"
-version = "6.2.1"
-ecosystem = "npm"
-ignore = true
-effectiveUntil = 2027-02-01
-reason = "Only in @capacitor/cli 5 (local Android sync tooling); fixed by upgrading Capacitor"
-
 # These come only from @vercel/node, which the API imports for types alone. Even its
 # latest release pins these versions, so there is no upgrade to take yet.
 [[PackageOverrides]]

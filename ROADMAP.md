@@ -74,7 +74,7 @@ Built across commits in session 4. Enable via `SETUP_SYNC.md`.
 Decision (user): Capacitor native shell + **Health Connect write**, sideloaded —
 no Play Store. The PWA is also already installable as-is.
 
-- **In the repo, verified:** Capacitor 5 + `capacitor-health-connect` deps
+- **In the repo, verified:** Capacitor 8 + `@capgo/capacitor-health` deps
   installed; `capacitor.config.json`; `src/lib/healthConnect.ts` seam called from
   `timerStore` on complete; `src/native-health.ts` (real writer) gated by
   `VITE_NATIVE` in `main.tsx`. Both builds verified — web bundle excludes the
