@@ -656,6 +656,63 @@ describe.skipIf(remote)('OAuth callback (M6, L6)', () => {
     expect(await res.text()).toBe('Failed to obtain access token.')
   })
 
+  it('logs one JSON line per failure naming the reason, never the code, state or cookie', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const reasons = () => warn.mock.calls.map((c) => JSON.parse(String(c[0])) as Record<string, unknown>)
+      stubGithub({ id: 1, login: 'a', name: 'A', email: 'a@b.com' }, null)
+
+      await call('/api/auth/callback?code=secretcode&state=secretstate')
+      const s1 = await startLogin()
+      await call('/api/auth/callback?code=secretcode&state=wrong', { headers: { cookie: s1.cookie } })
+      const s2 = await startLogin()
+      await call(`/api/auth/callback?state=${s2.state}&error=access_denied`, { headers: { cookie: s2.cookie } })
+      await call(`/api/auth/callback?code=c&state=${s2.state}`, { headers: { cookie: 'ff_oauth=forged.sig' } })
+      const s3 = await startLogin()
+      await call(`/api/auth/callback?code=secretcode&state=${s3.state}`, { headers: { cookie: s3.cookie } })
+
+      expect(reasons()).toEqual([
+        { event: 'auth_callback_failed', reason: 'missing_cookie', route: '/api/auth/callback', status: 400 },
+        { event: 'auth_callback_failed', reason: 'state_mismatch', route: '/api/auth/callback', status: 400, provider: 'github' },
+        { event: 'auth_callback_failed', reason: 'missing_code', route: '/api/auth/callback', status: 400, provider: 'github', providerError: 'access_denied' },
+        { event: 'auth_callback_failed', reason: 'invalid_cookie', route: '/api/auth/callback', status: 400 },
+        {
+          event: 'auth_callback_failed', reason: 'token_exchange_failed', route: '/api/auth/callback', status: 502,
+          provider: 'github', providerStatus: 200, providerError: 'bad_verification_code',
+        },
+      ])
+      const logged = warn.mock.calls.map((c) => String(c[0])).join('\n')
+      for (const secret of ['secretcode', 'secretstate', s1.state, s3.state, 'forged', 'gsecret']) {
+        expect(logged).not.toContain(secret)
+      }
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('logs profile_fetch_failed when the provider profile call fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      env.GITHUB_CLIENT_ID = 'gid'
+      env.GITHUB_CLIENT_SECRET = 'gsecret'
+      globalThis.fetch = (async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+        return url.startsWith('https://github.com/login/oauth/access_token')
+          ? new Response(JSON.stringify({ access_token: 'tok' }), { headers: { 'content-type': 'application/json' } })
+          : new Response('{}', { status: 401 })
+      }) as typeof fetch
+      const s = await startLogin()
+      const res = await call(`/api/auth/callback?code=c&state=${s.state}`, { headers: { cookie: s.cookie } })
+      expect(res.status).toBe(500)
+      expect(JSON.parse(String(error.mock.calls[0]?.[0]))).toEqual({
+        event: 'auth_callback_failed', reason: 'profile_fetch_failed', route: '/api/auth/callback', status: 500,
+        provider: 'github', error: 'Error: GitHub profile fetch failed: 401',
+      })
+    } finally {
+      error.mockRestore()
+    }
+  })
+
   it('answers 501 when the provider was switched off after login started', async () => {
     stubGithub({ id: 1, login: 'a', name: 'A', email: 'a@b.com' })
     const s = await startLogin()

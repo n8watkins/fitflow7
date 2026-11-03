@@ -323,6 +323,11 @@ export function readOAuthState(
   return decodeToken(ctx.env, parseCookies(ctx)[STATE_COOKIE])
 }
 
+/** Whether the request carried an OAuth state cookie at all, valid or not. */
+export function hasOAuthStateCookie(ctx: ApiContext): boolean {
+  return Boolean(parseCookies(ctx)[STATE_COOKIE])
+}
+
 export function clearOAuthState(ctx: ApiContext): void {
   ctx.appendCookie(serializeCookie(STATE_COOKIE, '', 0))
 }
