@@ -23,7 +23,7 @@ Turso (libSQL) + Vercel `/api` (auto-creating schema); hand-rolled GitHub/Google
 `mcp/` stdio server, token-authed (`POST /api/token`, "Generate access token" in Settings). Tools: `get_workout_history`, `get_stats`, `list_routines`, `log_session`, `compare_periods`, `get_personal_records`, `get_routine_detail`. Verified e2e (5/5 + 4/4). Returns your real data once you've signed in + generated a token. See `mcp/README.md`.
 
 ### Phase 2 — Android + Health Connect — **code complete (APK is owner-run)**
-Capacitor 5 + `capacitor-health-connect`; `healthConnect.ts` seam (called on workout complete) + `native-health.ts` (`ActiveCaloriesBurned`), gated by `VITE_NATIVE` so it never enters the web bundle. Both builds verified. Build/sideload steps in `ANDROID.md`.
+Capacitor 8 + `@capgo/capacitor-health`; `healthConnect.ts` seam (called on workout complete) + `native-health.ts` (active calories burned), gated by `VITE_NATIVE` so it never enters the web bundle. Both builds verified. Build/sideload steps in `ANDROID.md`.
 
 ### Phase 3a — Insights — **shipped (live, works signed-out)**
 `/insights`: weekly activity, GitHub-style heatmap, weekday distribution, top routines, completion rate. `computeInsights()` + hand-rolled SVG charts (no chart dep).

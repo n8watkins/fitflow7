@@ -5,29 +5,32 @@ Turn the app into a sideloadable Android app that writes finished workouts to
 
 ## What's already done in the repo
 
-- **Capacitor + plugin deps installed** (`@capacitor/core`, `@capacitor/cli`,
-  `@capacitor/android`, `capacitor-health-connect`), all pinned to Capacitor 5
-  (the plugin requires it).
-- `capacitor.config.json` — app id `dev.n8builds.fitflow7`, bundles `dist/`.
-- `src/lib/healthConnect.ts` — build-safe seam; `timerStore` already calls it on
+- **Capacitor 8 and the Health plugin** (`@capacitor/core`, `@capacitor/cli`,
+  `@capacitor/android`, `@capgo/capacitor-health`).
+- `capacitor.config.json`: app id `dev.n8builds.fitflow7`, bundles `dist/`.
+- `src/lib/healthConnect.ts`: build-safe seam; `timerStore` already calls it on
   workout complete (no-op on web).
-- `src/native-health.ts` — the real native writer, registered on `window` and
+- `src/native-health.ts`: the real native writer, registered on `window` and
   loaded **only** in the native build (gated by `VITE_NATIVE` in `main.tsx`).
-  Verified to compile and bundle; it never enters the web/Vercel bundle.
+  It never enters the web/Vercel bundle.
+- `public/privacypolicy.html`: the page Health Connect shows from its
+  permission screen. The build copies it to `assets/public/`, where the plugin
+  looks for it.
 
-> **Record type note:** `capacitor-health-connect` v0.7 has no `ExerciseSession`
-> record, so a workout is written as **ActiveCaloriesBurned** over the workout
-> window. Calories are a rough duration estimate (`CALORIES_PER_MINUTE` in
-> `native-health.ts`) since the app has no body-weight input — tune as you like.
+A finished workout is written as **active calories burned** over the workout
+window. Calories are a rough duration estimate (`CALORIES_PER_MINUTE` in
+`native-health.ts`), since the app has no body-weight input.
 
-So the web side is finished. Everything below runs on **your** machine (it needs
-the Android toolchain + a device, which can't run from this repo's CI).
+Everything below runs on **your** machine: it needs the Android toolchain and a
+phone, which CI doesn't have.
 
 ## Prerequisites (one time)
 
-- **Android Studio** (Android SDK + Gradle) and **JDK 17**.
-- A phone with **Health Connect** (built into Android 14+; older devices install
-  it from the Play Store) and **USB debugging** enabled.
+- **Node 22 or newer** (Capacitor 8's CLI needs it).
+- **Android Studio** (recent: Android SDK 36 and Gradle) and **JDK 21**
+  (Android Studio's bundled JDK is fine).
+- A phone on **Android 8 or newer** with **Health Connect** (built into Android
+  14+; older versions install it from the Play Store) and **USB debugging** on.
 
 ## 1. Build the native web bundle
 
@@ -35,57 +38,47 @@ the Android toolchain + a device, which can't run from this repo's CI).
 VITE_NATIVE=true npm run build
 ```
 
-This is the only build that includes the Health Connect plugin. (Plain
-`npm run build`, used by Vercel, deliberately excludes it.)
+This is the only build that includes the Health plugin. Plain `npm run build`,
+which Vercel uses, leaves it out.
 
-## 2. Add the Android platform + sync
+## 2. Add the Android platform and sync
 
 ```bash
-npx cap add android
+npx cap add android      # first time only; creates android/ (not committed)
 npx cap sync android
 ```
 
-## 3. Declare the Health Connect permission
+Then raise the minimum Android version to 8.0, which Health Connect needs: in
+`android/variables.gradle`, set `minSdkVersion = 26`.
 
-In `android/app/src/main/AndroidManifest.xml`, inside `<manifest>`:
+The plugin declares the Health Connect permissions and the permission-rationale
+screen itself, so `AndroidManifest.xml` needs no edits.
 
-```xml
-<uses-permission android:name="android.permission.health.WRITE_ACTIVE_CALORIES_BURNED" />
-```
-
-Health Connect also wants a permissions-rationale activity. Inside `<application>`:
-
-```xml
-<activity-alias
-  android:name="ViewPermissionUsageActivity"
-  android:exported="true"
-  android:targetActivity=".MainActivity"
-  android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
-  <intent-filter>
-    <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
-    <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
-  </intent-filter>
-</activity-alias>
-```
-
-(Confirm the current required manifest entries against the `capacitor-health-connect`
-README — Health Connect's requirements shift across Android versions.)
-
-## 4. Build the APK + sideload
+## 3. Build the APK and sideload it
 
 ```bash
-npx cap open android        # opens Android Studio
+npx cap open android     # opens Android Studio
 ```
 
-In Android Studio: **Build → Build APK(s)**, then install on the device
-(`adb install app/build/outputs/apk/debug/app-debug.apk`, or drag-drop). On the
-first completed workout the app requests Health Connect permission; after you
-grant it, sessions show up in Health Connect → Active calories.
+In Android Studio: **Build → Build APK(s)**, then install it on the phone
+(`adb install app/build/outputs/apk/debug/app-debug.apk`, or drag and drop).
+
+## 4. Check it on the phone
+
+1. Finish a short workout. The app asks for Health Connect access the first
+   time; allow **Active calories burned**.
+2. Open Health Connect → **Data and access** → **Activity** → **Active
+   calories burned**. The workout's calories appear for its time window, with
+   FitFlow 7 as the source.
+3. In Health Connect → **App permissions** → FitFlow 7, the privacy link opens
+   the FitFlow 7 privacy page.
 
 ## Re-deploying changes
 
 - After web changes: `VITE_NATIVE=true npm run build && npx cap sync android`,
   then rebuild the APK.
+- After upgrading Capacitor: `npx cap sync android`; if Android Studio reports
+  Gradle or SDK mismatches, run `npx cap migrate`.
 - Prefer always-latest without rebuilding the bundle? Set `server.url` to
   `https://fitflow7.vercel.app` in `capacitor.config.json` — but then the Health
   Connect plugin won't be present (the live site is the plain web build), so keep
