@@ -66,13 +66,14 @@ current streak?"*, or *"Log the 7-minute workout I just finished."*
 ## Local development / verification
 
 The server can be exercised without the production backend, against
-`vercel dev` + a local file DB (how it was validated):
+the Worker running locally (`npm run preview:worker`) and a local libSQL server:
 
 ```bash
-# from the repo root, with a local .env (TURSO_DATABASE_URL=file:..., SESSION_SECRET=...)
-vercel dev
+# from the repo root, with a .dev.vars (TURSO_DATABASE_URL=http://127.0.0.1:8080, SESSION_SECRET=...)
+turso dev --port 8080 &
+npm run preview:worker
 # mint a PAT signed with the same SESSION_SECRET, then:
-FITFLOW_API_URL=http://localhost:3001 FITFLOW_TOKEN=<pat> npm start
+FITFLOW_API_URL=http://localhost:8787 FITFLOW_TOKEN=<pat> npm start
 ```
 
 `npm run typecheck` type-checks the server.

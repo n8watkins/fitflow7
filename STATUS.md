@@ -98,11 +98,11 @@ A 29-agent multi-agent review (committed as `REVIEW.md`, commit `5abfe98`) inven
 
 - **Single-user by construction.** Cloud tables scoped by `user_id`; sync is LWW by `updatedAt`. Sharing (3c, Phase 4) is **copy-on-clone** via **separate endpoints** — never widen `/api/sync` to serve other users.
 - **Fail closed when unconfigured.** No env vars → clean 401 / `{user:null}` / "unavailable". Never commit `.env`.
-- **`/api` ESM imports need `.js`** (`type: module` + Vercel ESM runtime).
+- **The API is a Cloudflare Worker** (`worker/`, `wrangler.jsonc`); it reads config from the Worker env, not `process.env`.
 - **PAT model (post-S1):** PATs carry a `jti` and are valid only while a non-revoked row exists in the `access_tokens` registry; `scope` is `read`|`readwrite`. Revoke from Settings → Account (or `DELETE /api/token`). `resolveAuth` (api/_lib/tokens.ts) is the single auth path for sync/publish/report.
 - **Sync watermark is server-authoritative (S8/H2):** every synced table has a server-stamped `server_updated_at`; pulls filter and the cursor advances on *that*, never the client `updatedAt` (which is kept only for LWW tie-breaking). Added idempotently via CREATE + ALTER + backfill in `ensureSchema` (`api/_lib/db.ts`) — the deployed empty DB needs no manual migration. (Replaces the old "LWW cursor skew" caveat.) `challenge_progress` also gained a `cleared_days` column for per-day unmark tombstones (M2).
 - **Optional single-tenant lock-down (S8/L6):** set `ALLOWED_EMAILS` and/or `ALLOWED_PROVIDER_IDS` (comma-separated) to restrict who can register; **unset = open registration (default)**, so leaving them blank never locks the owner out.
-- **Verify** with `tsc -b` + `lint` + `test` + `build` (+ `mcp` typecheck); cloud changes get a local `vercel dev` + file-DB e2e before deploy.
+- **Verify** with `tsc -b` + `lint` + `test` + `build` (+ `mcp` typecheck); cloud changes get the contract suite against `wrangler dev` before deploy.
 
 ---
 

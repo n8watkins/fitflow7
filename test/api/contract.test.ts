@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { handle } from './target.ts'
+import { handle, remote } from './target.ts'
 import {
   DB_URL, ORIGIN, SECRET, cookieValue, request, sessionCookie, setCookies, testDb, unregisteredPat,
   type ApiEnv, type Req,
@@ -69,7 +69,7 @@ describe('routing', () => {
 })
 
 describe('auth gating', () => {
-  it('me returns { user: null } and the configured providers when unauthenticated', async () => {
+  it.skipIf(remote)('me returns { user: null } and the configured providers when unauthenticated', async () => {
     env.GITHUB_CLIENT_ID = 'gid'
     env.GITHUB_CLIENT_SECRET = 'gsecret'
     env.GOOGLE_CLIENT_ID = 'only-an-id'
@@ -103,7 +103,7 @@ describe('auth gating', () => {
     }
   })
 
-  it('fails closed when unconfigured: a valid-looking token is rejected with no SESSION_SECRET', async () => {
+  it.skipIf(remote)('fails closed when unconfigured: a valid-looking token is rejected with no SESSION_SECRET', async () => {
     const headers = await bearer('userA')
     delete env.SESSION_SECRET
     expect((await call('/api/sync', { method: 'POST', headers, json: {} })).status).toBe(401)
@@ -122,7 +122,7 @@ describe('logout', () => {
 })
 
 describe('login', () => {
-  it('rejects an unknown provider with 400 and an unconfigured one with 501', async () => {
+  it.skipIf(remote)('rejects an unknown provider with 400 and an unconfigured one with 501', async () => {
     const bad = await call('/api/auth/login?provider=bogus')
     expect(bad.status).toBe(400)
     expect(await json(bad)).toEqual({ error: 'unknown provider' })
@@ -133,7 +133,7 @@ describe('login', () => {
     expect(await json(off)).toEqual({ error: 'google OAuth is not configured' })
   })
 
-  it('redirects to the provider with a signed state cookie', async () => {
+  it.skipIf(remote)('redirects to the provider with a signed state cookie', async () => {
     env.GITHUB_CLIENT_ID = 'gid'
     env.GITHUB_CLIENT_SECRET = 'gsecret'
     env.APP_URL = 'https://app.example/'
@@ -153,7 +153,7 @@ describe('login', () => {
     expect(payload).toMatchObject({ state, provider: 'github', returnTo: '/stats' })
   })
 
-  it('uses Google’s endpoint and scope, and drops an unsafe returnTo', async () => {
+  it.skipIf(remote)('uses Google’s endpoint and scope, and drops an unsafe returnTo', async () => {
     env.GOOGLE_CLIENT_ID = 'goid'
     env.GOOGLE_CLIENT_SECRET = 'gosecret'
     const res = await call('/api/auth/login?provider=google&returnTo=//evil.com')
@@ -232,7 +232,7 @@ describe('sync - LWW + tombstones + user scoping', () => {
   })
 })
 
-describe('sync watermark is server-authoritative (H2)', () => {
+describe.skipIf(remote)('sync watermark is server-authoritative (H2)', () => {
   afterEach(() => vi.useRealTimers())
 
   it('a behind-clock device’s writes survive the cursor (not lost)', async () => {
@@ -278,7 +278,7 @@ describe('S1 - revocable + scoped tokens', () => {
     expect(res.status).toBe(401)
   })
 
-  it('a token signed with another secret is rejected', async () => {
+  it.skipIf(remote)('a token signed with another secret is rejected', async () => {
     const t = await mint('userA')
     env.SESSION_SECRET = 'rotated'
     expect((await call('/api/sync', { method: 'POST', headers: t.headers, json: {} })).status).toBe(401)
@@ -558,7 +558,7 @@ describe('cookie parsing fails closed (L5)', () => {
 })
 
 describe('/api/me authenticated branch (L11)', () => {
-  it('maps the user row for a valid session and returns null for a missing row', async () => {
+  it.skipIf(remote)('maps the user row for a valid session and returns null for a missing row', async () => {
     await testDb().execute({
       sql: `INSERT INTO users (id, provider, provider_id, email, name, avatar_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       args: ['u-me', 'github', 'gh-9', 'me@x.com', 'Me', 'http://a/v.png', '2026-01-01T00:00:00.000Z'],
@@ -574,7 +574,7 @@ describe('/api/me authenticated branch (L11)', () => {
   })
 })
 
-describe('OAuth callback (M6, L6)', () => {
+describe.skipIf(remote)('OAuth callback (M6, L6)', () => {
   const realFetch = globalThis.fetch
   afterEach(() => { globalThis.fetch = realFetch })
 

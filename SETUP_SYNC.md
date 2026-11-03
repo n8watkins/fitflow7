@@ -41,14 +41,19 @@ Credentials" -> "OAuth client ID" -> Application type "Web application"
 - Authorized redirect URI: `https://fitflow7.vercel.app/api/auth/callback`
 - Copy Client ID + Secret -> `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
 
-For local testing with `vercel dev`, also add
-`http://localhost:3000/api/auth/callback` as a callback/redirect URI.
+Use the host the app is served from: on Cloudflare that is the Worker's
+address (for example `https://fitflow7.<account>.workers.dev`) or its custom
+domain. For local testing with `npm run preview:worker`, also add
+`http://localhost:8787/api/auth/callback` as a callback/redirect URI.
 
-## 4. Set the env vars
+## 4. Set the secrets
 
-- **Production:** Vercel dashboard -> Project -> Settings -> Environment
-  Variables. Add each key from `.env.example`. Redeploy.
-- **Local:** `cp .env.example .env`, fill it in, run `vercel dev`.
+- **Production:** set each key from `.env.example` as a Worker secret, typing
+  the value at the prompt: `npx wrangler secret put SESSION_SECRET` (and so on).
+  `SESSION_SECRET`, `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are required;
+  a deploy fails until they are set.
+- **Local:** `cp .env.example .dev.vars`, fill it in, run
+  `npm run preview:worker`.
 
 ## 5. Verify
 

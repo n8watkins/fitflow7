@@ -1,32 +1,34 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
 import crypto from 'node:crypto'
 import {
   PROVIDERS,
   clearOAuthState,
+  getCredentials,
   getRedirectUri,
   isAllowedIdentity,
   readOAuthState,
   sanitizeReturnTo,
   setSession,
-} from '../_lib/auth.js'
-import { ensureSchema, getDb } from '../_lib/db.js'
+} from '../../lib/auth.ts'
+import { ensureSchema, getDb } from '../../lib/db.ts'
+import type { ApiContext } from '../../lib/http.ts'
 
 // GET /api/auth/callback?code=...&state=...
 // Verifies state, exchanges the code for an access token, fetches the profile,
 // upserts the user, issues a session cookie, and bounces back into the app.
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const code = Array.isArray(req.query.code) ? req.query.code[0] : req.query.code
-  const state = Array.isArray(req.query.state) ? req.query.state[0] : req.query.state
+export default async function callback(ctx: ApiContext): Promise<Response> {
+  const code = ctx.query('code')
+  const state = ctx.query('state')
 
-  const saved = readOAuthState(req)
-  clearOAuthState(res)
+  const saved = readOAuthState(ctx)
+  clearOAuthState(ctx)
   if (!saved || !state || saved.state !== state || !code) {
-    return res.status(400).send('OAuth state mismatch — please try signing in again.')
+    return ctx.send(400, 'OAuth state mismatch — please try signing in again.')
   }
 
   const config = PROVIDERS[saved.provider]
-  if (!config.clientId || !config.clientSecret) {
-    return res.status(501).send('Provider not configured.')
+  const credentials = getCredentials(ctx.env, saved.provider)
+  if (!credentials) {
+    return ctx.send(501, 'Provider not configured.')
   }
 
   try {
@@ -35,29 +37,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
       body: new URLSearchParams({
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
+        client_id: credentials.clientId,
+        client_secret: credentials.clientSecret,
         code,
-        redirect_uri: getRedirectUri(req),
+        redirect_uri: getRedirectUri(ctx),
         grant_type: 'authorization_code',
       }).toString(),
     })
     const tokenJson = (await tokenRes.json()) as { access_token?: string }
     if (!tokenJson.access_token) {
-      return res.status(502).send('Failed to obtain access token.')
+      return ctx.send(502, 'Failed to obtain access token.')
     }
 
     const profile = await config.fetchProfile(tokenJson.access_token)
 
     // Optional single-tenant lock-down: if an allow-list is configured, reject
     // identities that aren't on it before creating any account (L6).
-    if (!isAllowedIdentity(saved.provider, profile)) {
-      return res.status(403).send('This deployment is private — your account is not permitted.')
+    if (!isAllowedIdentity(ctx.env, saved.provider, profile)) {
+      return ctx.send(403, 'This deployment is private — your account is not permitted.')
     }
 
     // Upsert the user; keep the existing id on conflict.
-    await ensureSchema()
-    const db = getDb()
+    await ensureSchema(ctx.env)
+    const db = getDb(ctx.env)
     const result = await db.execute({
       sql: `INSERT INTO users (id, provider, provider_id, email, name, avatar_url, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -75,11 +77,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ],
     })
     const userId = result.rows[0]?.id as string | undefined
-    if (!userId) return res.status(500).send('Sign-in failed. Please try again.')
+    if (!userId) return ctx.send(500, 'Sign-in failed. Please try again.')
 
-    setSession(res, userId)
-    res.redirect(302, sanitizeReturnTo(saved.returnTo))
+    setSession(ctx, userId)
+    return ctx.redirect(302, sanitizeReturnTo(saved.returnTo))
   } catch {
-    res.status(500).send('Sign-in failed. Please try again.')
+    return ctx.send(500, 'Sign-in failed. Please try again.')
   }
 }

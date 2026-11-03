@@ -1,11 +1,11 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
 import crypto from 'node:crypto'
+import type { ApiContext, ApiEnv } from './http.ts'
 
 // ---------------------------------------------------------------------------
 // Hand-rolled OAuth (GitHub / Google) + signed-cookie sessions.
 //
 // No auth SDK: the OAuth "authorization code" flow is a few fetches, and Node's
-// built-in crypto signs our own session token (HMAC-SHA256). Sessions are
+// crypto (node:crypto, through nodejs_compat) signs our own session token (HMAC-SHA256). Sessions are
 // stateless signed tokens stored in an httpOnly cookie — no server session table.
 // ---------------------------------------------------------------------------
 
@@ -19,8 +19,6 @@ export interface NormalizedProfile {
 }
 
 export interface ProviderConfig {
-  clientId?: string
-  clientSecret?: string
   authorizeUrl: string
   tokenUrl: string
   scope: string
@@ -37,8 +35,6 @@ const STATE_TTL_SECONDS = 60 * 10 // 10 minutes
 // ---------------------------------------------------------------------------
 export const PROVIDERS: Record<Provider, ProviderConfig> = {
   github: {
-    clientId: process.env.GITHUB_CLIENT_ID,
-    clientSecret: process.env.GITHUB_CLIENT_SECRET,
     authorizeUrl: 'https://github.com/login/oauth/authorize',
     tokenUrl: 'https://github.com/login/oauth/access_token',
     scope: 'read:user user:email',
@@ -78,8 +74,6 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     },
   },
   google: {
-    clientId: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
     tokenUrl: 'https://oauth2.googleapis.com/token',
     scope: 'openid email profile',
@@ -103,23 +97,28 @@ export function isProvider(value: string | undefined): value is Provider {
   return value === 'github' || value === 'google'
 }
 
+/** A provider's OAuth client id and secret, or null while either is missing. */
+export function getCredentials(env: ApiEnv, provider: Provider): { clientId: string; clientSecret: string } | null {
+  const clientId = provider === 'github' ? env.GITHUB_CLIENT_ID : env.GOOGLE_CLIENT_ID
+  const clientSecret = provider === 'github' ? env.GITHUB_CLIENT_SECRET : env.GOOGLE_CLIENT_SECRET
+  return clientId && clientSecret ? { clientId, clientSecret } : null
+}
+
 /** Providers that are actually configured (both client id + secret present). The
  *  client uses this so the sign-in UI only shows buttons that will work. */
-export function getConfiguredProviders(): Provider[] {
-  return (Object.keys(PROVIDERS) as Provider[]).filter((p) =>
-    Boolean(PROVIDERS[p].clientId && PROVIDERS[p].clientSecret),
-  )
+export function getConfiguredProviders(env: ApiEnv): Provider[] {
+  return (Object.keys(PROVIDERS) as Provider[]).filter((p) => getCredentials(env, p) !== null)
 }
 
 /** Optional single-tenant lockdown (L6). When ALLOWED_EMAILS or
  *  ALLOWED_PROVIDER_IDS is set, only matching identities may register/sign in;
  *  when BOTH are unset, registration is open (the default — never locks the owner
  *  out). Provider ids may be listed bare ("123") or scoped ("github:123"). */
-export function isAllowedIdentity(provider: Provider, profile: NormalizedProfile): boolean {
+export function isAllowedIdentity(env: ApiEnv, provider: Provider, profile: NormalizedProfile): boolean {
   const list = (v: string | undefined) =>
     (v ?? '').split(',').map((s) => s.trim()).filter(Boolean)
-  const emails = list(process.env.ALLOWED_EMAILS).map((s) => s.toLowerCase())
-  const ids = list(process.env.ALLOWED_PROVIDER_IDS)
+  const emails = list(env.ALLOWED_EMAILS).map((s) => s.toLowerCase())
+  const ids = list(env.ALLOWED_PROVIDER_IDS)
   if (emails.length === 0 && ids.length === 0) return true
   const email = profile.email?.toLowerCase()
   if (email && emails.includes(email)) return true
@@ -129,21 +128,16 @@ export function isAllowedIdentity(provider: Provider, profile: NormalizedProfile
 // ---------------------------------------------------------------------------
 // Base URL + redirect URI
 // ---------------------------------------------------------------------------
-export function getBaseUrl(req: VercelRequest): string {
-  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, '')
-  // Vercel sets this to the project's canonical production domain — server-trusted
-  // and not client-controllable. Prefer it over request headers so the OAuth
-  // redirect_uri can't be influenced by a spoofed Host header (L3). Set APP_URL
-  // to pin a specific origin (e.g. a custom domain or preview).
-  const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  if (vercelHost) return `https://${vercelHost.replace(/\/$/, '')}`
-  const proto = (req.headers['x-forwarded-proto'] as string) || 'https'
-  const host = req.headers['x-forwarded-host'] || req.headers.host
-  return `${proto}://${host}`
+export function getBaseUrl(ctx: ApiContext): string {
+  if (ctx.env.APP_URL) return ctx.env.APP_URL.replace(/\/$/, '')
+  // The origin the request reached this Worker on. Cloudflare routes a request
+  // to the Worker by that hostname, so a spoofed Host header can't steer the
+  // OAuth redirect_uri elsewhere (L3). Set APP_URL to pin a specific origin.
+  return ctx.url.origin
 }
 
-export function getRedirectUri(req: VercelRequest): string {
-  return `${getBaseUrl(req)}/api/auth/callback`
+export function getRedirectUri(ctx: ApiContext): string {
+  return `${getBaseUrl(ctx)}/api/auth/callback`
 }
 
 /** Restricts a post-login returnTo to a same-origin absolute path. Rejects
@@ -166,8 +160,8 @@ export function sanitizeReturnTo(raw: string | undefined): string {
 // ---------------------------------------------------------------------------
 // Signed-token helpers (HMAC-SHA256 over a base64url JSON payload)
 // ---------------------------------------------------------------------------
-function getSecret(): string {
-  const secret = process.env.SESSION_SECRET
+function getSecret(env: ApiEnv): string {
+  const secret = env.SESSION_SECRET
   if (!secret) throw new Error('SESSION_SECRET is not set')
   return secret
 }
@@ -176,23 +170,23 @@ function b64url(input: Buffer | string): string {
   return Buffer.from(input).toString('base64url')
 }
 
-function sign(payloadB64: string): string {
-  return crypto.createHmac('sha256', getSecret()).update(payloadB64).digest('base64url')
+function sign(env: ApiEnv, payloadB64: string): string {
+  return crypto.createHmac('sha256', getSecret(env)).update(payloadB64).digest('base64url')
 }
 
-function encodeToken(payload: Record<string, unknown>): string {
+function encodeToken(env: ApiEnv, payload: Record<string, unknown>): string {
   const body = b64url(JSON.stringify(payload))
-  return `${body}.${sign(body)}`
+  return `${body}.${sign(env, body)}`
 }
 
-function decodeToken<T>(token: string | undefined): T | null {
+function decodeToken<T>(env: ApiEnv, token: string | undefined): T | null {
   if (!token) return null
   const [body, sig] = token.split('.')
   if (!body || !sig) return null
   try {
     // sign() throws if SESSION_SECRET is unset — in the dormant (unconfigured)
     // state a stray token must read as "unauthenticated", not crash the function.
-    const expected = sign(body)
+    const expected = sign(env, body)
     // Constant-time compare; lengths must match first or timingSafeEqual throws.
     if (sig.length !== expected.length) return null
     if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null
@@ -207,8 +201,8 @@ function decodeToken<T>(token: string | undefined): T | null {
 // ---------------------------------------------------------------------------
 // Cookies
 // ---------------------------------------------------------------------------
-function parseCookies(req: VercelRequest): Record<string, string> {
-  const header = req.headers.cookie
+function parseCookies(ctx: ApiContext): Record<string, string> {
+  const header = ctx.headers.get('cookie')
   if (!header) return {}
   const out: Record<string, string> = {}
   for (const c of header.split(';')) {
@@ -239,36 +233,30 @@ function serializeCookie(name: string, value: string, maxAgeSeconds: number): st
   return parts.join('; ')
 }
 
-function appendCookie(res: VercelResponse, cookie: string): void {
-  const prev = res.getHeader('Set-Cookie')
-  const list = prev ? (Array.isArray(prev) ? prev : [String(prev)]) : []
-  res.setHeader('Set-Cookie', [...list, cookie])
-}
-
 // ---------------------------------------------------------------------------
 // Session API
 // ---------------------------------------------------------------------------
 /** Signs a browser-session token. `sid: true` marks it as a session (vs a
  *  `pat: true` access token); getUserId requires it, so a PAT can never be
  *  replayed via the cookie to gain a full session (bypassing scope/revocation). */
-export function createSessionToken(userId: string): string {
-  return encodeToken({ uid: userId, sid: true, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS })
+export function createSessionToken(env: ApiEnv, userId: string): string {
+  return encodeToken(env, { uid: userId, sid: true, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS })
 }
 
-export function setSession(res: VercelResponse, userId: string): void {
-  appendCookie(res, serializeCookie(SESSION_COOKIE, createSessionToken(userId), SESSION_TTL_SECONDS))
+export function setSession(ctx: ApiContext, userId: string): void {
+  ctx.appendCookie(serializeCookie(SESSION_COOKIE, createSessionToken(ctx.env, userId), SESSION_TTL_SECONDS))
 }
 
-export function clearSession(res: VercelResponse): void {
-  appendCookie(res, serializeCookie(SESSION_COOKIE, '', 0))
+export function clearSession(ctx: ApiContext): void {
+  ctx.appendCookie(serializeCookie(SESSION_COOKIE, '', 0))
 }
 
 /** Returns the authenticated user id from the session cookie, or null. Only
  *  accepts genuine session tokens (`sid`) — a PAT (`pat`) presented via the
  *  cookie is rejected, so it can't bypass token scope/revocation. */
-export function getUserId(req: VercelRequest): string | null {
-  const token = parseCookies(req)[SESSION_COOKIE]
-  const payload = decodeToken<{ uid?: string; sid?: boolean; pat?: boolean }>(token)
+export function getUserId(ctx: ApiContext): string | null {
+  const token = parseCookies(ctx)[SESSION_COOKIE]
+  const payload = decodeToken<{ uid?: string; sid?: boolean; pat?: boolean }>(ctx.env, token)
   if (!payload?.sid || payload.pat) return null
   return payload.uid ?? null
 }
@@ -288,9 +276,9 @@ export interface PatClaims {
  *  server). Same signed-token scheme as the session cookie; `pat: true` marks it
  *  so it can only arrive via the Authorization header, never as a cookie. Carries
  *  a random `jti` so it can be tracked + revoked server-side (see _lib/tokens). */
-export function createAccessToken(userId: string, scope: Scope = 'readwrite'): { token: string; jti: string } {
+export function createAccessToken(env: ApiEnv, userId: string, scope: Scope = 'readwrite'): { token: string; jti: string } {
   const jti = crypto.randomUUID()
-  const token = encodeToken({
+  const token = encodeToken(env, {
     uid: userId,
     pat: true,
     jti,
@@ -303,10 +291,11 @@ export function createAccessToken(userId: string, scope: Scope = 'readwrite'): {
 /** Decodes + verifies a `Bearer <pat>` header's signature/expiry (no DB). Returns
  *  the claims, or null if absent/invalid/not a PAT/missing a jti. Revocation is
  *  checked separately against the token registry (see _lib/tokens resolveAuth). */
-export function decodePat(req: VercelRequest): PatClaims | null {
-  const header = req.headers.authorization
+export function decodePat(ctx: ApiContext): PatClaims | null {
+  const header = ctx.headers.get('authorization')
   if (!header || !header.startsWith('Bearer ')) return null
   const payload = decodeToken<{ uid?: string; pat?: boolean; jti?: string; scope?: Scope }>(
+    ctx.env,
     header.slice(7).trim(),
   )
   if (!payload?.pat || !payload.uid || !payload.jti) return null
@@ -316,24 +305,24 @@ export function decodePat(req: VercelRequest): PatClaims | null {
 // ---------------------------------------------------------------------------
 // OAuth state (CSRF) — signed, short-lived cookie carrying state + provider
 // ---------------------------------------------------------------------------
-export function setOAuthState(res: VercelResponse, provider: Provider, returnTo: string): string {
+export function setOAuthState(ctx: ApiContext, provider: Provider, returnTo: string): string {
   const state = crypto.randomBytes(16).toString('hex')
-  const token = encodeToken({
+  const token = encodeToken(ctx.env, {
     state,
     provider,
     returnTo,
     exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS,
   })
-  appendCookie(res, serializeCookie(STATE_COOKIE, token, STATE_TTL_SECONDS))
+  ctx.appendCookie(serializeCookie(STATE_COOKIE, token, STATE_TTL_SECONDS))
   return state
 }
 
 export function readOAuthState(
-  req: VercelRequest,
+  ctx: ApiContext,
 ): { state: string; provider: Provider; returnTo: string } | null {
-  return decodeToken(parseCookies(req)[STATE_COOKIE])
+  return decodeToken(ctx.env, parseCookies(ctx)[STATE_COOKIE])
 }
 
-export function clearOAuthState(res: VercelResponse): void {
-  appendCookie(res, serializeCookie(STATE_COOKIE, '', 0))
+export function clearOAuthState(ctx: ApiContext): void {
+  ctx.appendCookie(serializeCookie(STATE_COOKIE, '', 0))
 }

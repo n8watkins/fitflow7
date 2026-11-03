@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // FitFlow 7 on Cloudflare Workers: the Vite app in dist/ as static assets, and
+  // the /api routes (worker/) in front of it. `npm run deploy` builds and ships it.
+  "name": "fitflow7",
+  "account_id": "b2c564cf83cb9184dd6d7cc4ff8b38bf",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-28",
+  // The API signs sessions with node:crypto and reads tokens with Buffer.
+  "compatibility_flags": ["nodejs_compat"],
+  // Served at fitflow7.<account>.workers.dev until a domain moves over.
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "dist",
+    "binding": "ASSETS",
+    // Client routes (/stats, /workout/...) get index.html, like vercel.json's rewrite.
+    "not_found_handling": "single-page-application",
+    // Only the API runs the Worker; every other path is served from assets.
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": {
+    "enabled": true
+  },
+  // Set with `wrangler secret put <NAME>`, never in this file; deploys fail until
+  // these are set.
+  "secrets": {
+    "required": ["SESSION_SECRET", "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"]
+  }
+  // Optional secrets; each feature stays off while its value is missing:
+  //   GITHUB_CLIENT_ID + GITHUB_CLIENT_SECRET, GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET
+  //   (sign-in buttons), ALLOWED_EMAILS / ALLOWED_PROVIDER_IDS (single-tenant
+  //   lockdown) and APP_URL (pins the OAuth redirect origin).
+}

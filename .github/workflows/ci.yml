@@ -1,7 +1,8 @@
 name: CI
 
 # Verifies every push to main and every PR with the same pipeline used locally:
-# type-check + lint + tests + production build, plus the MCP server's type-check.
+# type-check + lint + tests + production build, a dry-run bundle of the Worker,
+# plus the MCP server's type-check.
 on:
   push:
     branches: [main]
@@ -24,6 +25,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Worker types match wrangler.jsonc
+        run: npx wrangler types worker-configuration.d.ts --check
+
       - name: Type-check
         run: npx tsc -b
 
@@ -35,6 +39,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Bundle the Worker
+        run: npx wrangler deploy --dry-run --outdir "${{ runner.temp }}/worker-bundle"
 
       - name: MCP type-check
         working-directory: mcp

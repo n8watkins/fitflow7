@@ -24,8 +24,9 @@ export interface ApiEnv {
 export const ORIGIN = 'https://fitflow7.test'
 export const SECRET = 'test-secret-xyz'
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fitflow7-api-'))
-export const DB_URL = `file:${path.join(dir, 'api.db')}`
+// A fresh database file per run, or the server a remote run's Worker uses.
+export const DB_URL = process.env.API_DB_URL
+  ?? `file:${path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'fitflow7-api-')), 'api.db')}`
 
 let db: Client | null = null
 /** A second connection to the API's database, for seeding and assertions. */

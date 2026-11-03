@@ -1,28 +1,38 @@
 import { createClient, type Client } from '@libsql/client'
+import type { ApiEnv } from './http.ts'
 
 // ---------------------------------------------------------------------------
 // Turso (libSQL) client + schema bootstrap.
 //
-// Config comes from env vars (see .env.example). Nothing connects until both
-// TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are set, so the app stays fully
-// local-only until you provision a database and paste the secrets in.
+// Config comes from the Worker's secrets (see .env.example). Nothing connects
+// until TURSO_DATABASE_URL is set, so the app stays fully local-only until you
+// provision a database and set the secrets. On Workers, '@libsql/client'
+// resolves to its fetch-based web build (the "workerd" export condition).
 // ---------------------------------------------------------------------------
 
-let client: Client | null = null
-let schemaReady: Promise<void> | null = null
+// One client per database. The web client keeps no connection open (every call
+// is its own fetch), so reusing it across requests is safe.
+const clients = new Map<string, Client>()
+// Databases whose schema this isolate has already brought up to date.
+const migrated = new Set<string>()
 
-export function getDb(): Client {
-  if (client) return client
-  const url = process.env.TURSO_DATABASE_URL
-  const authToken = process.env.TURSO_AUTH_TOKEN
-  if (!url) {
-    throw new Error('TURSO_DATABASE_URL is not set')
+function dbKey(env: ApiEnv): string {
+  const url = env.TURSO_DATABASE_URL
+  if (!url) throw new Error('TURSO_DATABASE_URL is not set')
+  return `${url}\n${env.TURSO_AUTH_TOKEN ?? ''}`
+}
+
+export function getDb(env: ApiEnv): Client {
+  const key = dbKey(env)
+  let client = clients.get(key)
+  if (!client) {
+    client = createClient({ url: env.TURSO_DATABASE_URL, authToken: env.TURSO_AUTH_TOKEN || undefined })
+    clients.set(key, client)
   }
-  client = createClient({ url, authToken })
   return client
 }
 
-// CREATE TABLE IF NOT EXISTS — cheap, idempotent, runs once per warm instance.
+// CREATE TABLE IF NOT EXISTS - cheap, idempotent, runs once per warm isolate.
 // Records are owned per user; routines/sessions carry updated_at (the CLIENT
 // clock, used only for LWW conflict resolution) plus server_updated_at (the
 // SERVER clock, stamped on every write and used as the sync watermark) and
@@ -177,30 +187,26 @@ const BACKFILLS = SYNCED_TABLES.map(
   (t) => `UPDATE ${t} SET server_updated_at = updated_at WHERE server_updated_at IS NULL`,
 )
 
-/** Ensures the schema exists. Memoized so concurrent requests share one bootstrap. */
-export function ensureSchema(): Promise<void> {
-  if (!schemaReady) {
-    const db = getDb()
-    schemaReady = (async () => {
-      for (const stmt of SCHEMA) {
-        await db.execute(stmt)
-      }
-      for (const stmt of ALTERS) {
-        try {
-          await db.execute(stmt)
-        } catch (err) {
-          // Already applied (column exists) → ignore; re-throw anything else.
-          if (!/duplicate column name/i.test(String((err as Error)?.message))) throw err
-        }
-      }
-      for (const stmt of BACKFILLS) {
-        await db.execute(stmt)
-      }
-    })().catch((err) => {
-      // Reset so a transient failure can retry on the next request.
-      schemaReady = null
-      throw err
-    })
+/** Ensures the schema exists, once per isolate and database. Every statement is
+ *  idempotent, so two requests racing on a cold isolate both run it safely; no
+ *  promise is shared between requests, which Workers does not allow for I/O. */
+export async function ensureSchema(env: ApiEnv): Promise<void> {
+  const key = dbKey(env)
+  if (migrated.has(key)) return
+  const db = getDb(env)
+  for (const stmt of SCHEMA) {
+    await db.execute(stmt)
   }
-  return schemaReady
+  for (const stmt of ALTERS) {
+    try {
+      await db.execute(stmt)
+    } catch (err) {
+      // Already applied (column exists) → ignore; re-throw anything else.
+      if (!/duplicate column name/i.test(String((err as Error)?.message))) throw err
+    }
+  }
+  for (const stmt of BACKFILLS) {
+    await db.execute(stmt)
+  }
+  migrated.add(key)
 }

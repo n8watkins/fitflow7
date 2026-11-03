@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', '.claude', 'mcp']),
+  globalIgnores(['dist', '.claude', 'mcp', '.wrangler', 'worker-configuration.d.ts']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -20,10 +20,11 @@ export default defineConfig([
     },
   },
   {
-    // Serverless API functions run on Node, not in the browser.
-    files: ['api/**/*.ts'],
+    // The Worker runs on Cloudflare's runtime, whose globals
+    // worker-configuration.d.ts declares; it is not a browser page.
+    files: ['worker/**/*.ts'],
     languageOptions: {
-      globals: globals.node,
+      globals: globals.serviceworker,
     },
   },
 ])
