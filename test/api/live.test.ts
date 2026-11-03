@@ -16,7 +16,8 @@ describe.skipIf(!base)(`live: ${base}`, () => {
     for (const path of ['/', '/stats', '/workout/classic-7', '/api']) {
       const res = await hit(path)
       expect(res.status, path).toBe(200)
-      expect(res.headers.get('content-type'), path).toBe('text/html; charset=utf-8')
+      // Vercel adds '; charset=utf-8', Cloudflare does not; index.html declares UTF-8.
+      expect(res.headers.get('content-type'), path).toMatch(/^text\/html\b/)
       expect(await res.text(), path).toContain('<div id="root">')
     }
     for (const [path, type] of [['/favicon.svg', 'image/svg+xml'], ['/manifest.webmanifest', 'application/manifest+json'], ['/privacypolicy.html', 'text/html']]) {
