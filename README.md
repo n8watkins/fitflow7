@@ -104,6 +104,10 @@ After every push to main, `.github/workflows/deploy.yml` runs the same deploy
 once the repository has a `CLOUDFLARE_API_TOKEN` secret (an API token with the
 "Edit Cloudflare Workers" permission); until then it skips.
 
+`vercel.json` only turns off Vercel's Git deploys: fitflow7.vercel.app keeps
+serving its last Vercel deployment (which still has the old API) until the
+domain moves, since the Android app and the MCP server call it.
+
 `npm test` runs the API's contract suite in process.
 To run it against a running Worker, start `wrangler dev` with
 `SESSION_SECRET=test-secret-xyz` and a libSQL server, then set
