@@ -31,7 +31,7 @@ export const DB_URL = process.env.API_DB_URL
 let db: Client | null = null
 /** A second connection to the API's database, for seeding and assertions. */
 export function testDb(): Client {
-  db ??= createClient({ url: DB_URL })
+  db ??= createClient({ url: DB_URL, authToken: process.env.API_DB_AUTH_TOKEN || undefined })
   return db
 }
 
