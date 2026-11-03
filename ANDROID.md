@@ -85,7 +85,7 @@ In Android Studio: **Build → Build APK(s)**, then install it on the phone
 - The API origin and the calendar app link are read at build time from
   `.env.native` (`VITE_API_BASE_URL`, `VITE_APP_URL`); change them there if the
   site moves, then rebuild and reinstall the APK. An APK built before
-  2026-11 points at fitflow7.vercel.app, which no longer serves the app.
+  2026-11 points at the retired fitflow7.vercel.app deployment; rebuild it.
 - Prefer always-latest without rebuilding the bundle? Set `server.url` to
   `https://fitflow7.n8builds.dev` in `capacitor.config.json` — but then the Health
   Connect plugin won't be present (the live site is the plain web build), so keep

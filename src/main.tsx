@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { gcTombstones, runMigrations } from './lib/storage'
+import { takeSignInNotice } from './lib/signInNotice'
+import { useSyncStore } from './store/syncStore'
 
 // Upgrade any stored data to the current schema before the app reads it.
 runMigrations()
@@ -15,6 +17,10 @@ gcTombstones()
 if (import.meta.env.VITE_NATIVE === 'true') {
   void import('./native-health')
 }
+
+// A sign-in that did not finish comes back as ?signin=<notice>: keep it for the
+// banner and clean the address bar before the router reads the URL.
+useSyncStore.getState().setSignInNotice(takeSignInNotice())
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

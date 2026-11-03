@@ -114,6 +114,7 @@ In the Cloudflare dashboard, open Workers & Pages, then the `fitflow7` Worker, t
 To stream them live, run `npx wrangler tail fitflow7 --format pretty`.
 `--search` matches log messages only, not request URLs, so use `--status error` or no filter to see requests.
 Failures log one JSON line with `event`, `reason`, `route` and `status`, for example `{"event":"auth_callback_failed","reason":"missing_cookie",...}`; unexpected throws log `unhandled_exception` with the route.
+A failed sign-in redirects back into the app with `?signin=expired`, `cancelled`, `failed`, `unavailable` or `not_allowed`, which shows a "Sign in again" banner; the log line says why, and `signedIn: true` marks a replayed callback from someone already signed in.
 They never carry codes, state values, tokens, cookies or emails.
 
 `npm test` runs the API's contract suite in process.

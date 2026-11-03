@@ -6,6 +6,7 @@ import {
   getRedirectUri,
   hasOAuthStateCookie,
   isAllowedIdentity,
+  getUserId,
   readOAuthState,
   sanitizeReturnTo,
   setSession,
@@ -17,11 +18,26 @@ import { errorSummary, logError, logWarn, oauthErrorCode } from '../../lib/log.t
 const ROUTE = '/api/auth/callback'
 const EVENT = 'auth_callback_failed'
 
+/** Why sign-in did not finish, as the app's `?signin=` notice reads it. */
+export type SignInNotice = 'expired' | 'cancelled' | 'failed' | 'unavailable' | 'not_allowed'
+
+/** Sends the browser back into the app with `?signin=<notice>`, so a failed or
+ *  stale sign-in lands on a page with a "Sign in again" button instead of a bare
+ *  text page. No session is set on this path. */
+function backToApp(ctx: ApiContext, returnTo: string | undefined, notice: SignInNotice | null): Response {
+  const target = new URL(sanitizeReturnTo(returnTo), 'https://app.invalid')
+  target.searchParams.delete('signin')
+  if (notice) target.searchParams.set('signin', notice)
+  return ctx.redirect(302, `${target.pathname}${target.search}${target.hash}`)
+}
+
 // GET /api/auth/callback?code=...&state=...
 // Verifies state, exchanges the code for an access token, fetches the profile,
 // upserts the user, issues a session cookie, and bounces back into the app.
 // Every failure logs one JSON line naming the reason (never the code, state,
-// cookie, token or profile).
+// cookie, token or profile) and redirects into the app with `?signin=<notice>`.
+// A stale or replayed callback (reload, back button, a second tab) from someone
+// who is already signed in just goes back to the app without a notice.
 export default async function callback(ctx: ApiContext): Promise<Response> {
   const code = ctx.query('code')
   const state = ctx.query('state')
@@ -37,25 +53,31 @@ export default async function callback(ctx: ApiContext): Promise<Response> {
         : !state || saved.state !== state
           ? 'state_mismatch'
           : 'missing_code'
+    const signedIn = Boolean(getUserId(ctx))
     logWarn({
       event: EVENT,
       reason,
       route: ROUTE,
-      status: 400,
+      status: 302,
       provider: saved?.provider,
       // The provider's own reason when it sent the user back without a code
       // (access_denied when they cancel).
       providerError: oauthErrorCode(ctx.query('error')),
+      // Already signed in: a reload, back button or second tab replaying an old
+      // callback, not a failed sign-in.
+      signedIn: signedIn || undefined,
     })
-    return ctx.send(400, 'OAuth state mismatch — please try signing in again.')
+    if (signedIn) return backToApp(ctx, saved?.returnTo, null)
+    const cancelled = reason === 'missing_code' && ctx.query('error') === 'access_denied'
+    return backToApp(ctx, saved?.returnTo, cancelled ? 'cancelled' : 'expired')
   }
 
   const provider = saved.provider
   const config = PROVIDERS[provider]
   const credentials = getCredentials(ctx.env, provider)
   if (!credentials) {
-    logError({ event: EVENT, reason: 'provider_not_configured', route: ROUTE, status: 501, provider })
-    return ctx.send(501, 'Provider not configured.')
+    logError({ event: EVENT, reason: 'provider_not_configured', route: ROUTE, status: 302, provider })
+    return backToApp(ctx, saved.returnTo, 'unavailable')
   }
 
   let stage = 'token_exchange_failed'
@@ -78,14 +100,14 @@ export default async function callback(ctx: ApiContext): Promise<Response> {
         event: EVENT,
         reason: 'token_exchange_failed',
         route: ROUTE,
-        status: 502,
+        status: 302,
         provider,
         providerStatus: tokenRes.status,
         // GitHub answers 200 with { error: "bad_verification_code" }; Google
         // answers 400 with { error: "invalid_grant" }.
         providerError: oauthErrorCode(tokenJson.error),
       })
-      return ctx.send(502, 'Failed to obtain access token.')
+      return backToApp(ctx, saved.returnTo, 'failed')
     }
 
     stage = 'profile_fetch_failed'
@@ -94,8 +116,8 @@ export default async function callback(ctx: ApiContext): Promise<Response> {
     // Optional single-tenant lock-down: if an allow-list is configured, reject
     // identities that aren't on it before creating any account (L6).
     if (!isAllowedIdentity(ctx.env, provider, profile)) {
-      logWarn({ event: EVENT, reason: 'identity_not_allowed', route: ROUTE, status: 403, provider })
-      return ctx.send(403, 'This deployment is private — your account is not permitted.')
+      logWarn({ event: EVENT, reason: 'identity_not_allowed', route: ROUTE, status: 302, provider })
+      return backToApp(ctx, saved.returnTo, 'not_allowed')
     }
 
     // Upsert the user; keep the existing id on conflict.
@@ -120,14 +142,14 @@ export default async function callback(ctx: ApiContext): Promise<Response> {
     })
     const userId = result.rows[0]?.id as string | undefined
     if (!userId) {
-      logError({ event: EVENT, reason: 'user_upsert_failed', route: ROUTE, status: 500, provider })
-      return ctx.send(500, 'Sign-in failed. Please try again.')
+      logError({ event: EVENT, reason: 'user_upsert_failed', route: ROUTE, status: 302, provider })
+      return backToApp(ctx, saved.returnTo, 'failed')
     }
 
     setSession(ctx, userId)
-    return ctx.redirect(302, sanitizeReturnTo(saved.returnTo))
+    return backToApp(ctx, saved.returnTo, null)
   } catch (err) {
-    logError({ event: EVENT, reason: stage, route: ROUTE, status: 500, provider, error: errorSummary(err) })
-    return ctx.send(500, 'Sign-in failed. Please try again.')
+    logError({ event: EVENT, reason: stage, route: ROUTE, status: 302, provider, error: errorSummary(err) })
+    return backToApp(ctx, saved.returnTo, 'failed')
   }
 }

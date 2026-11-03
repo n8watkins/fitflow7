@@ -38,13 +38,13 @@ See `HANDOFF.md` for current session state, `SETUP_SYNC.md` to enable sync, and
 
 ## Phase 1 — Accounts + Cloud Sync ✅ LIVE (configured 2026-06-20)
 
-> Turso + GitHub OAuth + SESSION_SECRET are set in Vercel and deployed; GitHub
+> Turso + GitHub OAuth + SESSION_SECRET are set as Cloudflare Worker secrets and deployed; GitHub
 > sign-in is active. Pending only the owner's first real two-browser verification.
 > (Original "dormant" build notes below.)
 
 Built across commits in session 4. Enable via `SETUP_SYNC.md`.
-- Backend: Turso (libSQL) via `@libsql/client`; Vercel serverless functions in
-  `/api` (auto-created schema). `api/sync.ts` is one bidirectional endpoint.
+- Backend: Turso (libSQL) via `@libsql/client`; a Cloudflare Worker API in
+  `worker/` (auto-created schema; it replaced the original Vercel functions in 2026-11). `api/sync.ts` is one bidirectional endpoint.
 - Auth: hand-rolled OAuth (GitHub + Google), HMAC-signed session cookie. No
   password storage, no auth SDK. `/api/auth/login|callback|logout`, `/api/me`.
 - Sync engine (`src/lib/sync.ts`): offline-first, last-write-wins by `updatedAt`,
@@ -52,7 +52,7 @@ Built across commits in session 4. Enable via `SETUP_SYNC.md`.
 - UI: optional sign-in in Settings (app fully usable signed-out), sync status
   pill in the nav.
 - Deps added (PLAN.md "no new deps" relaxed here): `@libsql/client`,
-  `@vercel/node` (types).
+  originally `@vercel/node` (types), dropped with the move to Workers.
 - **Remaining to go live:** provision Turso + OAuth app, set env vars, redeploy.
   Then real-device verification of cross-device sync + tombstones.
 
@@ -65,7 +65,7 @@ Built across commits in session 4. Enable via `SETUP_SYNC.md`.
 - Auth-scoped to the user via a **personal access token**: `createAccessToken`
   in `api/_lib/auth.ts`, issued by `POST /api/token` (generated in Settings),
   accepted by `getAuthedUserId` on `/api/sync` as `Authorization: Bearer`.
-- Verified end-to-end locally (real MCP stdio client + `vercel dev` + file DB +
+- Verified end-to-end locally (real MCP stdio client + a local API server + file DB +
   minted PAT): all four tools, read + write round-trip. Lights up for real data
   once Phase 1 sync is configured. See `mcp/README.md`.
 

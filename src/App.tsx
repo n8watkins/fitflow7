@@ -28,7 +28,8 @@ const Settings = lazy(() => import('./pages/Settings'))
 import { bootstrapAuth, startSyncListeners } from './lib/sync'
 import { getThemePref } from './lib/storage'
 import { applyTheme } from './lib/theme'
-import { useSyncStore } from './store/syncStore'
+import AccountMenu from './components/AccountMenu'
+import SignInNoticeBanner from './components/SignInNoticeBanner'
 
 type NavItem = { to: string; label: string; Icon: ComponentType<{ className?: string }> }
 
@@ -79,7 +80,7 @@ function Shell() {
                   {item.label}
                 </NavLink>
               ))}
-              <SyncBadge />
+              <AccountMenu />
             </nav>
           </header>
 
@@ -88,12 +89,13 @@ function Shell() {
             <Link to="/" className="text-lg font-bold tracking-tight">
               Fit<span className="text-accent">Flow</span> 7
             </Link>
-            <SyncBadge />
+            <AccountMenu />
           </header>
         </>
       )}
 
       <main className={inWorkout ? '' : 'mx-auto max-w-5xl px-4 py-8 pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-8'}>
+        {!inWorkout && <SignInNoticeBanner />}
         <Suspense fallback={<RouteFallback fullHeight={inWorkout} />}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
@@ -193,33 +195,6 @@ function MobileNav() {
         </button>
       </nav>
     </>
-  )
-}
-
-// Small signed-in/sync status pill, right-aligned in the nav. Signed-out users
-// see nothing here — sign-in lives in Settings.
-function SyncBadge() {
-  const user = useSyncStore((s) => s.user)
-  const status = useSyncStore((s) => s.status)
-  if (!user) return null
-
-  const dot =
-    status === 'syncing'
-      ? 'bg-amber-400'
-      : status === 'error'
-        ? 'bg-red-400'
-        : 'bg-emerald-400'
-  const label =
-    status === 'syncing' ? 'Syncing…' : status === 'error' ? 'Sync error' : 'Synced'
-
-  return (
-    <span
-      className="ml-auto flex items-center gap-1.5 rounded-full border border-edge bg-card px-3 py-1 text-xs font-medium text-slate-400"
-      title={user.email ?? user.name ?? 'Signed in'}
-    >
-      <span className={`h-2 w-2 rounded-full ${dot}`} />
-      {label}
-    </span>
   )
 }
 

@@ -606,17 +606,39 @@ describe.skipIf(remote)('OAuth callback (M6, L6)', () => {
   }
   const userCount = async () => Number((await testDb().execute('SELECT COUNT(*) AS n FROM users')).rows[0]?.n ?? -1)
 
-  it('rejects a missing/mismatched state with 400, clears the state cookie and writes no user', async () => {
+  it('sends a missing/mismatched state back to the app with a sign-in notice, clears the state cookie and writes no user', async () => {
     const res = await call('/api/auth/callback?code=x&state=nope')
-    expect(res.status).toBe(400)
-    expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
-    expect(await res.text()).toBe('OAuth state mismatch — please try signing in again.')
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/?signin=expired')
     expect(setCookies(res)).toEqual(['ff_oauth=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'])
     expect(await userCount()).toBe(0)
 
+    // A bare callback URL (no code, no state, no cookie), as a reload or a typed URL sends it.
+    const bare = await call('/api/auth/callback')
+    expect(bare.status).toBe(302)
+    expect(bare.headers.get('location')).toBe('/?signin=expired')
+    expect(setCookies(bare).some((c) => c.startsWith('ff_session='))).toBe(false)
+
     stubGithub({ id: 1, login: 'a', name: 'A', email: 'a@b.com' })
-    const s = await startLogin()
-    expect((await call(`/api/auth/callback?state=${s.state}`, { headers: { cookie: s.cookie } })).status).toBe(400)
+    const s = await startLogin('/settings')
+    const noCode = await call(`/api/auth/callback?state=${s.state}`, { headers: { cookie: s.cookie } })
+    expect(noCode.headers.get('location')).toBe('/settings?signin=expired')
+    expect(await userCount()).toBe(0)
+  })
+
+  it('says "cancelled" when the user declines on the provider', async () => {
+    stubGithub({ id: 1, login: 'a', name: 'A', email: 'a@b.com' })
+    const s = await startLogin('/settings')
+    const res = await call(`/api/auth/callback?state=${s.state}&error=access_denied`, { headers: { cookie: s.cookie } })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/settings?signin=cancelled')
+  })
+
+  it('sends a replayed callback from a signed-in browser back to the app without a notice or a new session', async () => {
+    const res = await call('/api/auth/callback?code=old&state=old', { headers: { cookie: sessionCookie('u1') } })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/')
+    expect(setCookies(res)).toEqual(['ff_oauth=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'])
   })
 
   it('upserts a user, sets a session, and reuses the id on a second sign-in', async () => {
@@ -652,8 +674,9 @@ describe.skipIf(remote)('OAuth callback (M6, L6)', () => {
     stubGithub({ id: 1, login: 'a', name: 'A', email: 'a@b.com' }, null)
     const s = await startLogin()
     const res = await call(`/api/auth/callback?code=c&state=${s.state}`, { headers: { cookie: s.cookie } })
-    expect(res.status).toBe(502)
-    expect(await res.text()).toBe('Failed to obtain access token.')
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/?signin=failed')
+    expect(setCookies(res).some((c) => c.startsWith('ff_session='))).toBe(false)
   })
 
   it('logs one JSON line per failure naming the reason, never the code, state or cookie', async () => {
@@ -672,12 +695,12 @@ describe.skipIf(remote)('OAuth callback (M6, L6)', () => {
       await call(`/api/auth/callback?code=secretcode&state=${s3.state}`, { headers: { cookie: s3.cookie } })
 
       expect(reasons()).toEqual([
-        { event: 'auth_callback_failed', reason: 'missing_cookie', route: '/api/auth/callback', status: 400 },
-        { event: 'auth_callback_failed', reason: 'state_mismatch', route: '/api/auth/callback', status: 400, provider: 'github' },
-        { event: 'auth_callback_failed', reason: 'missing_code', route: '/api/auth/callback', status: 400, provider: 'github', providerError: 'access_denied' },
-        { event: 'auth_callback_failed', reason: 'invalid_cookie', route: '/api/auth/callback', status: 400 },
+        { event: 'auth_callback_failed', reason: 'missing_cookie', route: '/api/auth/callback', status: 302 },
+        { event: 'auth_callback_failed', reason: 'state_mismatch', route: '/api/auth/callback', status: 302, provider: 'github' },
+        { event: 'auth_callback_failed', reason: 'missing_code', route: '/api/auth/callback', status: 302, provider: 'github', providerError: 'access_denied' },
+        { event: 'auth_callback_failed', reason: 'invalid_cookie', route: '/api/auth/callback', status: 302 },
         {
-          event: 'auth_callback_failed', reason: 'token_exchange_failed', route: '/api/auth/callback', status: 502,
+          event: 'auth_callback_failed', reason: 'token_exchange_failed', route: '/api/auth/callback', status: 302,
           provider: 'github', providerStatus: 200, providerError: 'bad_verification_code',
         },
       ])
@@ -703,9 +726,10 @@ describe.skipIf(remote)('OAuth callback (M6, L6)', () => {
       }) as typeof fetch
       const s = await startLogin()
       const res = await call(`/api/auth/callback?code=c&state=${s.state}`, { headers: { cookie: s.cookie } })
-      expect(res.status).toBe(500)
+      expect(res.status).toBe(302)
+      expect(res.headers.get('location')).toBe('/?signin=failed')
       expect(JSON.parse(String(error.mock.calls[0]?.[0]))).toEqual({
-        event: 'auth_callback_failed', reason: 'profile_fetch_failed', route: '/api/auth/callback', status: 500,
+        event: 'auth_callback_failed', reason: 'profile_fetch_failed', route: '/api/auth/callback', status: 302,
         provider: 'github', error: 'Error: GitHub profile fetch failed: 401',
       })
     } finally {
@@ -713,13 +737,13 @@ describe.skipIf(remote)('OAuth callback (M6, L6)', () => {
     }
   })
 
-  it('answers 501 when the provider was switched off after login started', async () => {
+  it('sends the user back with "unavailable" when the provider was switched off after login started', async () => {
     stubGithub({ id: 1, login: 'a', name: 'A', email: 'a@b.com' })
     const s = await startLogin()
     delete env.GITHUB_CLIENT_SECRET
     const res = await call(`/api/auth/callback?code=c&state=${s.state}`, { headers: { cookie: s.cookie } })
-    expect(res.status).toBe(501)
-    expect(await res.text()).toBe('Provider not configured.')
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/?signin=unavailable')
   })
 
   it('rejects an identity not on the allow-list when one is configured (L6)', async () => {
@@ -727,8 +751,8 @@ describe.skipIf(remote)('OAuth callback (M6, L6)', () => {
     env.ALLOWED_EMAILS = 'owner@example.com'
     const s = await startLogin()
     const res = await call(`/api/auth/callback?code=c&state=${s.state}`, { headers: { cookie: s.cookie } })
-    expect(res.status).toBe(403)
-    expect(await res.text()).toBe('This deployment is private — your account is not permitted.')
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/?signin=not_allowed')
     expect(await userCount()).toBe(0)
   })
 

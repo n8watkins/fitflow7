@@ -1,6 +1,8 @@
 # FitFlow 7 — Full Project Review
 
 **Date:** 2026-06-27
+
+> **Historical record.** This review predates the 2026-11-03 move from Vercel to Cloudflare Workers: `api/` is now `worker/`, and the app is live at https://fitflow7.n8builds.dev. Vercel references below describe the app as it was reviewed.
 **Scope:** Entire codebase — `src/` (frontend, ~11K LOC), `api/` (12 Vercel serverless endpoints), `mcp/` (stdio MCP server), `test/` (12 suites).
 **Method:** Multi-agent review (29 agents). Two agents inventoried what was built; four audit dimensions (frontend correctness, backend correctness, security, quality+tests) hunted for issues; **every finding was independently re-read and adversarially verified** before it counted. 23 raw findings → **22 confirmed**, 1 rejected (an "all controls intact" info-note with nothing to fix).
 

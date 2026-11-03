@@ -18,9 +18,8 @@ export type ApiEnv = Pick<Env, 'SESSION_SECRET'> &
     string
   >>
 
-/** Thrown when a JSON body is malformed. Like Vercel's req.body getter, it is
- *  thrown where the route first reads the body, so a route's own try/catch sees
- *  it; anywhere else it becomes a 400. */
+/** Thrown when a JSON body is malformed, where the route first reads the body,
+ *  so a route's own try/catch sees it; anywhere else it becomes a 400. */
 export class InvalidJsonError extends Error {
   constructor() {
     super('Invalid JSON')
@@ -72,7 +71,7 @@ export class ApiContext {
     return this.respond(status, JSON.stringify(value), 'application/json; charset=utf-8')
   }
 
-  /** A plain message, served as HTML the way Vercel's res.send serves a string. */
+  /** A plain message, served as text/html. */
   send(status: number, message: string): Response {
     return this.respond(status, message, 'text/html; charset=utf-8')
   }
