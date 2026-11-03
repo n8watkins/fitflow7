@@ -1,6 +1,6 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { resolveAuth } from '../_lib/tokens.js'
-import { ensureSchema, getDb } from '../_lib/db.js'
+import { resolveAuth } from '../../lib/tokens.ts'
+import { ensureSchema, getDb } from '../../lib/db.ts'
+import type { ApiContext } from '../../lib/http.ts'
 
 // POST /api/routines/report — auth required.
 //
@@ -15,27 +15,27 @@ interface ReportBody {
 
 const BLOCK_THRESHOLD = 3
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' })
-  const auth = await resolveAuth(req)
-  if (!auth) return res.status(401).json({ error: 'not signed in' })
-  if (auth.scope === 'read') return res.status(403).json({ error: 'read-only token cannot report' })
+export default async function reportRoutine(ctx: ApiContext): Promise<Response> {
+  if (ctx.method !== 'POST') return ctx.json(405, { error: 'method not allowed' })
+  const auth = await resolveAuth(ctx)
+  if (!auth) return ctx.json(401, { error: 'not signed in' })
+  if (auth.scope === 'read') return ctx.json(403, { error: 'read-only token cannot report' })
   const userId = auth.userId
 
-  const body = (req.body ?? {}) as ReportBody
+  const body = (ctx.body ?? {}) as ReportBody
   const slug = typeof body.slug === 'string' ? body.slug : ''
-  if (!slug) return res.status(400).json({ error: 'slug is required' })
+  if (!slug) return ctx.json(400, { error: 'slug is required' })
 
   try {
-    await ensureSchema()
-    const db = getDb()
+    await ensureSchema(ctx.env)
+    const db = getDb(ctx.env)
     // Only accept reports for a routine that actually exists — otherwise a caller
     // could write unbounded orphan rows into routine_reports for arbitrary slugs.
     const exists = await db.execute({
       sql: `SELECT 1 FROM public_routines WHERE slug = ?`,
       args: [slug],
     })
-    if (exists.rows.length === 0) return res.status(404).json({ error: 'not found' })
+    if (exists.rows.length === 0) return ctx.json(404, { error: 'not found' })
     // One report per user per routine (dedup). Re-reporting is a no-op.
     await db.execute({
       sql: `INSERT OR IGNORE INTO routine_reports (slug, user_id, created_at) VALUES (?, ?, ?)`,
@@ -56,8 +56,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             WHERE slug = ?`,
       args: [distinct, distinct, BLOCK_THRESHOLD, slug],
     })
-    res.status(200).json({ ok: true })
+    return ctx.json(200, { ok: true })
   } catch {
-    res.status(500).json({ error: 'report failed' })
+    return ctx.json(500, { error: 'report failed' })
   }
 }

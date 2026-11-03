@@ -28,3 +28,7 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Cloudflare Workers local state and dev secrets
+.wrangler
+.dev.vars*

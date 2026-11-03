@@ -1,4 +1,3 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
 import type {
   BodyProfile,
   ChallengeProgress,
@@ -6,9 +5,10 @@ import type {
   UserSettings,
   WeightEntry,
   WorkoutSession,
-} from '../src/types'
-import { resolveAuth } from './_lib/tokens.js'
-import { ensureSchema, getDb } from './_lib/db.js'
+} from '../../src/types'
+import { resolveAuth } from '../lib/tokens.ts'
+import { ensureSchema, getDb } from '../lib/db.ts'
+import type { ApiContext } from '../lib/http.ts'
 import type { InStatement } from '@libsql/client'
 
 // POST /api/sync — authenticated bidirectional sync.
@@ -220,13 +220,13 @@ function challengeUpsert(userId: string, c: ChallengeProgress, serverNow: string
   }
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' })
-  const auth = await resolveAuth(req)
-  if (!auth) return res.status(401).json({ error: 'not signed in' })
+export default async function sync(ctx: ApiContext): Promise<Response> {
+  if (ctx.method !== 'POST') return ctx.json(405, { error: 'method not allowed' })
+  const auth = await resolveAuth(ctx)
+  if (!auth) return ctx.json(401, { error: 'not signed in' })
   const userId = auth.userId
 
-  const body = (req.body ?? {}) as SyncBody
+  const body = (ctx.body ?? {}) as SyncBody
   const since = body.since || EPOCH
 
   // A read-scoped token may pull but never push (S1).
@@ -238,12 +238,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     !!body.bodyProfile ||
     (body.challengeProgress?.length ?? 0) > 0
   if (auth.scope === 'read' && wantsWrite) {
-    return res.status(403).json({ error: 'read-only token cannot push' })
+    return ctx.json(403, { error: 'read-only token cannot push' })
   }
 
   try {
-    await ensureSchema()
-    const db = getDb()
+    await ensureSchema(ctx.env)
+    const db = getDb(ctx.env)
     // One server-clock stamp per request — used both as every row's
     // server_updated_at and as the returned cursor, so the watermark is entirely
     // server-authoritative and immune to client clock skew (H2).
@@ -357,7 +357,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       : null
 
-    res.status(200).json({
+    return ctx.json(200, {
       serverTime,
       routines: routinesRes.rows.map((r) => rowToRoutine(r as Record<string, unknown>)),
       sessions: sessionsRes.rows.map((r) => rowToSession(r as Record<string, unknown>)),
@@ -367,6 +367,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       bodyProfile,
     })
   } catch {
-    res.status(500).json({ error: 'sync failed' })
+    return ctx.json(500, { error: 'sync failed' })
   }
 }

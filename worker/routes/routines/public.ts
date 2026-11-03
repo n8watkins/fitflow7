@@ -1,5 +1,5 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { ensureSchema, getDb } from '../_lib/db.js'
+import { ensureSchema, getDb } from '../../lib/db.ts'
+import type { ApiContext } from '../../lib/http.ts'
 
 // GET /api/routines/public — public, no auth.
 //
@@ -36,15 +36,14 @@ function rowToSafe(r: Record<string, unknown>): SafeRoutine {
   }
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'method not allowed' })
+export default async function publicRoutines(ctx: ApiContext): Promise<Response> {
+  if (ctx.method !== 'GET') return ctx.json(405, { error: 'method not allowed' })
 
-  const rawSlug = req.query.slug
-  const slug = Array.isArray(rawSlug) ? rawSlug[0] : rawSlug
+  const slug = ctx.query('slug')
 
   try {
-    await ensureSchema()
-    const db = getDb()
+    await ensureSchema(ctx.env)
+    const db = getDb(ctx.env)
 
     if (slug) {
       const result = await db.execute({
@@ -52,17 +51,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         args: [slug],
       })
       const row = result.rows[0]
-      if (!row) return res.status(404).json({ error: 'not found' })
-      return res.status(200).json({ routine: rowToSafe(row as Record<string, unknown>) })
+      if (!row) return ctx.json(404, { error: 'not found' })
+      return ctx.json(200, { routine: rowToSafe(row as Record<string, unknown>) })
     }
 
     const result = await db.execute(
       `SELECT * FROM public_routines WHERE blocked = 0 ORDER BY created_at DESC LIMIT 50`,
     )
-    res.status(200).json({
+    return ctx.json(200, {
       routines: result.rows.map((r) => rowToSafe(r as Record<string, unknown>)),
     })
   } catch {
-    res.status(500).json({ error: 'unavailable' })
+    return ctx.json(500, { error: 'unavailable' })
   }
 }

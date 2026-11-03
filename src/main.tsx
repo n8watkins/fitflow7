@@ -10,7 +10,7 @@ runMigrations()
 gcTombstones()
 
 // Native (Capacitor) builds only: register the Health Connect writer. VITE_NATIVE
-// is unset in the web/Vercel build, so vite drops this branch and the native
+// is unset in the web build, so vite drops this branch and the native
 // plugin never enters the web bundle.
 if (import.meta.env.VITE_NATIVE === 'true') {
   void import('./native-health')

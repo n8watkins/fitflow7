@@ -1,4 +1,5 @@
 import type { Routine } from '../types'
+import { apiUrl } from './api'
 
 // ---------------------------------------------------------------------------
 // Community routine library — thin client helpers over /api/routines/*.
@@ -23,7 +24,7 @@ export interface PublicRoutine {
 /** Most-recent published routines, or [] if unavailable. */
 export async function listPublicRoutines(): Promise<PublicRoutine[]> {
   try {
-    const res = await fetch('/api/routines/public', { credentials: 'include' })
+    const res = await fetch(apiUrl('/api/routines/public'), { credentials: 'include' })
     if (!res.ok) return []
     const data = (await res.json()) as { routines?: PublicRoutine[] }
     return Array.isArray(data.routines) ? data.routines : []
@@ -38,7 +39,7 @@ export async function publishRoutine(
   ownerName?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const res = await fetch('/api/routines/publish', {
+    const res = await fetch(apiUrl('/api/routines/publish'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -71,7 +72,7 @@ export async function publishRoutine(
 /** Flags a published routine for review. Returns true on success. */
 export async function reportRoutine(slug: string): Promise<boolean> {
   try {
-    const res = await fetch('/api/routines/report', {
+    const res = await fetch(apiUrl('/api/routines/report'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },

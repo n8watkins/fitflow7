@@ -11,7 +11,10 @@
     "preview": "vite preview",
     "release": "release-kit release",
     "release:check": "release-kit check && npm run lint && npm test && npm run build",
-    "prepare": "git config core.hooksPath .githooks || true"
+    "prepare": "git config core.hooksPath .githooks || true",
+    "preview:worker": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "cf-typegen": "wrangler types worker-configuration.d.ts"
   },
   "dependencies": {
     "@capacitor/core": "^8.6.0",
@@ -31,7 +34,6 @@
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vercel/node": "^5.10.2",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
@@ -41,6 +43,7 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.3.5",
-    "vitest": "^4.1.12"
+    "vitest": "^4.1.12",
+    "wrangler": "^4.157.0"
   }
 }

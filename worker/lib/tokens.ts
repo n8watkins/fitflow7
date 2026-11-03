@@ -1,7 +1,7 @@
-import type { VercelRequest } from '@vercel/node'
 import type { Client } from '@libsql/client'
-import { decodePat, getUserId, type Scope } from './auth.js'
-import { ensureSchema, getDb } from './db.js'
+import { decodePat, getUserId, type Scope } from './auth.ts'
+import { ensureSchema, getDb } from './db.ts'
+import type { ApiContext } from './http.ts'
 
 // S1: server-side personal-access-token registry. A PAT is valid only while a
 // matching, non-revoked row exists in access_tokens — so tokens are revocable
@@ -26,19 +26,19 @@ export interface TokenInfo {
  *  header (must be present + non-revoked in the registry). Returns null if
  *  neither authenticates. Trusts the DB-stored scope over the token's claim, so
  *  scope changes/revocation take effect immediately. */
-export async function resolveAuth(req: VercelRequest): Promise<AuthResult | null> {
-  const cookieUid = getUserId(req)
+export async function resolveAuth(ctx: ApiContext): Promise<AuthResult | null> {
+  const cookieUid = getUserId(ctx)
   if (cookieUid) return { userId: cookieUid, scope: 'readwrite' }
 
-  const pat = decodePat(req)
+  const pat = decodePat(ctx)
   if (!pat) return null
 
   // Fail closed: any DB error (e.g. TURSO unconfigured/down) resolves to "not
   // authenticated" rather than throwing out of the caller. Callers invoke this
   // before their own try/catch, so a throw here would surface as an opaque 500.
   try {
-    await ensureSchema()
-    const db = getDb()
+    await ensureSchema(ctx.env)
+    const db = getDb(ctx.env)
     const row = (
       await db.execute({
         sql: `SELECT scope, revoked_at FROM access_tokens WHERE jti = ? AND user_id = ?`,

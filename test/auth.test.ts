@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sanitizeReturnTo } from '../api/_lib/auth'
+import { sanitizeReturnTo } from '../worker/lib/auth.ts'
 
 describe('sanitizeReturnTo (open-redirect guard)', () => {
   it('allows same-origin absolute paths', () => {

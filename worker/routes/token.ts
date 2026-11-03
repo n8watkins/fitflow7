@@ -1,0 +1,45 @@
+import { createAccessToken, getUserId, type Scope } from '../lib/auth.ts'
+import { ensureSchema, getDb } from '../lib/db.ts'
+import type { ApiContext } from '../lib/http.ts'
+import { listTokens, recordToken, revokeToken } from '../lib/tokens.ts'
+
+// /api/token — personal access token management. Cookie-authed only: you manage
+// tokens from a real signed-in web session, never with a token itself.
+//   POST   mint a token  (body: { scope?: 'read'|'readwrite', label? }) -> { token, ... }
+//   GET    list your tokens (metadata only, no secrets)
+//   DELETE revoke one     (?jti= or body { jti })
+// The minted secret is returned once on POST and never stored server-side; only
+// the jti + metadata live in the registry (see _lib/tokens).
+export default async function token(ctx: ApiContext): Promise<Response> {
+  const userId = getUserId(ctx)
+  if (!userId) return ctx.json(401, { error: 'not signed in' })
+
+  try {
+    await ensureSchema(ctx.env)
+    const db = getDb(ctx.env)
+
+    if (ctx.method === 'POST') {
+      const body = (ctx.body ?? {}) as { scope?: unknown; label?: unknown }
+      const scope: Scope = body.scope === 'read' ? 'read' : 'readwrite'
+      const label = typeof body.label === 'string' ? body.label.trim().slice(0, 60) || null : null
+      const { token, jti } = createAccessToken(ctx.env, userId, scope)
+      await recordToken(db, { jti, userId, label, scope, createdAt: new Date().toISOString() })
+      return ctx.json(200, { token, jti, scope, label })
+    }
+
+    if (ctx.method === 'GET') {
+      return ctx.json(200, { tokens: await listTokens(db, userId) })
+    }
+
+    if (ctx.method === 'DELETE') {
+      const jti = ctx.query('jti') ?? (ctx.body as { jti?: unknown } | undefined)?.jti
+      if (typeof jti !== 'string' || !jti) return ctx.json(400, { error: 'jti is required' })
+      await revokeToken(db, userId, jti)
+      return ctx.json(200, { ok: true })
+    }
+
+    return ctx.json(405, { error: 'method not allowed' })
+  } catch {
+    return ctx.json(500, { error: 'token operation failed' })
+  }
+}

@@ -1,7 +1,7 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
 import crypto from 'node:crypto'
-import { resolveAuth } from '../_lib/tokens.js'
-import { ensureSchema, getDb } from '../_lib/db.js'
+import { resolveAuth } from '../../lib/tokens.ts'
+import { ensureSchema, getDb } from '../../lib/db.ts'
+import type { ApiContext } from '../../lib/http.ts'
 
 // Exercise ids are short kebab-case slugs (see src/data/exercises.ts). Validate
 // the shape server-side so junk / injection-y ids can't be stored or served.
@@ -37,18 +37,18 @@ interface PublishBody {
 
 const MAX_PER_OWNER = 25
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' })
-  const auth = await resolveAuth(req)
-  if (!auth) return res.status(401).json({ error: 'not signed in' })
-  if (auth.scope === 'read') return res.status(403).json({ error: 'read-only token cannot publish' })
+export default async function publishRoutine(ctx: ApiContext): Promise<Response> {
+  if (ctx.method !== 'POST') return ctx.json(405, { error: 'method not allowed' })
+  const auth = await resolveAuth(ctx)
+  if (!auth) return ctx.json(401, { error: 'not signed in' })
+  if (auth.scope === 'read') return ctx.json(403, { error: 'read-only token cannot publish' })
   const userId = auth.userId
 
-  const body = (req.body ?? {}) as PublishBody
+  const body = (ctx.body ?? {}) as PublishBody
   const routine = body.routine ?? {}
 
   const name = typeof routine.name === 'string' ? routine.name.trim() : ''
-  if (!name) return res.status(400).json({ error: 'name is required' })
+  if (!name) return ctx.json(400, { error: 'name is required' })
 
   const description = typeof routine.description === 'string' ? routine.description : null
   const exerciseIds = Array.isArray(routine.exerciseIds)
@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     : []
   // Server-side shape validation: every id must be a valid slug (S1).
   if (exerciseIds.some((id) => !SLUG_RE.test(id))) {
-    return res.status(400).json({ error: 'invalid exercise id' })
+    return ctx.json(400, { error: 'invalid exercise id' })
   }
   const workSeconds = Number(routine.workSeconds)
   const restSeconds = Number(routine.restSeconds)
@@ -67,7 +67,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     !Number.isFinite(restSeconds) ||
     !Number.isFinite(rounds)
   ) {
-    return res.status(400).json({ error: 'invalid routine' })
+    return ctx.json(400, { error: 'invalid routine' })
   }
   // Range guard (L2): without this, rounds=0 (non-runnable) or absurd values like
   // 1e12 pass Number.isFinite and pollute the community feed every user browses.
@@ -80,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     restR < 0 || restR > 3600 ||
     roundsR < 1 || roundsR > 100
   ) {
-    return res.status(400).json({ error: 'routine values out of range' })
+    return ctx.json(400, { error: 'routine values out of range' })
   }
 
   const ownerName = typeof body.ownerName === 'string' ? body.ownerName.trim() || null : null
@@ -93,15 +93,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     exerciseIds.length > 60 ||
     exerciseIds.some((id) => id.length > 64)
   ) {
-    return res.status(400).json({ error: 'routine too large' })
+    return ctx.json(400, { error: 'routine too large' })
   }
 
   const slug = crypto.randomUUID()
   const createdAt = new Date().toISOString()
 
   try {
-    await ensureSchema()
-    const db = getDb()
+    await ensureSchema(ctx.env)
+    const db = getDb(ctx.env)
 
     // Abuse caps enforced ATOMICALLY (L4): both the per-owner total and the
     // trailing-hour burst are evaluated inside the INSERT...SELECT...WHERE, so
@@ -134,11 +134,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
 
     if (ins.rowsAffected === 0) {
-      return res.status(429).json({ error: 'publish limit reached' })
+      return ctx.json(429, { error: 'publish limit reached' })
     }
 
-    res.status(200).json({ slug })
+    return ctx.json(200, { slug })
   } catch {
-    res.status(500).json({ error: 'publish failed' })
+    return ctx.json(500, { error: 'publish failed' })
   }
 }

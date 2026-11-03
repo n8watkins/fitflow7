@@ -4,7 +4,7 @@ import type { WorkoutSession } from './types'
 
 // ---------------------------------------------------------------------------
 // Native-only Health Connect writer (loaded only in the Capacitor Android build
-// via the VITE_NATIVE flag in main.tsx — never in the web/Vercel bundle).
+// via the VITE_NATIVE flag in main.tsx — never in the web bundle).
 //
 // A finished workout is written as active calories burned over the workout
 // window. Calories are a rough duration-based estimate (the app has no

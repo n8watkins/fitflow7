@@ -80,9 +80,39 @@ npm run build
 | Audio | Web Audio API (no assets) |
 | Storage | localStorage |
 | Offline | Service worker + web app manifest (installable PWA) |
-| Deploy | Vercel |
+| Hosting | Cloudflare Workers (static assets + the `/api` Worker in `worker/`) |
 
 No backend. No database. No API keys. It all lives in the browser.
+
+---
+
+## Hosting
+
+The app is one Cloudflare Worker: the Vite build in `dist/` is served as static
+assets, and `worker/` answers `/api/*` (sign-in, sync, access tokens and the
+community library) against Turso.
+`wrangler.jsonc` holds the config.
+
+```bash
+npm run preview:worker   # build, then run the Worker locally with wrangler dev
+npm run deploy           # build, then deploy to Cloudflare (wrangler deploy)
+```
+
+Secrets are set with `npx wrangler secret put <NAME>`, never in a file; see
+[SETUP_SYNC.md](SETUP_SYNC.md) for the list.
+After every push to main, `.github/workflows/deploy.yml` runs the same deploy
+once the repository has a `CLOUDFLARE_API_TOKEN` secret (an API token with the
+"Edit Cloudflare Workers" permission); until then it skips.
+
+`vercel.json` only turns off Vercel's Git deploys: fitflow7.vercel.app keeps
+serving its last Vercel deployment (which still has the old API) until the
+domain moves, since the Android app and the MCP server call it.
+
+`npm test` runs the API's contract suite in process.
+To run it against a running Worker, start `wrangler dev` with
+`SESSION_SECRET=test-secret-xyz` and a libSQL server, then set
+`API_BASE_URL` and `API_DB_URL`.
+`LIVE_URL=https://... npm test` adds read-only checks of a deployed host.
 
 ---
 
