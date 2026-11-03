@@ -35,11 +35,14 @@ phone, which CI doesn't have.
 ## 1. Build the native web bundle
 
 ```bash
-VITE_NATIVE=true npm run build
+npm run build:android
 ```
 
-This is the only build that includes the Health plugin. Plain `npm run build`,
-which the web deploy uses, leaves it out.
+This runs `vite build --mode native`, which reads `.env.native`:
+`VITE_NATIVE=true` (the only build that includes the Health plugin) and
+`VITE_API_BASE_URL` / `VITE_APP_URL` = `https://fitflow7.n8builds.dev`, so the app reaches the API
+and writes calendar links on the live site. Plain `npm run build`, which the web
+deploy uses, leaves the plugin out and calls the API on its own origin.
 
 ## 2. Add the Android platform and sync
 
@@ -75,21 +78,25 @@ In Android Studio: **Build → Build APK(s)**, then install it on the phone
 
 ## Re-deploying changes
 
-- After web changes: `VITE_NATIVE=true npm run build && npx cap sync android`,
+- After web changes: `npm run build:android && npx cap sync android`,
   then rebuild the APK.
 - After upgrading Capacitor: `npx cap sync android`; if Android Studio reports
   Gradle or SDK mismatches, run `npx cap migrate`.
-- The bundle calls the API on its own origin unless the build sets
-  `VITE_API_BASE_URL` (for example `VITE_API_BASE_URL=https://fitflow7.vercel.app`);
-  `VITE_APP_URL` likewise sets the app link written into calendar events
-  (default `https://fitflow7.vercel.app`). Both are read at build time.
+- The API origin and the calendar app link are read at build time from
+  `.env.native` (`VITE_API_BASE_URL`, `VITE_APP_URL`); change them there if the
+  site moves, then rebuild and reinstall the APK. An APK built before
+  2026-11 points at fitflow7.vercel.app, which no longer serves the app.
 - Prefer always-latest without rebuilding the bundle? Set `server.url` to
-  `https://fitflow7.vercel.app` in `capacitor.config.json` — but then the Health
+  `https://fitflow7.n8builds.dev` in `capacitor.config.json` — but then the Health
   Connect plugin won't be present (the live site is the plain web build), so keep
   the bundled approach if you want Health Connect.
 
 ## Notes
 
+- The APK runs from `https://localhost`, so its calls to the live API are
+  cross-origin. The Worker sends no CORS headers yet, so sign-in, sync and the
+  community library do not work inside the APK; workouts, history and Health
+  Connect are local and work fully.
 - Cloud sync and the MCP server are independent of this — Health Connect is a
   local device mirror of finished workouts.
 - Write-only for now. Reading other apps' data back would add `read` scopes.

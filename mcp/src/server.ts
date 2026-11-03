@@ -13,11 +13,11 @@ import { z } from 'zod'
 // there is no second copy of the database and no extra trust boundary.
 //
 // Config (env):
-//   FITFLOW_API_URL   default https://fitflow7.vercel.app
+//   FITFLOW_API_URL   default https://fitflow7.n8builds.dev
 //   FITFLOW_TOKEN     required — generate in the app: Settings -> Account -> "Access token"
 // ---------------------------------------------------------------------------
 
-const API_URL = (process.env.FITFLOW_API_URL ?? 'https://fitflow7.vercel.app').replace(/\/$/, '')
+const API_URL = (process.env.FITFLOW_API_URL ?? 'https://fitflow7.n8builds.dev').replace(/\/$/, '')
 const TOKEN = process.env.FITFLOW_TOKEN
 
 if (!TOKEN) {

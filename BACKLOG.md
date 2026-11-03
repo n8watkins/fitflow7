@@ -21,7 +21,7 @@ Forward-looking work list, written to be picked up **with zero prior context**. 
 ## Owner-only / ops (not code an agent can finish alone)
 
 - **F1 · Real-device sign-in verification:** sign in on two browsers, confirm propagation + delete tombstones across devices — now covers routines/sessions **and** weigh-ins / body profile / challenge progress (B1). Agent confirms the rows in Turso.
-- **F2 · Android APK:** `VITE_NATIVE=true npm run build` → `npx cap add android` → manifest perm → Android Studio → sideload (`ANDROID.md`).
+- **F2 · Android APK:** `npm run build:android` → `npx cap add android` → manifest perm → Android Studio → sideload (`ANDROID.md`).
 - **F3 · Deploy:** ✅ **DONE (2026-06-26)** — `main` pushed + `vercel --prod` deployed; https://fitflow7.vercel.app live (home 200, GitHub OAuth 302). S1 + B1 Turso tables (`access_tokens`, `routine_reports`, `weight_log`, `body_profile`, `challenge_progress`) auto-create on first request — no migration step. Re-`vercel link --yes --project fitflow7` after a fresh clone.
 
 ---

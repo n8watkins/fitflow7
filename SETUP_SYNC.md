@@ -32,18 +32,16 @@ openssl rand -base64 32                # -> SESSION_SECRET
 You only need one provider; set up both if you want both buttons to work.
 
 **GitHub** — https://github.com/settings/developers -> "New OAuth App"
-- Homepage URL: `https://fitflow7.vercel.app`
-- Authorization callback URL: `https://fitflow7.vercel.app/api/auth/callback`
+- Homepage URL: `https://fitflow7.n8builds.dev`
+- Authorization callback URL: `https://fitflow7.n8builds.dev/api/auth/callback`
 - Copy Client ID + a generated Client Secret -> `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`
 
 **Google** — https://console.cloud.google.com/apis/credentials -> "Create
 Credentials" -> "OAuth client ID" -> Application type "Web application"
-- Authorized redirect URI: `https://fitflow7.vercel.app/api/auth/callback`
+- Authorized redirect URI: `https://fitflow7.n8builds.dev/api/auth/callback`
 - Copy Client ID + Secret -> `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
 
-Use the host the app is served from: on Cloudflare that is the Worker's
-address (for example `https://fitflow7.<account>.workers.dev`) or its custom
-domain. For local testing with `npm run preview:worker`, also add
+Use the host the app is served from (`APP_URL` in `wrangler.jsonc`). For local testing with `npm run preview:worker`, also add
 `http://localhost:8787/api/auth/callback` as a callback/redirect URI.
 
 ## 4. Set the secrets

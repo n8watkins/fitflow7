@@ -8,13 +8,14 @@
   "compatibility_date": "2026-10-28",
   // The API signs sessions with node:crypto and reads tokens with Buffer.
   "compatibility_flags": ["nodejs_compat"],
-  // Served at fitflow7.<account>.workers.dev until a domain moves over.
-  "workers_dev": true,
+  // Served only at its custom domain; deploys keep the domain attached.
+  "workers_dev": false,
+  "routes": [{ "pattern": "fitflow7.n8builds.dev", "custom_domain": true }],
   "preview_urls": false,
   "assets": {
     "directory": "dist",
     "binding": "ASSETS",
-    // Client routes (/stats, /workout/...) get index.html, like vercel.json's rewrite.
+    // Client routes (/stats, /workout/...) get index.html.
     "not_found_handling": "single-page-application",
     // Serve /privacypolicy.html as is, without redirecting to /privacypolicy.
     "html_handling": "none",
@@ -28,6 +29,11 @@
   "observability": {
     "enabled": true
   },
+  // The public origin: OAuth redirect URIs are built from it, never from the
+  // request's Host header.
+  "vars": {
+    "APP_URL": "https://fitflow7.n8builds.dev"
+  },
   // Set with `wrangler secret put <NAME>`, never in this file; deploys fail until
   // it is set. It signs sessions and access tokens.
   "secrets": {
@@ -37,6 +43,6 @@
   //   TURSO_DATABASE_URL + TURSO_AUTH_TOKEN (accounts, sync and the community
   //   library; without them the API answers signed-out and "unavailable"),
   //   GITHUB_CLIENT_ID + GITHUB_CLIENT_SECRET, GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET
-  //   (sign-in buttons), ALLOWED_EMAILS / ALLOWED_PROVIDER_IDS (single-tenant
-  //   lockdown) and APP_URL (pins the OAuth redirect origin).
+  //   (sign-in buttons) and ALLOWED_EMAILS / ALLOWED_PROVIDER_IDS (single-tenant
+  //   lockdown).
 }
