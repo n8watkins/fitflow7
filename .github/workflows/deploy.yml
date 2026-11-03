@@ -1,7 +1,6 @@
 # Deploys the Worker (the app and its API) to Cloudflare after every push to
 # main, the same `npm run deploy` that ships it by hand. Only main deploys:
-# release/* branches and pull requests never do (as vercel.json kept them off
-# Vercel). It needs a
+# release/* branches and pull requests never do. It needs a
 # CLOUDFLARE_API_TOKEN repository secret (an API token with the "Edit
 # Cloudflare Workers" permission); until that exists the job says so and
 # passes without deploying.

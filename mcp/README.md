@@ -36,7 +36,7 @@ npm install
    shown once). You can revoke it any time from the same screen.
 2. Add the server to your MCP client config (examples below), setting:
    - `FITFLOW_TOKEN` — the token you just generated (treat it like a password)
-   - `FITFLOW_API_URL` — optional, defaults to `https://fitflow7.vercel.app`
+   - `FITFLOW_API_URL` — optional, defaults to `https://fitflow7.n8builds.dev`
 
 ### Claude Desktop (`claude_desktop_config.json`)
 

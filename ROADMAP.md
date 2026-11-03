@@ -83,7 +83,7 @@ no Play Store. The PWA is also already installable as-is.
   as `ActiveCaloriesBurned` (duration-based kcal estimate; tune in
   `native-health.ts`).
 - **Remaining (needs Android Studio + a phone, can't run from CI):**
-  `VITE_NATIVE=true npm run build` → `npx cap add android` → manifest permission
+  `npm run build:android` → `npx cap add android` → manifest permission
   → build APK → sideload. All steps in `ANDROID.md`.
 - Future: read other apps' data back; better calorie model.
 

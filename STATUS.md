@@ -2,7 +2,7 @@
 
 Living snapshot: what's done, what's left, and what's on the owner. Updated 2026-06-29.
 
-- **Live:** https://fitflow7.vercel.app (public, deployed). Repo `main`; **pushed + redeployed 2026-06-29 (session 9)** — origin/main is current. Prod verified: home 200, GitHub login 302, `/api/me` 200 `{user:null}`. Working tree clean.
+- **Live:** https://fitflow7.n8builds.dev (public, Cloudflare Worker `fitflow7`; moved off Vercel 2026-11). Repo `main`; **pushed + redeployed 2026-06-29 (session 9)** — origin/main is current. Prod verified: home 200, GitHub login 302, `/api/me` 200 `{user:null}`. Working tree clean.
 - **Cloud sync is now CONFIGURED + LIVE** — Turso DB + GitHub OAuth + `SESSION_SECRET` are set in Vercel and deployed. `…/api/auth/login?provider=github` returns 302 → GitHub. (Google OAuth intentionally **not** configured; its sign-in button is hidden.)
 - **Verify pipeline:** `npx tsc -b` + `npm run lint` + `npm run test` (**154 tests**) + `npm run build` — all green. `/api` type-checked via `tsconfig.api.json`; `mcp/` has its own `npm run typecheck`. **CI** (`.github/workflows/ci.yml`) now runs the full pipeline on push/PR.
 - **Design principle still holds:** the signed-out app is byte-identical to the local-only MVP; cloud features only activate when signed in. (The "dormant when unconfigured" behavior remains the fail-closed default.)
@@ -73,7 +73,7 @@ A 29-agent multi-agent review (committed as `REVIEW.md`, commit `5abfe98`) inven
 | # | Item | Status / notes | Owner |
 |---|------|----------------|-------|
 | T1 | Real-device sign-in verification | Sync is live but **0 users so far** — sign in on two browsers, confirm routine/session propagation + delete/clear tombstones; I'll confirm in Turso. | **You** |
-| T2 | Build + sideload the Android APK | `VITE_NATIVE=true npm run build` → `cap add android` → manifest perm → Android Studio → sideload (`ANDROID.md`). | **You** |
+| T2 | Build + sideload the Android APK | `npm run build:android` → `cap add android` → manifest perm → Android Studio → sideload (`ANDROID.md`). | **You** |
 | T3 | `/api` request-harness tests | ✅ **DONE** — `test/api/handlers.test.ts` (auth gating, sync LWW/tombstones/scoping, community no-PII + dedup) + CI. | me |
 | T4 | Harden 3c before it's used by anyone but you | ✅ **DONE (S1)** — revocable + scoped (`read`/`readwrite`) tokens via the `access_tokens` registry; publish rate-limit; one-report-per-user dedup; server-side exercise-id validation. **Unblocks T7.** | me |
 | T5 | Player empty-routine guard | ✅ **DONE** — store refuses an empty list; Player shows a guard screen instead of logging a junk session. | me |

@@ -2,7 +2,7 @@
 
 **The no-excuses workout timer.** Seven minutes. Twenty-four exercises. Zero subscriptions.
 
-> Live at **[fitflow7.vercel.app](https://fitflow7.vercel.app)** — just open and go.
+> Live at **[fitflow7.n8builds.dev](https://fitflow7.n8builds.dev)** — just open and go.
 
 ---
 
@@ -104,9 +104,8 @@ After every push to main, `.github/workflows/deploy.yml` runs the same deploy
 once the repository has a `CLOUDFLARE_API_TOKEN` secret (an API token with the
 "Edit Cloudflare Workers" permission); until then it skips.
 
-`vercel.json` only turns off Vercel's Git deploys: fitflow7.vercel.app keeps
-serving its last Vercel deployment (which still has the old API) until the
-domain moves, since the Android app and the MCP server call it.
+The Worker serves only its custom domain, fitflow7.n8builds.dev (`routes` in
+`wrangler.jsonc`), and `APP_URL` there pins the OAuth redirect origin.
 
 `npm test` runs the API's contract suite in process.
 To run it against a running Worker, start `wrangler dev` with

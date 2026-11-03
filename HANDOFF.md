@@ -10,7 +10,7 @@ Zero-context handoff. **Read these first, in order, and don't re-ask anything th
 FitFlow 7 is a desktop-first, mobile-responsive **7-minute workout web app**. Local-first: `localStorage` is the source of truth through one seam (`src/lib/storage.ts`); the signed-out app works fully offline. Optional cloud sync + accounts + a private MCP server layer on top.
 
 - **Stack:** Vite + React 19 + TypeScript + Tailwind v4 (CSS-first `@theme` in `src/index.css`) + Zustand + react-router-dom v7. Backend = Vercel serverless funcs in `/api` + Turso (libSQL). MCP server in `mcp/`.
-- **Deployed:** https://fitflow7.vercel.app (public, live). Deploy: `vercel --prod --yes` (CLI authed; project linked as `fitflow7`; re-`vercel link --yes --project fitflow7` after a fresh clone). Repo: https://github.com/n8watkins/fitflow7, branch `main`.
+- **Deployed:** https://fitflow7.n8builds.dev (public, live) on the Cloudflare Worker `fitflow7`. Deploy: `npm run deploy` (`wrangler deploy`; see README). Repo: https://github.com/n8watkins/fitflow7, branch `main`.
 - **Verify (must stay green):** `npx tsc -b && npm run lint && npm run test && npm run build` (+ `cd mcp && npm run typecheck`). **154 tests.** CI (`.github/workflows/ci.yml`) runs the whole pipeline on push/PR.
 
 ## State (session 8)
