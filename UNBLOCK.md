@@ -15,7 +15,7 @@ is byte-identical to the local-only MVP.
 - Phase 3c — the community routine library (publish / browse / clone / report)
 
 > Reference: `SETUP_SYNC.md` (underlying detail), `STATUS.md` (full state).
-> **Never commit secrets** — `.env` is gitignored; env vars live only in Vercel.
+> **Never commit secrets** — `.env` and `.dev.vars` are gitignored; production values live only in Cloudflare Worker secrets (`npx wrangler secret put <NAME>`).
 
 ---
 

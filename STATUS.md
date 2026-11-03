@@ -3,7 +3,7 @@
 Living snapshot: what's done, what's left, and what's on the owner. Updated 2026-06-29.
 
 - **Live:** https://fitflow7.n8builds.dev (public, Cloudflare Worker `fitflow7`; moved off Vercel 2026-11). Repo `main`; **pushed + redeployed 2026-06-29 (session 9)** — origin/main is current. Prod verified: home 200, GitHub login 302, `/api/me` 200 `{user:null}`. Working tree clean.
-- **Cloud sync is now CONFIGURED + LIVE** — Turso DB + GitHub OAuth + `SESSION_SECRET` are set in Vercel and deployed. `…/api/auth/login?provider=github` returns 302 → GitHub. (Google OAuth intentionally **not** configured; its sign-in button is hidden.)
+- **Cloud sync is now CONFIGURED + LIVE** — Turso DB + GitHub OAuth + `SESSION_SECRET` are set as Cloudflare Worker secrets and deployed. `…/api/auth/login?provider=github` returns 302 → GitHub. (Google OAuth intentionally **not** configured; its sign-in button is hidden.)
 - **Verify pipeline:** `npx tsc -b` + `npm run lint` + `npm run test` (**154 tests**) + `npm run build` — all green. `/api` type-checked via `tsconfig.api.json`; `mcp/` has its own `npm run typecheck`. **CI** (`.github/workflows/ci.yml`) now runs the full pipeline on push/PR.
 - **Design principle still holds:** the signed-out app is byte-identical to the local-only MVP; cloud features only activate when signed in. (The "dormant when unconfigured" behavior remains the fail-closed default.)
 
@@ -17,7 +17,7 @@ Living snapshot: what's done, what's left, and what's on the owner. Updated 2026
 7-minute workout app: timer engine (drift-corrected, wake-lock), 24 exercises, Classic 7 + custom routines, history, stats/streaks, audio cues, PWA offline shell. localStorage via one seam (`storage.ts`). Phase 0 added schema versioning/migrations, tombstones, the dirty queue, `updatedAt`.
 
 ### Phase 1 — Accounts + cloud sync — **LIVE (configured)**
-Turso (libSQL) + Vercel `/api` (auto-creating schema); hand-rolled GitHub/Google OAuth + HMAC session cookie; `api/sync.ts` bidirectional LWW + tombstones, user-scoped. Client engine `lib/sync.ts` + `syncStore.ts`; sign-in in Settings; sync pill in nav. Locally verified 14/14; **prod backend configured + deployed**, pending the owner's first real sign-in.
+Turso (libSQL) + the Worker API in `worker/` (auto-creating schema); hand-rolled GitHub/Google OAuth + HMAC session cookie; `api/sync.ts` bidirectional LWW + tombstones, user-scoped. Client engine `lib/sync.ts` + `syncStore.ts`; sign-in in Settings; sync pill in nav. Locally verified 14/14; **prod backend configured + deployed**, pending the owner's first real sign-in.
 
 ### Phase 1.5 + 3b — Private MCP server — **live**
 `mcp/` stdio server, token-authed (`POST /api/token`, "Generate access token" in Settings). Tools: `get_workout_history`, `get_stats`, `list_routines`, `log_session`, `compare_periods`, `get_personal_records`, `get_routine_detail`. Verified e2e (5/5 + 4/4). Returns your real data once you've signed in + generated a token. See `mcp/README.md`.
@@ -88,7 +88,7 @@ A 29-agent multi-agent review (committed as `REVIEW.md`, commit `5abfe98`) inven
 
 | # | Item | State |
 |---|------|-------|
-| **B1** | Provision + turn on cloud sync | ✅ **DONE** — Turso + GitHub OAuth + secret set in Vercel, deployed. Only the **real sign-in verification (T1)** remains. |
+| **B1** | Provision + turn on cloud sync | ✅ **DONE** — Turso + GitHub OAuth + secret set as Worker secrets, deployed. Only the **real sign-in verification (T1)** remains. |
 | **B2** | Android APK build | Open — needs Android Studio + JDK 17 + a phone w/ Health Connect (`ANDROID.md`). |
 | **B3** | Product decisions | Open — (a) Phase 4 social go/no-go; (b) monetization (still "no subscriptions"?); (c) pay for ExerciseDB GIFs or keep free photos; (d) charts: keep SVG or adopt a lib. |
 

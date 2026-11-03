@@ -307,6 +307,7 @@ function Stepper({ label, description, value, min, max, step = 1, unit, onChange
 // ---------------------------------------------------------------------------
 
 export default function Settings() {
+  const signedIn = useSyncStore((s) => s.user !== null)
   const [settings, setSettings] = useState<UserSettings>(() => getSettings())
   const [theme, setTheme] = useState<ThemePref>(() => getThemePref())
   const [savedVisible, setSavedVisible] = useState(false)
@@ -399,7 +400,9 @@ export default function Settings() {
         <div>
           <h1 className="text-2xl font-bold text-slate-100">Settings</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Defaults for new routines. Routines and history live only in this browser.
+            {signedIn
+              ? 'Defaults for new routines. Routines and history sync to your account.'
+              : 'Defaults for new routines. Routines and history live only in this browser.'}
           </p>
         </div>
         <span

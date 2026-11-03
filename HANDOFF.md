@@ -9,7 +9,7 @@ Zero-context handoff. **Read these first, in order, and don't re-ask anything th
 ## Project summary
 FitFlow 7 is a desktop-first, mobile-responsive **7-minute workout web app**. Local-first: `localStorage` is the source of truth through one seam (`src/lib/storage.ts`); the signed-out app works fully offline. Optional cloud sync + accounts + a private MCP server layer on top.
 
-- **Stack:** Vite + React 19 + TypeScript + Tailwind v4 (CSS-first `@theme` in `src/index.css`) + Zustand + react-router-dom v7. Backend = Vercel serverless funcs in `/api` + Turso (libSQL). MCP server in `mcp/`.
+- **Stack:** Vite + React 19 + TypeScript + Tailwind v4 (CSS-first `@theme` in `src/index.css`) + Zustand + react-router-dom v7. Backend = a Cloudflare Worker API in `worker/` + Turso (libSQL). MCP server in `mcp/`.
 - **Deployed:** https://fitflow7.n8builds.dev (public, live) on the Cloudflare Worker `fitflow7`. Deploy: `npm run deploy` (`wrangler deploy`; see README). Repo: https://github.com/n8watkins/fitflow7, branch `main`.
 - **Verify (must stay green):** `npx tsc -b && npm run lint && npm run test && npm run build` (+ `cd mcp && npm run typecheck`). **154 tests.** CI (`.github/workflows/ci.yml`) runs the whole pipeline on push/PR.
 
@@ -34,7 +34,7 @@ This session's commits (newest first):
 
 ## Next steps (ordered)
 
-1. **Decide push + redeploy.** `main` is 7 commits ahead of `origin/main`, unpushed. When the owner is ready: `git push origin main` then `vercel --prod --yes`. The H2 schema change (new `server_updated_at` columns + `challenge_progress.cleared_days`) is applied **automatically** by `ensureSchema` (CREATE + idempotent ALTER + backfill) on the first request after deploy — no manual migration. Acceptance: prod home 200, `…/api/auth/login?provider=github` 302, no 500s in Vercel logs.
+1. **Deploy.** Changes land through PRs; deploy `main` by hand with `npx wrangler whoami`, `npm run build` and `npx wrangler deploy` (CI has no `CLOUDFLARE_API_TOKEN`). Schema changes apply **automatically** through `ensureSchema` (CREATE + idempotent ALTER + backfill) on the first request after deploy. Acceptance: prod home 200, `…/api/auth/login?provider=github` 302, no `auth_callback_failed` or `unhandled_exception` spikes in Workers Logs.
 2. **Owner sign-in verification (F1/T1 — owner-gated, unchanged).** Owner signs in on two browsers on the live site; confirm routines/sessions **and** B1 data (weigh-ins / body profile / challenge progress) propagate and that deletes/unmarks tombstone across devices. Agent then confirms rows landed in Turso. This is the long-standing last go-live step.
 3. **Exercise photos (owner has the assets?).** The owner stated "all exercises have accurate photos," but the code is still **29/71**: `IMAGE_SLUGS` in `src/data/exercises.ts` wires 29 slugs and `public/exercises/` holds 58 files (29 two-frame pairs). To cover the other 42: drop `<slug>.jpg` + `<slug>-2.jpg` into `public/exercises/` and add each slug to `IMAGE_SLUGS`. Acceptance: `EXERCISES` entries get `imageUrl`/`imageUrl2`, `ExerciseVisual` shows photos not emoji. **Needs the image files from the owner — confirm they exist before starting.**
 4. **(Optional) Adversarial review of the session-8 diff.** A multi-agent verification pass over `git diff 5abfe98^..HEAD` before pushing — the user was offered this and it needs an explicit go (it spends tokens). Skip if confident.

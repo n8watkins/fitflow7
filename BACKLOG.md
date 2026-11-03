@@ -3,7 +3,7 @@
 Forward-looking work list, written to be picked up **with zero prior context**. For current state read `STATUS.md` first.
 
 ## Orientation (read once)
-- **Stack:** Vite + React 19 + TypeScript + Tailwind v4 (CSS-first `@theme` in `src/index.css`; tokens: `accent`, `surface`, `card`, `card-hover`, `edge`; **light theme** via `html[data-theme='light']` overrides) + Zustand + react-router-dom v7. Backend = Vercel `/api` + Turso (libSQL). Private MCP server in `mcp/`.
+- **Stack:** Vite + React 19 + TypeScript + Tailwind v4 (CSS-first `@theme` in `src/index.css`; tokens: `accent`, `surface`, `card`, `card-hover`, `edge`; **light theme** via `html[data-theme='light']` overrides) + Zustand + react-router-dom v7. Backend = Cloudflare Worker API (`worker/`) + Turso (libSQL). Private MCP server in `mcp/`.
 - **Local-first:** `src/lib/storage.ts` is the single localStorage seam (CRUD + `dirty`/`deletedAt` tombstones + export/import). Pure logic in `src/lib/*` with Vitest in `test/`. Pages re-read storage via a `useSyncStore` `dataVersion` + `location.key` memo idiom.
 - **Verify (must stay green):** `npx tsc -b && npm run lint && npm run test && npm run build` (+ `cd mcp && npm run typecheck`). **154 tests** today. CI (`.github/workflows/ci.yml`) runs the whole pipeline on push/PR.
 - **Lint gotchas:** the repo enforces `react-hooks/set-state-in-effect` (don't `setState` directly in an effect — derive, or do it in an async callback) and `react-hooks/exhaustive-deps` (storage-read memos use an inline `// eslint-disable-next-line`). `/api` ESM imports need explicit `.js`.
@@ -22,7 +22,7 @@ Forward-looking work list, written to be picked up **with zero prior context**. 
 
 - **F1 · Real-device sign-in verification:** sign in on two browsers, confirm propagation + delete tombstones across devices — now covers routines/sessions **and** weigh-ins / body profile / challenge progress (B1). Agent confirms the rows in Turso.
 - **F2 · Android APK:** `npm run build:android` → `npx cap add android` → manifest perm → Android Studio → sideload (`ANDROID.md`).
-- **F3 · Deploy:** ✅ **DONE (2026-06-26)** — `main` pushed + `vercel --prod` deployed; https://fitflow7.vercel.app live (home 200, GitHub OAuth 302). S1 + B1 Turso tables (`access_tokens`, `routine_reports`, `weight_log`, `body_profile`, `challenge_progress`) auto-create on first request — no migration step. Re-`vercel link --yes --project fitflow7` after a fresh clone.
+- **F3 · Deploy:** ✅ **DONE** — live at https://fitflow7.n8builds.dev on the Cloudflare Worker `fitflow7` since 2026-11-03 (home 200, GitHub OAuth 302); deploy by hand with `npx wrangler deploy` after `npm run build`. S1 + B1 Turso tables (`access_tokens`, `routine_reports`, `weight_log`, `body_profile`, `challenge_progress`) auto-create on first request — no migration step. Re-`vercel link --yes --project fitflow7` after a fresh clone.
 
 ---
 

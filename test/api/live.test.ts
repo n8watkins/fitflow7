@@ -16,7 +16,7 @@ describe.skipIf(!base)(`live: ${base}`, () => {
     for (const path of ['/', '/stats', '/workout/classic-7', '/api']) {
       const res = await hit(path)
       expect(res.status, path).toBe(200)
-      // Vercel adds '; charset=utf-8', Cloudflare does not; index.html declares UTF-8.
+      // Cloudflare serves index.html without '; charset=utf-8'; the file declares UTF-8.
       expect(res.headers.get('content-type'), path).toMatch(/^text\/html\b/)
       expect(await res.text(), path).toContain('<div id="root">')
     }
@@ -71,10 +71,10 @@ describe.skipIf(!base)(`live: ${base}`, () => {
     expect(res.headers.getSetCookie()).toEqual(['ff_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'])
   })
 
-  it('a bad OAuth callback is a 400 that clears the state cookie', async () => {
+  it('a bad OAuth callback goes back to the app with a sign-in notice and clears the state cookie', async () => {
     const res = await hit('/api/auth/callback?code=x&state=y')
-    expect(res.status).toBe(400)
-    expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/?signin=expired')
     expect(res.headers.getSetCookie()).toEqual(['ff_oauth=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'])
   })
 

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { SignInNotice } from '../lib/signInNotice'
 
 export interface AuthUser {
   id: string
@@ -20,9 +21,12 @@ interface SyncState {
   dataVersion: number
   /** OAuth providers the backend has configured (from /api/me); UI shows only these. */
   providers: string[]
+  /** Why the last sign-in did not finish (from the callback's ?signin=), until dismissed. */
+  signInNotice: SignInNotice | null
   setUser: (user: AuthUser | null) => void
   setProviders: (providers: string[]) => void
   setAuthLoaded: () => void
+  setSignInNotice: (notice: SignInNotice | null) => void
   setStatus: (status: SyncStatus) => void
   markSynced: () => void
   bumpData: () => void
@@ -35,9 +39,11 @@ export const useSyncStore = create<SyncState>((set) => ({
   lastSyncedAt: null,
   dataVersion: 0,
   providers: [],
+  signInNotice: null,
   setUser: (user) => set({ user }),
   setProviders: (providers) => set({ providers }),
   setAuthLoaded: () => set({ authLoaded: true }),
+  setSignInNotice: (signInNotice) => set({ signInNotice }),
   setStatus: (status) => set({ status }),
   markSynced: () => set({ status: 'synced', lastSyncedAt: Date.now() }),
   bumpData: () => set((s) => ({ dataVersion: s.dataVersion + 1 })),

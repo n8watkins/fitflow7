@@ -10,8 +10,8 @@ import publicRoutines from './routes/routines/public.ts'
 import publishRoutine from './routes/routines/publish.ts'
 import reportRoutine from './routes/routines/report.ts'
 
-// The /api routes. Each route checks the method itself, exactly as the Vercel
-// Functions it replaced did, so status codes for a wrong method stay the same.
+// The /api routes. Each route checks the method itself, so a wrong method gets
+// the route's own 405.
 const ROUTES: Record<string, Route> = {
   '/api/me': me,
   '/api/sync': sync,
