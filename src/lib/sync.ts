@@ -22,6 +22,7 @@ import type {
   WeightEntry,
   WorkoutSession,
 } from '../types'
+import { apiUrl } from './api'
 
 // ---------------------------------------------------------------------------
 // Client sync engine. Offline-first: every write stays local; this layer pushes
@@ -65,7 +66,7 @@ export async function sync(): Promise<void> {
   try {
     const pending = getPendingSync()
     const pendingSettings = getPendingSettings()
-    const res = await fetch('/api/sync', {
+    const res = await fetch(apiUrl('/api/sync'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -160,7 +161,7 @@ function scheduleSync(delayMs = 1200): void {
 /** Checks the current session and, if signed in, runs an initial sync. */
 export async function bootstrapAuth(): Promise<void> {
   try {
-    const res = await fetch('/api/me', { credentials: 'include' })
+    const res = await fetch(apiUrl('/api/me'), { credentials: 'include' })
     const data = (await res.json()) as { user: AuthUser | null; providers?: string[] }
     useSyncStore.getState().setUser(data.user ?? null)
     useSyncStore.getState().setProviders(data.providers ?? [])
@@ -175,7 +176,7 @@ export async function bootstrapAuth(): Promise<void> {
 /** Redirects to the provider's OAuth consent screen. */
 export function loginWith(provider: 'github' | 'google'): void {
   const returnTo = encodeURIComponent(window.location.pathname)
-  window.location.href = `/api/auth/login?provider=${provider}&returnTo=${returnTo}`
+  window.location.href = apiUrl(`/api/auth/login?provider=${provider}&returnTo=${returnTo}`)
 }
 
 /** Token metadata returned by GET /api/token (never includes the secret). */
@@ -192,7 +193,7 @@ export interface AccessTokenInfo {
  *  Returns the secret once; it is never retrievable afterward. */
 export async function requestAccessToken(opts?: { scope?: 'read' | 'readwrite'; label?: string }): Promise<string | null> {
   try {
-    const res = await fetch('/api/token', {
+    const res = await fetch(apiUrl('/api/token'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -209,7 +210,7 @@ export async function requestAccessToken(opts?: { scope?: 'read' | 'readwrite'; 
 /** Lists the signed-in user's tokens (metadata only). */
 export async function listAccessTokens(): Promise<AccessTokenInfo[]> {
   try {
-    const res = await fetch('/api/token', { method: 'GET', credentials: 'include' })
+    const res = await fetch(apiUrl('/api/token'), { method: 'GET', credentials: 'include' })
     if (!res.ok) return []
     return ((await res.json()) as { tokens?: AccessTokenInfo[] }).tokens ?? []
   } catch {
@@ -220,7 +221,7 @@ export async function listAccessTokens(): Promise<AccessTokenInfo[]> {
 /** Revokes one of the user's tokens by id (jti). */
 export async function revokeAccessToken(jti: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/token?jti=${encodeURIComponent(jti)}`, {
+    const res = await fetch(apiUrl(`/api/token?jti=${encodeURIComponent(jti)}`), {
       method: 'DELETE',
       credentials: 'include',
     })
@@ -232,7 +233,7 @@ export async function revokeAccessToken(jti: string): Promise<boolean> {
 
 export async function logout(): Promise<void> {
   try {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+    await fetch(apiUrl('/api/auth/logout'), { method: 'POST', credentials: 'include' })
   } finally {
     clearSyncCursor()
     useSyncStore.getState().setUser(null)

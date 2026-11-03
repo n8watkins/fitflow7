@@ -12,7 +12,7 @@ Turn the app into a sideloadable Android app that writes finished workouts to
   workout complete (no-op on web).
 - `src/native-health.ts`: the real native writer, registered on `window` and
   loaded **only** in the native build (gated by `VITE_NATIVE` in `main.tsx`).
-  It never enters the web/Vercel bundle.
+  It never enters the web bundle.
 - `public/privacypolicy.html`: the page Health Connect shows from its
   permission screen. The build copies it to `assets/public/`, where the plugin
   looks for it.
@@ -39,7 +39,7 @@ VITE_NATIVE=true npm run build
 ```
 
 This is the only build that includes the Health plugin. Plain `npm run build`,
-which Vercel uses, leaves it out.
+which the web deploy uses, leaves it out.
 
 ## 2. Add the Android platform and sync
 
@@ -79,6 +79,10 @@ In Android Studio: **Build → Build APK(s)**, then install it on the phone
   then rebuild the APK.
 - After upgrading Capacitor: `npx cap sync android`; if Android Studio reports
   Gradle or SDK mismatches, run `npx cap migrate`.
+- The bundle calls the API on its own origin unless the build sets
+  `VITE_API_BASE_URL` (for example `VITE_API_BASE_URL=https://fitflow7.vercel.app`);
+  `VITE_APP_URL` likewise sets the app link written into calendar events
+  (default `https://fitflow7.vercel.app`). Both are read at build time.
 - Prefer always-latest without rebuilding the bundle? Set `server.url` to
   `https://fitflow7.vercel.app` in `capacitor.config.json` — but then the Health
   Connect plugin won't be present (the live site is the plain web build), so keep

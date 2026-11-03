@@ -16,7 +16,8 @@ export interface ScheduleOptions {
   repeatWeekly?: boolean
 }
 
-const APP_URL = 'https://fitflow7.vercel.app'
+// The app link written into calendar events. VITE_APP_URL overrides it at build time.
+const APP_URL = (import.meta.env.VITE_APP_URL || 'https://fitflow7.vercel.app').replace(/\/$/, '')
 
 /** Rough workout length in minutes (>= 7), from the routine's timing. */
 export function estimateMinutes(r: Routine): number {
