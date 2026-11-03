@@ -107,6 +107,15 @@ once the repository has a `CLOUDFLARE_API_TOKEN` secret (an API token with the
 The Worker serves only its custom domain, fitflow7.n8builds.dev (`routes` in
 `wrangler.jsonc`), and `APP_URL` there pins the OAuth redirect origin.
 
+### Reading the logs
+
+Workers Logs keeps every request (`observability` in `wrangler.jsonc`).
+In the Cloudflare dashboard, open Workers & Pages, then the `fitflow7` Worker, then Logs.
+To stream them live, run `npx wrangler tail fitflow7 --format pretty`.
+`--search` matches log messages only, not request URLs, so use `--status error` or no filter to see requests.
+Failures log one JSON line with `event`, `reason`, `route` and `status`, for example `{"event":"auth_callback_failed","reason":"missing_cookie",...}`; unexpected throws log `unhandled_exception` with the route.
+They never carry codes, state values, tokens, cookies or emails.
+
 `npm test` runs the API's contract suite in process.
 To run it against a running Worker, start `wrangler dev` with
 `SESSION_SECRET=test-secret-xyz` and a libSQL server, then set

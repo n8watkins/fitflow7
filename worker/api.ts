@@ -1,4 +1,5 @@
 import { ApiContext, InvalidJsonError, type ApiEnv, type Route } from './lib/http.ts'
+import { errorSummary, logError } from './lib/log.ts'
 import me from './routes/me.ts'
 import sync from './routes/sync.ts'
 import token from './routes/token.ts'
@@ -40,7 +41,14 @@ export async function handleApi(request: Request, env: ApiEnv): Promise<Response
     return await route(ctx)
   } catch (err) {
     if (err instanceof InvalidJsonError) return ctx.send(400, 'Invalid JSON')
-    console.error(JSON.stringify({ message: 'api route failed', path, error: String(err) }))
+    logError({
+      event: 'unhandled_exception',
+      reason: 'route_threw',
+      route: path,
+      method: request.method,
+      status: 500,
+      error: errorSummary(err),
+    })
     return ctx.json(500, { error: 'internal error' })
   }
 }

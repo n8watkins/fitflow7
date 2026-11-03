@@ -26,8 +26,10 @@
   // queries, so a Worker near the visitor would pay a cross-country round trip
   // for each. Static assets are still served from the edge.
   "placement": { "mode": "targeted", "region": "aws:us-east-2" },
+  // Workers Logs: keep every request's logs (see "Reading the logs" in README.md).
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "head_sampling_rate": 1
   },
   // The public origin: OAuth redirect URIs are built from it, never from the
   // request's Host header.
