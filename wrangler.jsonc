@@ -23,11 +23,13 @@
     "enabled": true
   },
   // Set with `wrangler secret put <NAME>`, never in this file; deploys fail until
-  // these are set.
+  // it is set. It signs sessions and access tokens.
   "secrets": {
-    "required": ["SESSION_SECRET", "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"]
+    "required": ["SESSION_SECRET"]
   }
   // Optional secrets; each feature stays off while its value is missing:
+  //   TURSO_DATABASE_URL + TURSO_AUTH_TOKEN (accounts, sync and the community
+  //   library; without them the API answers signed-out and "unavailable"),
   //   GITHUB_CLIENT_ID + GITHUB_CLIENT_SECRET, GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET
   //   (sign-in buttons), ALLOWED_EMAILS / ALLOWED_PROVIDER_IDS (single-tenant
   //   lockdown) and APP_URL (pins the OAuth redirect origin).

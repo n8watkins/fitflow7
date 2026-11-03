@@ -50,8 +50,8 @@ domain. For local testing with `npm run preview:worker`, also add
 
 - **Production:** set each key from `.env.example` as a Worker secret, typing
   the value at the prompt: `npx wrangler secret put SESSION_SECRET` (and so on).
-  `SESSION_SECRET`, `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are required;
-  a deploy fails until they are set.
+  A deploy fails until `SESSION_SECRET` is set; without `TURSO_DATABASE_URL`
+  and `TURSO_AUTH_TOKEN` the API stays signed-out.
 - **Local:** `cp .env.example .dev.vars`, fill it in, run
   `npm run preview:worker`.
 

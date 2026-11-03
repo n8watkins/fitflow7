@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
-// Read-only checks of a deployed FitFlow 7: LIVE_URL=https://... npm test.
+// Read-only checks of a deployed FitFlow 7: LIVE_URL=https://... npm test
+// (LIVE_EXPECT_DB=0 for a host that has no database yet).
 // Nothing here signs in or writes, so it is safe against production, and the
 // same run against two hosts shows that they answer alike.
 const base = process.env.LIVE_URL?.replace(/\/$/, '')
@@ -33,10 +34,18 @@ describe.skipIf(!base)(`live: ${base}`, () => {
     expect(body.user).toBeNull()
     expect(Array.isArray(body.providers)).toBe(true)
 
+    // 200 with a database, 500 "unavailable" without one (the app shows the
+    // community library as offline).
     const pub = await hit('/api/routines/public')
-    expect(pub.status).toBe(200)
-    expect(Array.isArray(((await pub.json()) as { routines: unknown[] }).routines)).toBe(true)
-    expect((await hit('/api/routines/public?slug=does-not-exist')).status).toBe(404)
+    const pubBody = (await pub.json()) as { routines?: unknown[]; error?: string }
+    if (process.env.LIVE_EXPECT_DB === '0') {
+      expect(pub.status).toBe(500)
+      expect(pubBody).toEqual({ error: 'unavailable' })
+    } else {
+      expect(pub.status).toBe(200)
+      expect(Array.isArray(pubBody.routines)).toBe(true)
+      expect((await hit('/api/routines/public?slug=does-not-exist')).status).toBe(404)
+    }
   })
 
   it('gates, rejects and routes exactly as before', async () => {
@@ -68,7 +77,12 @@ describe.skipIf(!base)(`live: ${base}`, () => {
     expect(res.headers.getSetCookie()).toEqual(['ff_oauth=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'])
   })
 
-  it('GitHub sign-in starts with a redirect back to this host', async () => {
+  it('GitHub sign-in starts with a redirect back to this host, when it is configured', async (t) => {
+    const { providers } = (await (await hit('/api/me')).json()) as { providers: string[] }
+    if (!providers.includes('github')) {
+      expect((await hit('/api/auth/login?provider=github')).status).toBe(501)
+      t.skip()
+    }
     const res = await hit('/api/auth/login?provider=github&returnTo=/stats')
     expect(res.status).toBe(302)
     const location = new URL(res.headers.get('location')!)

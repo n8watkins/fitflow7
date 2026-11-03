@@ -2,10 +2,12 @@
 // carries the parsed request, the Worker env and the Set-Cookie headers a route
 // queues before it answers.
 
-/** The Worker env as the API reads it. The OAuth, allow-list and APP_URL values
- *  are optional secrets: each feature stays off while its value is missing. */
-export type ApiEnv = Pick<Env, 'SESSION_SECRET' | 'TURSO_DATABASE_URL' | 'TURSO_AUTH_TOKEN'> &
+/** The Worker env as the API reads it. All but SESSION_SECRET are optional
+ *  secrets: each feature stays off while its value is missing. */
+export type ApiEnv = Pick<Env, 'SESSION_SECRET'> &
   Partial<Record<
+    | 'TURSO_DATABASE_URL'
+    | 'TURSO_AUTH_TOKEN'
     | 'APP_URL'
     | 'GITHUB_CLIENT_ID'
     | 'GITHUB_CLIENT_SECRET'

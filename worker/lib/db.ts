@@ -16,17 +16,18 @@ const clients = new Map<string, Client>()
 // Databases whose schema this isolate has already brought up to date.
 const migrated = new Set<string>()
 
-function dbKey(env: ApiEnv): string {
+function dbConfig(env: ApiEnv): { key: string; url: string; authToken: string | undefined } {
   const url = env.TURSO_DATABASE_URL
   if (!url) throw new Error('TURSO_DATABASE_URL is not set')
-  return `${url}\n${env.TURSO_AUTH_TOKEN ?? ''}`
+  const authToken = env.TURSO_AUTH_TOKEN || undefined
+  return { key: `${url}\n${authToken ?? ''}`, url, authToken }
 }
 
 export function getDb(env: ApiEnv): Client {
-  const key = dbKey(env)
+  const { key, url, authToken } = dbConfig(env)
   let client = clients.get(key)
   if (!client) {
-    client = createClient({ url: env.TURSO_DATABASE_URL, authToken: env.TURSO_AUTH_TOKEN || undefined })
+    client = createClient({ url, authToken })
     clients.set(key, client)
   }
   return client
@@ -191,7 +192,7 @@ const BACKFILLS = SYNCED_TABLES.map(
  *  idempotent, so two requests racing on a cold isolate both run it safely; no
  *  promise is shared between requests, which Workers does not allow for I/O. */
 export async function ensureSchema(env: ApiEnv): Promise<void> {
-  const key = dbKey(env)
+  const { key } = dbConfig(env)
   if (migrated.has(key)) return
   const db = getDb(env)
   for (const stmt of SCHEMA) {
