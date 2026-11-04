@@ -1,5 +1,6 @@
 import {
   applyRemoteBodyProfile,
+  applyRemoteTrainingProfile,
   applyRemoteChallengeProgress,
   applyRemoteRoutines,
   applyRemoteSessions,
@@ -16,6 +17,7 @@ import {
 import { useSyncStore, type AuthUser } from '../store/syncStore'
 import type {
   BodyProfile,
+  TrainingProfile,
   ChallengeProgress,
   Routine,
   UserSettings,
@@ -41,6 +43,7 @@ interface SyncResponse {
   weightLog: WeightEntry[]
   challengeProgress: ChallengeProgress[]
   bodyProfile: BodyProfile | null
+  trainingProfile?: TrainingProfile | null
 }
 
 /** Records per push. The server refuses more than 500; a long offline history
@@ -50,7 +53,7 @@ export const MAX_PUSH_RECORDS = 200
 /** Takes up to MAX_PUSH_RECORDS records from the dirty queue, routines first.
  *  `more` says whether anything was left for the next request. */
 function takeBatch(all: ReturnType<typeof getPendingSync>) {
-  let left = MAX_PUSH_RECORDS - (all.bodyProfile ? 1 : 0) - 1 // settings may ride along
+  let left = MAX_PUSH_RECORDS - (all.bodyProfile ? 1 : 0) - (all.trainingProfile ? 1 : 0) - 1 // settings may ride along
   const take = <T,>(list: T[]): T[] => {
     const out = list.slice(0, Math.max(0, left))
     left -= out.length
@@ -62,6 +65,7 @@ function takeBatch(all: ReturnType<typeof getPendingSync>) {
     weightLog: take(all.weightLog),
     challengeProgress: take(all.challengeProgress),
     bodyProfile: all.bodyProfile,
+    trainingProfile: all.trainingProfile,
   }
   const more =
     batch.routines.length < all.routines.length ||
@@ -112,6 +116,7 @@ export async function sync(): Promise<void> {
               weightLog: pending.weightLog,
               challengeProgress: pending.challengeProgress,
               bodyProfile: pending.bodyProfile ?? null,
+              trainingProfile: pending.trainingProfile ?? null,
             }
           : {}),
       }),
@@ -151,6 +156,7 @@ export async function sync(): Promise<void> {
         weightLog: pending.weightLog,
         challengeProgress: pending.challengeProgress,
         bodyProfile: pending.bodyProfile,
+        trainingProfile: pending.trainingProfile,
       })
       if (pendingSettings) markSettingsSynced(pendingSettings.updatedAt)
     }
@@ -162,6 +168,7 @@ export async function sync(): Promise<void> {
     applyRemoteWeightLog(data.weightLog ?? [])
     applyRemoteChallengeProgress(data.challengeProgress ?? [])
     if (data.bodyProfile) applyRemoteBodyProfile(data.bodyProfile)
+    if (data.trainingProfile) applyRemoteTrainingProfile(data.trainingProfile)
 
     if (pushed && more) rerunQueued = true
     setSyncCursor(data.serverTime)
@@ -172,7 +179,8 @@ export async function sync(): Promise<void> {
       data.settings ||
       data.weightLog?.length ||
       data.challengeProgress?.length ||
-      data.bodyProfile
+      data.bodyProfile ||
+      data.trainingProfile
     ) {
       useSyncStore.getState().bumpData()
     }

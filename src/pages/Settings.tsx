@@ -15,6 +15,7 @@ import {
 import { applyTheme } from '../lib/theme'
 import { dayKey } from '../lib/format'
 import { useSyncStore } from '../store/syncStore'
+import TrainingSettings from '../components/TrainingSettings'
 import { speak, speechAvailable, type CoachTone } from '../lib/coach'
 import {
   loginWith,
@@ -483,6 +484,9 @@ export default function Settings() {
 
       {/* Account & sync */}
       <AccountSection />
+
+      {/* Training plan (level, goal, starter plan) */}
+      <TrainingSettings />
 
       {/* Workout defaults */}
       <section>

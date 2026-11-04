@@ -1,5 +1,9 @@
 import type {
   BodyProfile,
+  Goal,
+  Level,
+  TrainingProfile,
+  VariationTier,
   ChallengeProgress,
   Routine,
   UserSettings,
@@ -16,7 +20,7 @@ import type {
 export const MAX_SYNC_BODY_BYTES = 1_000_000
 export const MAX_SYNC_RECORDS = 500
 
-export type Collection = 'routines' | 'sessions' | 'weightLog' | 'challengeProgress' | 'settings' | 'bodyProfile'
+export type Collection = 'routines' | 'sessions' | 'weightLog' | 'challengeProgress' | 'settings' | 'bodyProfile' | 'trainingProfile'
 
 export interface Rejected {
   collection: Collection
@@ -182,6 +186,35 @@ export const checkBodyProfile = (raw: unknown): Check<BodyProfile> =>
     goalWeightKg: optNum(o, 'goalWeightKg', 1, 1000),
     updatedAt: date(o, 'updatedAt'),
   }))
+
+const GOALS = new Set(['habit', 'strength', 'cardio'])
+const LEVELS = new Set(['beginner', 'intermediate', 'advanced'])
+const TIERS = new Set(['easier', 'standard', 'harder'])
+
+export const checkTrainingProfile = (raw: unknown): Check<TrainingProfile> =>
+  record(raw, (o) => {
+    if (o.goal !== undefined && o.goal !== null && !GOALS.has(o.goal as string)) fail('goal is not a known goal')
+    if (o.level !== undefined && o.level !== null && !LEVELS.has(o.level as string)) fail('level is not a known level')
+    if (o.onboardingDone !== undefined && typeof o.onboardingDone !== 'boolean') fail('onboardingDone must be true or false')
+    const variations: Record<string, VariationTier> = {}
+    if (o.variations !== undefined && o.variations !== null) {
+      if (!isObject(o.variations)) fail('variations must be a map of exercise to tier')
+      const entries = Object.entries(o.variations)
+      if (entries.length > 200) fail('variations has too many moves')
+      for (const [id, tier] of entries) {
+        if (!SLUG_RE.test(id) || !TIERS.has(tier as string)) fail('variations must be a map of exercise to tier')
+        variations[id] = tier as VariationTier
+      }
+    }
+    return {
+      goal: (o.goal ?? undefined) as Goal | undefined,
+      level: (o.level ?? undefined) as Level | undefined,
+      planStartedAt: optDate(o, 'planStartedAt'),
+      onboardingDone: o.onboardingDone === true,
+      variations,
+      updatedAt: date(o, 'updatedAt'),
+    }
+  })
 
 /** The record's id for a rejection report, or '' when it has none worth echoing. */
 export function rejectedId(raw: unknown, key: string): string {

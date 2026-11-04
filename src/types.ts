@@ -119,6 +119,29 @@ export type BodyProfile = {
   dirty?: boolean
 }
 
+// ---------------------------------------------------------------------------
+// Training profile: onboarding answers, the starter plan and per-move
+// easier/harder choices. Singleton, synced like BodyProfile.
+// ---------------------------------------------------------------------------
+
+export type Goal = 'habit' | 'strength' | 'cardio'
+export type Level = 'beginner' | 'intermediate' | 'advanced'
+export type VariationTier = 'easier' | 'standard' | 'harder'
+
+export type TrainingProfile = {
+  goal?: Goal
+  level?: Level
+  /** ISO time the current starter plan began; unset = no plan. Completed
+   *  workouts from then on move the plan forward. */
+  planStartedAt?: string
+  /** True once onboarding was answered or skipped, so it isn't shown again. */
+  onboardingDone?: boolean
+  /** Per-move choice of easier/standard/harder, by base exercise id. */
+  variations?: Record<string, VariationTier>
+  updatedAt: string
+  dirty?: boolean
+}
+
 /** A single dated weight measurement. One entry per local calendar day (upsert). */
 export type WeightEntry = {
   id: string

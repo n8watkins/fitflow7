@@ -5,6 +5,7 @@ import {
   type ChallengeProgress,
   type Routine,
   type ThemePref,
+  type TrainingProfile,
   type UserSettings,
   type WeightEntry,
   type WorkoutSession,
@@ -23,6 +24,7 @@ const KEY = {
   schemaVersion: 'fitflow.schemaVersion',
   syncCursor: 'fitflow.syncCursor',
   bodyProfile: 'fitflow.bodyProfile',
+  trainingProfile: 'fitflow.trainingProfile',
   weightLog: 'fitflow.weightLog',
   challengeProgress: 'fitflow.challengeProgress',
   theme: 'fitflow.theme',
@@ -320,14 +322,17 @@ export function getPendingSync(): {
   weightLog: WeightEntry[]
   challengeProgress: ChallengeProgress[]
   bodyProfile?: BodyProfile
+  trainingProfile?: TrainingProfile
 } {
   const bodyProfile = readJSON<BodyProfile>(KEY.bodyProfile, { updatedAt: '' })
+  const trainingProfile = getTrainingProfile()
   return {
     routines: getRoutinesRaw().filter((r) => r.dirty),
     sessions: readJSON<WorkoutSession[]>(KEY.sessions, []).filter((s) => s.dirty),
     weightLog: readJSON<WeightEntry[]>(KEY.weightLog, []).filter((e) => e.dirty),
     challengeProgress: readJSON<ChallengeProgress[]>(KEY.challengeProgress, []).filter((c) => c.dirty),
     bodyProfile: bodyProfile.dirty ? bodyProfile : undefined,
+    trainingProfile: trainingProfile.dirty ? trainingProfile : undefined,
   }
 }
 
@@ -341,6 +346,7 @@ export function markSynced(pushed: {
   weightLog?: { id: string; updatedAt?: string }[]
   challengeProgress?: { challengeId: string; updatedAt?: string }[]
   bodyProfile?: { updatedAt: string }
+  trainingProfile?: { updatedAt: string }
 }): void {
   if (pushed.routines?.length) {
     const m = new Map(pushed.routines.map((r) => [r.id, r.updatedAt]))
@@ -382,6 +388,10 @@ export function markSynced(pushed: {
     const bp = readJSON<BodyProfile>(KEY.bodyProfile, { updatedAt: '' })
     // Only clear dirty if it wasn't edited again during the round-trip.
     if (bp.updatedAt === pushed.bodyProfile.updatedAt) writeJSON(KEY.bodyProfile, { ...bp, dirty: false })
+  }
+  if (pushed.trainingProfile) {
+    const tp = getTrainingProfile()
+    if (tp.updatedAt === pushed.trainingProfile.updatedAt) writeJSON(KEY.trainingProfile, { ...tp, dirty: false })
   }
 }
 
@@ -580,6 +590,13 @@ export function applyRemoteBodyProfile(value: BodyProfile): void {
   }
 }
 
+/** Applies the server's training profile (singleton) if it's newer. */
+export function applyRemoteTrainingProfile(value: TrainingProfile): void {
+  if ((value.updatedAt ?? '') > (getTrainingProfile().updatedAt ?? '')) {
+    writeJSON(KEY.trainingProfile, { ...value, dirty: false })
+  }
+}
+
 export function applyRemoteSettings(value: UserSettings, updatedAt: string): void {
   // Empty string sorts before any ISO timestamp, so it loses LWW ties as the
   // "oldest" value — which is what we want for a never-stamped record.
@@ -610,6 +627,8 @@ export interface ExportBundle {
   weightLog?: WeightEntry[]
   bodyProfile?: BodyProfile
   challengeProgress?: ChallengeProgress[]
+  /** Training profile (optional — absent in older backups). */
+  trainingProfile?: TrainingProfile
 }
 
 export interface ImportResult {
@@ -635,6 +654,7 @@ export function exportData(): ExportBundle {
     weightLog: readJSON<WeightEntry[]>(KEY.weightLog, []),
     bodyProfile: getBodyProfile(),
     challengeProgress: readJSON<ChallengeProgress[]>(KEY.challengeProgress, []),
+    trainingProfile: getTrainingProfile(),
   }
 }
 
@@ -727,6 +747,11 @@ export function importData(bundle: ExportBundle): ImportResult {
     bodyProfile = true
   }
 
+  // Training profile — singleton, LWW by updatedAt.
+  if (bundle.trainingProfile && (bundle.trainingProfile.updatedAt ?? '') > getTrainingProfile().updatedAt) {
+    writeJSON(KEY.trainingProfile, { ...bundle.trainingProfile, dirty: true })
+  }
+
   emitWrite()
   return { routines, sessions, settings, weightEntries, challenges, bodyProfile }
 }
@@ -745,6 +770,21 @@ export function saveBodyProfile(patch: Partial<BodyProfile>): void {
   const current = getBodyProfile()
   const next: BodyProfile = { ...current, ...patch, updatedAt: now(), dirty: true }
   writeJSON(KEY.bodyProfile, next)
+  emitWrite()
+}
+
+// ---------------------------------------------------------------------------
+// Training profile (singleton: onboarding answers, plan start, move choices)
+// ---------------------------------------------------------------------------
+
+export function getTrainingProfile(): TrainingProfile {
+  return readJSON<TrainingProfile>(KEY.trainingProfile, { updatedAt: '' })
+}
+
+/** Persists a change to the training profile, stamping updatedAt + dirty. */
+export function saveTrainingProfile(patch: Partial<TrainingProfile>): void {
+  const next: TrainingProfile = { ...getTrainingProfile(), ...patch, updatedAt: now(), dirty: true }
+  writeJSON(KEY.trainingProfile, next)
   emitWrite()
 }
 

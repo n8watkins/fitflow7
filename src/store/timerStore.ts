@@ -19,6 +19,8 @@ export type CueEvent = {
 export type TimerState = {
   routine?: Routine
   exercises: Exercise[]
+  /** The routine's own move at each position, before any easier/harder swap. */
+  baseIds: string[]
   phase: WorkoutPhase
   currentIndex: number
   secondsLeft: number
@@ -41,7 +43,7 @@ export type TimerState = {
   cueEvent: CueEvent | null
 
   // Actions
-  start(routine: Routine, exercises: Exercise[], settings: UserSettings): void
+  start(routine: Routine, exercises: Exercise[], settings: UserSettings, baseIds?: string[]): void
   tick(): void
   pause(): void
   resume(): void
@@ -50,6 +52,9 @@ export type TimerState = {
   previous(): void
   endWorkout(): void
   toggleMute(): void
+  /** Swaps the move at these positions (all at or after the current one) for
+   *  another, e.g. its easier or harder version. Timing is unchanged. */
+  replaceExercises(indices: number[], exercise: Exercise): void
   reset(): void
 }
 
@@ -212,6 +217,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   // Initial idle state
   routine: undefined,
   exercises: [],
+  baseIds: [],
   phase: 'idle',
   currentIndex: 0,
   secondsLeft: 0,
@@ -228,7 +234,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   // -------------------------------------------------------------------------
   // start
   // -------------------------------------------------------------------------
-  start(routine, exercises, settings) {
+  start(routine, exercises, settings, baseIds) {
     clearTick()
 
     // Guard: an all-unknown-exercise routine (e.g. a clone/import whose ids no
@@ -263,6 +269,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     set({
       routine,
       exercises,
+      baseIds: baseIds ?? exercises.map((e) => e.id),
       phase,
       currentIndex: 0,
       secondsLeft: seconds,
@@ -558,6 +565,14 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   // -------------------------------------------------------------------------
   // toggleMute
   // -------------------------------------------------------------------------
+  replaceExercises(indices, exercise) {
+    set((s) => {
+      const next = [...s.exercises]
+      for (const i of indices) if (i >= s.currentIndex && i < next.length) next[i] = exercise
+      return { exercises: next }
+    })
+  },
+
   toggleMute() {
     set((s) => ({ isMuted: !s.isMuted }))
   },
@@ -571,6 +586,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     set({
       routine: undefined,
       exercises: [],
+      baseIds: [],
       phase: 'idle',
       currentIndex: 0,
       secondsLeft: 0,
