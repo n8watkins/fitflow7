@@ -5,6 +5,8 @@ import App from './App.tsx'
 import { gcTombstones, runMigrations } from './lib/storage'
 import { takeSignInNotice } from './lib/signInNotice'
 import { useSyncStore } from './store/syncStore'
+import ErrorBoundary from './components/ErrorBoundary'
+import { initMonitoring } from './lib/monitoring'
 
 // Upgrade any stored data to the current schema before the app reads it.
 runMigrations()
@@ -24,9 +26,14 @@ useSyncStore.getState().setSignInNotice(takeSignInNotice())
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary fullScreen>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )
+
+// Error tracking loads only when the Worker has a SENTRY_DSN (lib/monitoring.ts).
+void initMonitoring()
 
 // Register the service worker for offline support (production only — the dev
 // server has no /sw.js and an active worker would cache stale modules).

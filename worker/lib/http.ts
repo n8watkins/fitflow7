@@ -15,7 +15,8 @@ export type ApiEnv = Pick<Env, 'SESSION_SECRET'> &
     | 'GOOGLE_CLIENT_ID'
     | 'GOOGLE_CLIENT_SECRET'
     | 'ALLOWED_EMAILS'
-    | 'ALLOWED_PROVIDER_IDS',
+    | 'ALLOWED_PROVIDER_IDS'
+    | 'SENTRY_DSN',
     string
   >>
 

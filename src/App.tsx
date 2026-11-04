@@ -32,6 +32,7 @@ import { applyTheme } from './lib/theme'
 import AccountMenu from './components/AccountMenu'
 import { SaveStatusChip } from './components/SaveStatus'
 import SignInNoticeBanner from './components/SignInNoticeBanner'
+import ErrorBoundary from './components/ErrorBoundary'
 
 type NavItem = { to: string; label: string; Icon: ComponentType<{ className?: string }> }
 
@@ -104,6 +105,7 @@ function Shell() {
 
       <main className={inWorkout ? '' : 'mx-auto max-w-5xl px-4 py-8 pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-8'}>
         {!inWorkout && <SignInNoticeBanner />}
+        <ErrorBoundary resetKey={location.pathname} fullScreen={inWorkout}>
         <Suspense fallback={<RouteFallback fullHeight={inWorkout} />}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
@@ -120,6 +122,7 @@ function Shell() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
+        </ErrorBoundary>
       </main>
 
       {!inWorkout && <MobileNav />}
@@ -220,18 +223,53 @@ function RouteFallback({ fullHeight = false }: { fullHeight?: boolean }) {
   )
 }
 
+// Unknown paths: the Worker also answers them with status 404 (worker/index.ts).
 function NotFound() {
+  const suggestions = [
+    { to: '/', label: 'Workouts', Icon: IconDumbbell },
+    { to: '/library', label: 'Exercises', Icon: IconBook },
+    { to: '/history', label: 'History', Icon: IconClock },
+  ]
   return (
-    <div className="flex flex-col items-center gap-6 py-24 text-center">
-      <span className="text-6xl">🧭</span>
-      <h1 className="text-2xl font-bold text-slate-100">Page not found</h1>
-      <p className="text-slate-400">That page doesn't exist.</p>
-      <Link
-        to="/"
-        className="rounded-xl bg-accent px-5 py-2.5 font-semibold text-slate-900 transition hover:opacity-90"
-      >
-        Back to Dashboard
-      </Link>
+    <div className="flex flex-col items-center gap-6 py-20 text-center" data-testid="not-found">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-edge bg-card text-accent" aria-hidden="true">
+        <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="m15.5 8.5-2 5-5 2 2-5 5-2Z" />
+        </svg>
+      </div>
+      <div>
+        <h1 className="text-2xl font-bold text-slate-100">Page not found</h1>
+        <p className="mt-2 text-slate-400">There’s no page at this address. It may have moved, or the link has a typo.</p>
+      </div>
+      <div className="flex flex-wrap justify-center gap-3">
+        <Link to="/" className="rounded-xl bg-accent px-5 py-2.5 font-semibold text-slate-900 transition hover:opacity-90">
+          Home
+        </Link>
+        <button
+          type="button"
+          onClick={() => window.history.back()}
+          className="rounded-xl border border-edge bg-card px-5 py-2.5 font-medium text-slate-200 transition hover:bg-card-hover"
+        >
+          Back
+        </button>
+      </div>
+      <nav aria-label="Popular pages" className="mt-2 w-full max-w-md">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">Popular pages</p>
+        <ul className="grid grid-cols-3 gap-2">
+          {suggestions.map(({ to, label, Icon }) => (
+            <li key={to}>
+              <Link
+                to={to}
+                className="flex flex-col items-center gap-1.5 rounded-xl border border-edge bg-card px-2 py-3 text-sm font-medium text-slate-300 transition hover:border-accent/50 hover:text-slate-100"
+              >
+                <Icon className="h-5 w-5" />
+                {label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
     </div>
   )
 }

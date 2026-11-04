@@ -20,7 +20,7 @@
     // Serve /privacypolicy.html as is, without redirecting to /privacypolicy.
     "html_handling": "none",
     // Only the API runs the Worker; every other path is served from assets.
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/*", "!/assets/*", "!/exercises/*"]
   },
   // Run next to the Turso database (aws-us-east-2): every request makes several
   // queries, so a Worker near the visitor would pay a cross-country round trip

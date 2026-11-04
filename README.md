@@ -107,6 +107,13 @@ once the repository has a `CLOUDFLARE_API_TOKEN` secret (an API token with the
 The Worker serves only its custom domain, fitflow7.n8builds.dev (`routes` in
 `wrangler.jsonc`), and `APP_URL` there pins the OAuth redirect origin.
 
+### Error tracking
+
+Sentry is off until the Worker has a `SENTRY_DSN` secret: `npx wrangler secret put SENTRY_DSN`, then paste the project's DSN.
+The Worker then reports its own errors, and the browser loads the Sentry SDK (a separate chunk) after `/api/config` hands it the DSN.
+Reports carry no user, IP, cookies, headers, bodies or query strings, browser-extension and aborted-request noise is dropped, and traces are sampled at 5% on the Worker and off in the browser.
+To turn it off again, `npx wrangler secret delete SENTRY_DSN`.
+
 ### Reading the logs
 
 Workers Logs keeps every request (`observability` in `wrangler.jsonc`).
