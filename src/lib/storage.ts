@@ -32,6 +32,7 @@ const KEY = {
   theme: 'fitflow.theme',
   voiceCoach: 'fitflow.voiceCoach',
   lengthTimes: 'fitflow.lengthTimes',
+  signedInHere: 'fitflow.signedInHere',
 } as const
 
 // ---------------------------------------------------------------------------
@@ -263,7 +264,15 @@ export function getSettings(): UserSettings {
 export function saveSettings(s: UserSettings): void {
   writeJSON(KEY.settings, s)
   writeJSON(KEY.settingsMeta, { updatedAt: now(), dirty: true })
+  emitSettings()
   emitWrite()
+}
+
+/** Event fired whenever stored settings change, locally or from a sync pull
+ *  (hooks/useSettings.ts listens), so open screens never show stale values. */
+export const SETTINGS_EVENT = 'fitflow:settings'
+function emitSettings(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(SETTINGS_EVENT))
 }
 
 // Color theme is a device-local display preference (like nothing else syncs it).
@@ -309,12 +318,8 @@ function getSettingsMeta(): SettingsMeta {
 // ---------------------------------------------------------------------------
 // Sync queue
 // ---------------------------------------------------------------------------
-// Routines + sessions (and settings, via getPendingSettings) sync to the cloud
-// through lib/sync.ts. The body profile, weight log, and challenge-progress
-// collections are intentionally LOCAL-ONLY for now: they carry the same
-// dirty/tombstone fields as forward-looking groundwork, but getPendingSync()
-// deliberately does not drain them and the server has no columns for them yet.
-// Wiring them into sync is a planned follow-up (see STATUS.md session 6).
+// Every collection here (and settings, via getPendingSettings) syncs to the
+// account through lib/sync.ts: records carry a dirty flag until a push lands.
 
 /** All records with unsynced local changes (tombstones included). The sync engine
  *  drains this. Body/weight/challenge ride the same dirty/LWW contract (B1). */
@@ -442,6 +447,32 @@ export function clearSyncCursor(): void {
   } catch {
     // ignore
   }
+}
+
+/** True when any local change has not reached the account yet. */
+export function hasPendingChanges(): boolean {
+  const p = getPendingSync()
+  return Boolean(
+    getPendingSettings() ||
+      p.bodyProfile ||
+      p.trainingProfile ||
+      p.routines.length ||
+      p.sessions.length ||
+      p.weightLog.length ||
+      p.skipDays.length ||
+      p.challengeProgress.length,
+  )
+}
+
+/** Whether this device believes it is signed in (set on a confirmed sign-in,
+ *  cleared on sign-out), so a session that ended elsewhere can be told apart
+ *  from a device that was never signed in. */
+export function getSignedInHere(): boolean {
+  return readJSON<boolean>(KEY.signedInHere, false)
+}
+
+export function setSignedInHere(value: boolean): void {
+  writeJSON(KEY.signedInHere, value)
 }
 
 /** Merges server routines into local storage, last-write-wins by updatedAt.
@@ -617,16 +648,27 @@ export function applyRemoteTrainingProfile(value: TrainingProfile): void {
   }
 }
 
-export function applyRemoteSettings(value: UserSettings, updatedAt: string): void {
+/** Settings as the server sends them: it stores no units, and has no image
+ *  preference until a client saved one. */
+export type RemoteSettings = Omit<UserSettings, 'exerciseImages'> & Partial<Pick<UserSettings, 'exerciseImages'>>
+
+export function applyRemoteSettings(value: RemoteSettings, updatedAt: string): void {
   // Empty string sorts before any ISO timestamp, so it loses LWW ties as the
   // "oldest" value — which is what we want for a never-stamped record.
   if (updatedAt >= getSettingsMeta().updatedAt) {
     // unitSystem is device-local (not persisted server-side); keep ours so a
     // remote pull never resets the chosen display units.
-    writeJSON(KEY.settings, { ...value, unitSystem: getSettings().unitSystem })
+    // A server that predates a setting sends no value for it: keep ours.
+    const local = getSettings()
+    writeJSON(KEY.settings, {
+      ...value,
+      unitSystem: local.unitSystem,
+      exerciseImages: value.exerciseImages ?? local.exerciseImages,
+    })
     // Never persist an empty timestamp — that would leave local settings with no
     // real updatedAt and make them perpetually losable on the next merge.
     writeJSON(KEY.settingsMeta, { updatedAt: updatedAt || now(), dirty: false })
+    emitSettings()
   }
 }
 
@@ -729,6 +771,7 @@ export function importData(bundle: ExportBundle): ImportResult {
     if (incoming >= getSettingsMeta().updatedAt) {
       writeJSON(KEY.settings, { ...DEFAULT_SETTINGS, ...bundle.settings })
       writeJSON(KEY.settingsMeta, { updatedAt: incoming || now(), dirty: true })
+      emitSettings()
       settings = true
     }
   }

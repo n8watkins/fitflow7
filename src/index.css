@@ -56,3 +56,15 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* Drawn exercise figures (components/ExerciseFigure.tsx). */
+.ff-figure {
+  --fig-skin: var(--color-slate-300);
+  --fig-back: var(--color-slate-500);
+  --fig-work: var(--color-accent);
+  --fig-floor: var(--color-edge);
+}
+html[data-theme='light'] .ff-figure {
+  --fig-back: var(--color-slate-600);
+  --fig-floor: #cbd5e1;
+}

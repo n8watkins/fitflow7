@@ -30,6 +30,7 @@ import { unlockSpeechOnFirstGesture } from './lib/coach'
 import { getThemePref } from './lib/storage'
 import { applyTheme } from './lib/theme'
 import AccountMenu from './components/AccountMenu'
+import { SaveStatusChip } from './components/SaveStatus'
 import SignInNoticeBanner from './components/SignInNoticeBanner'
 
 type NavItem = { to: string; label: string; Icon: ComponentType<{ className?: string }> }
@@ -63,7 +64,7 @@ function Shell() {
         <>
           {/* Desktop / tablet top nav */}
           <header className="hidden border-b border-edge md:block">
-            <nav className="mx-auto flex max-w-5xl flex-wrap items-center gap-1 px-4 py-3">
+            <nav className="mx-auto flex max-w-5xl flex-wrap items-center gap-1 px-4 py-3 xl:max-w-6xl">
               <NavLink to="/" end className="mr-4 text-lg font-bold tracking-tight">
                 Fit<span className="text-accent">Flow</span> 7
               </NavLink>
@@ -81,7 +82,10 @@ function Shell() {
                   {item.label}
                 </NavLink>
               ))}
-              <AccountMenu />
+              <div className="ml-auto flex items-center gap-2">
+                <SaveStatusChip compactBelowXl />
+                <AccountMenu />
+              </div>
             </nav>
           </header>
 
@@ -90,7 +94,10 @@ function Shell() {
             <Link to="/" className="text-lg font-bold tracking-tight">
               Fit<span className="text-accent">Flow</span> 7
             </Link>
-            <AccountMenu />
+            <div className="flex items-center gap-2">
+              <SaveStatusChip />
+              <AccountMenu />
+            </div>
           </header>
         </>
       )}

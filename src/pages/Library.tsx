@@ -61,7 +61,7 @@ function ExerciseCard({ exercise: ex, onOpen }: { exercise: Exercise; onOpen: ()
     >
       {/* Visual (animates on hover) */}
       <div className="mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-surface text-4xl">
-        <ExerciseVisual exercise={ex} imgClassName="h-full w-full object-cover" emojiClassName="text-4xl" />
+        <ExerciseVisual exercise={ex} imgClassName="h-full w-full object-cover" />
       </div>
 
       <h2 className="mb-1 text-base font-bold leading-tight text-slate-100">{ex.name}</h2>

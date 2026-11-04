@@ -157,7 +157,7 @@ function OutlineRow({ index, exercise, onOpen }: { index: number; exercise: Exer
         className="flex w-full items-center gap-3 rounded-2xl border border-edge bg-card p-3 text-left transition hover:border-accent/40 hover:bg-card-hover active:scale-[0.99]"
       >
         <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface">
-          <ExerciseVisual exercise={exercise} imgClassName="h-14 w-14 object-cover" emojiClassName="text-3xl leading-none" />
+          <ExerciseVisual exercise={exercise} imgClassName="h-14 w-14 object-cover" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-slate-100">

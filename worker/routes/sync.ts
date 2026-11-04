@@ -352,14 +352,15 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
       const s = body.settings.value
       writes.push({
         sql: `INSERT INTO settings
-                (user_id, default_work_seconds, default_rest_seconds, default_rounds, countdown_seconds, audio_cues_enabled, updated_at, server_updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (user_id, default_work_seconds, default_rest_seconds, default_rounds, countdown_seconds, audio_cues_enabled, exercise_images, updated_at, server_updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(user_id) DO UPDATE SET
                 default_work_seconds = excluded.default_work_seconds,
                 default_rest_seconds = excluded.default_rest_seconds,
                 default_rounds = excluded.default_rounds,
                 countdown_seconds = excluded.countdown_seconds,
                 audio_cues_enabled = excluded.audio_cues_enabled,
+                exercise_images = COALESCE(excluded.exercise_images, settings.exercise_images),
                 updated_at = excluded.updated_at, server_updated_at = excluded.server_updated_at
               WHERE excluded.updated_at > settings.updated_at`,
         args: [
@@ -369,6 +370,7 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
           s.defaultRounds,
           s.countdownSeconds,
           s.audioCuesEnabled ? 1 : 0,
+          s.exerciseImages ?? null,
           clampStamp(body.settings.updatedAt, serverTime),
           serverTime,
         ],
@@ -457,7 +459,7 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
     ])
 
     const settingsRow = settingsRes.rows[0]
-    const settings: { value: UserSettings; updatedAt: string } | null = settingsRow
+    const settings: { value: Omit<UserSettings, 'exerciseImages'> & Partial<UserSettings>; updatedAt: string } | null = settingsRow
       ? {
           value: {
             defaultWorkSeconds: Number(settingsRow.default_work_seconds),
@@ -465,6 +467,10 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
             defaultRounds: Number(settingsRow.default_rounds),
             countdownSeconds: Number(settingsRow.countdown_seconds),
             audioCuesEnabled: Boolean(settingsRow.audio_cues_enabled),
+            // Absent until a client has saved it; the client then keeps its own.
+            ...(settingsRow.exercise_images === 'illustrations' || settingsRow.exercise_images === 'photos'
+              ? { exerciseImages: settingsRow.exercise_images }
+              : {}),
             // unitSystem is a device-local preference (no server column). The
             // client's applyRemoteSettings preserves the local value, so this
             // default is never actually applied — it only satisfies the type.

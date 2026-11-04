@@ -3,7 +3,7 @@ import type { Category, Difficulty, Exercise } from '../types'
 import { EXERCISE_MAP } from '../data/exercises'
 import ExerciseVisual from './ExerciseVisual'
 import { IconClose } from './icons'
-import MoveGlyph from './MoveGlyph'
+import ExerciseFigure from './ExerciseFigure'
 
 const CATEGORY_LABEL: Record<Category, string> = {
   cardio: 'Cardio',
@@ -114,7 +114,7 @@ export default function ExerciseModal({
         {/* Sticky header */}
         <div className="sticky top-0 z-10 flex items-start gap-4 border-b border-edge bg-card/95 p-4 backdrop-blur sm:p-5">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-surface text-4xl">
-            <ExerciseVisual exercise={ex} autoPlay imgClassName="h-full w-full object-cover" emojiClassName="text-4xl" />
+            <ExerciseVisual exercise={ex} autoPlay imgClassName="h-full w-full object-cover" />
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="text-xl font-bold text-slate-100">{ex.name}</h2>
@@ -191,7 +191,7 @@ export default function ExerciseModal({
                       onClick={() => onJump(v.id)}
                       className="inline-flex items-center gap-1.5 rounded-full border border-edge bg-surface px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-accent hover:text-accent active:scale-95"
                     >
-                      <MoveGlyph exercise={target} className="h-4 w-4" />
+                      <ExerciseFigure exerciseId={target.id} name="" className="h-5 w-5" />
                       {v.label}: {target.name}
                     </button>
                   )

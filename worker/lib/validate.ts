@@ -163,7 +163,11 @@ export const checkChallenge = (raw: unknown): Check<ChallengeProgress> =>
     deletedAt: optDate(o, 'deletedAt'),
   }))
 
-export type SettingsPush = { value: Omit<UserSettings, 'unitSystem'>; updatedAt: string }
+export type SettingsPush = {
+  value: Omit<UserSettings, 'unitSystem' | 'exerciseImages'> & { exerciseImages?: UserSettings['exerciseImages'] }
+  updatedAt: string
+}
+const EXERCISE_IMAGES = ['photos', 'illustrations'] as const
 export const checkSettings = (raw: unknown): Check<SettingsPush> =>
   record(raw, (o) => {
     if (!isObject(o.value)) fail('value must be an object')
@@ -175,6 +179,12 @@ export const checkSettings = (raw: unknown): Check<SettingsPush> =>
         defaultRounds: num(v, 'defaultRounds', 1, 100),
         countdownSeconds: num(v, 'countdownSeconds', 0, 600),
         audioCuesEnabled: bool(v, 'audioCuesEnabled'),
+        // Optional: older clients do not send it, and the stored value stays.
+        exerciseImages: (() => {
+          if (v.exerciseImages === undefined) return undefined
+          if (!EXERCISE_IMAGES.includes(v.exerciseImages as never)) fail('exerciseImages must be photos or illustrations')
+          return v.exerciseImages as UserSettings['exerciseImages']
+        })(),
       },
       updatedAt: date(o, 'updatedAt'),
     }

@@ -2,15 +2,17 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { logout } from '../lib/sync'
 import { useSyncStore } from '../store/syncStore'
+import { SAVE_DOT } from '../lib/saveState'
+import { SaveStatusLine } from './SaveStatus'
+import { useSaveState } from '../hooks/useSaveState'
 
 // The signed-in user's button in the nav: their avatar (or initials) with a sync
-// status dot. It opens a small panel with who is signed in, the sync state,
-// a link to account settings and Sign out. Signed-out users see nothing here;
-// sign-in lives in Settings.
+// status dot. It opens a small panel with who is signed in, where the data is
+// kept, a link to account settings and Sign out. Signed-out users see nothing
+// here (the header's save chip says the data is on this device).
 export default function AccountMenu() {
   const user = useSyncStore((s) => s.user)
-  const status = useSyncStore((s) => s.status)
-  const lastSyncedAt = useSyncStore((s) => s.lastSyncedAt)
+  const save = useSaveState()
   const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -46,16 +48,8 @@ export default function AccountMenu() {
       .slice(0, 2)
       .map((w) => w[0]?.toUpperCase())
       .join('') || '?'
-  const dot = status === 'syncing' ? 'bg-amber-400' : status === 'error' ? 'bg-red-400' : 'bg-emerald-400'
-  const statusText =
-    status === 'syncing'
-      ? 'Syncing…'
-      : status === 'error'
-        ? 'Sync error, retrying when you come back'
-        : lastSyncedAt
-          ? `Synced ${new Date(lastSyncedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
-          : 'Synced'
-  const shortStatus = status === 'syncing' ? 'syncing' : status === 'error' ? 'sync error' : 'synced'
+  const dot = SAVE_DOT[save?.kind ?? 'syncing']
+  const shortStatus = (save?.label ?? 'Syncing…').toLowerCase()
 
   async function handleSignOut() {
     setSigningOut(true)
@@ -68,7 +62,7 @@ export default function AccountMenu() {
   }
 
   return (
-    <div ref={rootRef} className="relative ml-auto shrink-0">
+    <div ref={rootRef} className="relative shrink-0">
       <button
         ref={buttonRef}
         type="button"
@@ -92,17 +86,14 @@ export default function AccountMenu() {
       {open && (
         <div
           id={panelId}
-          className="absolute right-0 z-50 mt-2 w-64 rounded-2xl border border-edge bg-card p-2 shadow-xl shadow-black/40 light:shadow-slate-300/60"
+          className="absolute right-0 z-50 mt-2 w-72 rounded-2xl border border-edge bg-card p-2 shadow-xl shadow-black/40 light:shadow-slate-300/60"
         >
           <div className="px-3 pt-2 pb-3">
             <div className="truncate font-semibold text-slate-100">{displayName}</div>
             {user.email && user.email !== displayName && (
               <div className="truncate text-sm text-slate-400">{user.email}</div>
             )}
-            <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-              <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} aria-hidden="true" />
-              {statusText}
-            </div>
+            <SaveStatusLine className="mt-2 !text-xs" />
           </div>
           <div className="border-t border-edge pt-2">
             <Link

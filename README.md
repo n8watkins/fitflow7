@@ -123,6 +123,12 @@ To run it against a running Worker, start `wrangler dev` with
 `API_BASE_URL` and `API_DB_URL`.
 `LIVE_URL=https://... npm test` adds read-only checks of a deployed host.
 
+`npm run test:e2e` runs the end-to-end persistence suite (`test/e2e`, Playwright): the built app and API in `wrangler dev` against a real libSQL server.
+It checks that workouts, routines and settings survive reloads, signing out and in, a second device, Sign out everywhere and going offline.
+Sign-in uses seeded test sessions with the suite's own secret, never real accounts.
+Run `npm run build` first; it starts `sqld` itself (install it with the Turso CLI, or point `SQLD_BIN` at it), or uses the libSQL server at `E2E_DB_URL`.
+CI runs it with a libSQL service container.
+
 ---
 
 ## Install it

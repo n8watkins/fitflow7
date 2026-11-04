@@ -15,6 +15,9 @@ import {
 import { applyTheme } from '../lib/theme'
 import { dayKey } from '../lib/format'
 import { useSyncStore } from '../store/syncStore'
+import { useSettings } from '../hooks/useSettings'
+import { useLocation } from 'react-router-dom'
+import { SaveStatusLine } from '../components/SaveStatus'
 import TrainingSettings from '../components/TrainingSettings'
 import { speak, speechAvailable, type CoachTone } from '../lib/coach'
 import {
@@ -33,7 +36,6 @@ import {
 function AccountSection() {
   const user = useSyncStore((s) => s.user)
   const authLoaded = useSyncStore((s) => s.authLoaded)
-  const lastSyncedAt = useSyncStore((s) => s.lastSyncedAt)
   const providers = useSyncStore((s) => s.providers)
   const [minted, setMinted] = useState<string | null>(null)
   const [tokenBusy, setTokenBusy] = useState(false)
@@ -84,7 +86,7 @@ function AccountSection() {
   }
 
   return (
-    <section>
+    <section id="account" className="scroll-mt-6">
       <div className="rounded-2xl border border-edge bg-card">
         <div className="border-b border-edge px-5 py-4">
           <h2 className="font-semibold text-slate-200">Account &amp; Sync</h2>
@@ -92,6 +94,7 @@ function AccountSection() {
             Optional. Sign in to back up routines, history, and settings and sync across devices.
             The app works fully without an account.
           </p>
+          <SaveStatusLine className="mt-3" />
         </div>
         <div className="px-5 py-4">
           {!authLoaded ? (
@@ -103,11 +106,9 @@ function AccountSection() {
                   <div className="truncate font-medium text-slate-200">
                     {user.name ?? user.email ?? 'Signed in'}
                   </div>
-                  <div className="mt-0.5 text-sm text-slate-500">
-                    {lastSyncedAt
-                      ? `Last synced ${new Date(lastSyncedAt).toLocaleTimeString()}`
-                      : 'Syncing…'}
-                  </div>
+                  {user.email && user.email !== user.name && (
+                    <div className="mt-0.5 truncate text-sm text-slate-500">{user.email}</div>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -126,7 +127,8 @@ function AccountSection() {
                 </div>
               </div>
               <p className="-mt-2 text-xs text-slate-500">
-                Sign out everywhere ends every session on this account, on every device. AI access tokens below keep working.
+                Signing out keeps everything on this device, and it keeps saving here; it syncs again when you sign back in.
+                Sign out everywhere also ends every other session on this account. AI access tokens below keep working.
               </p>
 
               {/* MCP access tokens */}
@@ -232,6 +234,11 @@ function AccountSection() {
           ) : providers.length === 0 ? (
             <div className="text-sm text-slate-500">Sign-in isn’t available right now.</div>
           ) : (
+            <div className="space-y-3">
+            <p className="text-sm text-slate-400">
+              When you sign in, everything saved on this device is added to your account, and anything already in
+              your account comes to this device.
+            </p>
             <div className="flex flex-wrap gap-3">
               {providers.map((p) => (
                 <button
@@ -242,6 +249,7 @@ function AccountSection() {
                   Sign in with {p === 'github' ? 'GitHub' : p === 'google' ? 'Google' : p}
                 </button>
               ))}
+            </div>
             </div>
           )}
         </div>
@@ -377,31 +385,31 @@ function VoiceCoachSetting() {
 
 export default function Settings() {
   const signedIn = useSyncStore((s) => s.user !== null)
-  const [settings, setSettings] = useState<UserSettings>(() => getSettings())
+  // Live settings: a sync pull that lands while this page is open shows up
+  // here, and each change is written on top of what is stored now, so a
+  // screen opened before the pull can never write old values back (it did).
+  const settings = useSettings()
   const [theme, setTheme] = useState<ThemePref>(() => getThemePref())
   const [savedVisible, setSavedVisible] = useState(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [importMsg, setImportMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const bumpData = useSyncStore((s) => s.bumpData)
-
-  // Auto-save whenever settings change (after initial mount)
-  const isFirstRender = useRef(true)
+  const { hash } = useLocation()
+  // The header's save chip links to #account: bring that section into view.
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false
-      return
-    }
-    saveSettings(settings)
+    if (hash === '#account') document.getElementById('account')?.scrollIntoView({ block: 'start' })
+  }, [hash])
 
-    // Show "Saved" flash
+  function flashSaved() {
     setSavedVisible(true)
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => setSavedVisible(false), 1800)
-  }, [settings])
+  }
 
   function update<K extends keyof UserSettings>(key: K, value: UserSettings[K]) {
-    setSettings((prev) => ({ ...prev, [key]: value }))
+    saveSettings({ ...getSettings(), [key]: value })
+    flashSaved()
   }
 
   // Theme is a device-local display pref (not in UserSettings / not synced):
@@ -419,7 +427,8 @@ export default function Settings() {
   }
 
   function handleResetDefaults() {
-    setSettings(DEFAULT_SETTINGS)
+    saveSettings(DEFAULT_SETTINGS)
+    flashSaved()
   }
 
   function handleExport() {
@@ -445,7 +454,6 @@ export default function Settings() {
           return
         }
         const result = importData(parsed)
-        if (result.settings) setSettings(getSettings())
         bumpData() // refresh Dashboard/History reads
         const extras: string[] = []
         if (result.weightEntries) extras.push(`${result.weightEntries} weigh-in${result.weightEntries === 1 ? '' : 's'}`)
@@ -598,6 +606,29 @@ export default function Settings() {
                 {t}
               </button>
             ))}
+          </div>
+          <div className="flex flex-col gap-3 border-t border-edge px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="font-medium text-slate-200" id="exercise-images-label">Exercise images</div>
+              <div className="mt-0.5 text-sm text-slate-500">
+                {settings.exerciseImages === 'photos'
+                  ? 'Photos where a move has one, drawn figures for the rest.'
+                  : 'Drawn figures for every move, in one style.'}
+              </div>
+            </div>
+            <div role="radiogroup" aria-labelledby="exercise-images-label" className="flex shrink-0 self-start overflow-hidden rounded-lg border border-edge text-sm font-medium sm:self-auto">
+              {(['photos', 'illustrations'] as const).map((v) => (
+                <button
+                  key={v}
+                  role="radio"
+                  aria-checked={settings.exerciseImages === v}
+                  onClick={() => update('exerciseImages', v)}
+                  className={`px-3 py-1.5 transition ${settings.exerciseImages === v ? 'bg-accent text-slate-900' : 'bg-card text-slate-300 hover:bg-card-hover'}`}
+                >
+                  {v === 'photos' ? 'Photos' : 'Illustrations'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </section>

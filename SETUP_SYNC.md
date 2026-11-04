@@ -67,8 +67,7 @@ Use the host the app is served from (`APP_URL` in `wrangler.jsonc`). For local t
 - Conflict resolution is last-write-wins by `updatedAt`. Fine for a single user
   across devices; not designed for concurrent multi-user editing.
 - Sessions are append-only; "Clear history" tombstones them so the clear syncs.
-- Sign-out clears the session cookie but leaves local data in the browser. On a
-  shared browser, the next account's first sync merges both sets (acceptable for
-  a personal app; revisit if multi-user-per-browser becomes a real case).
-- No automated tests yet — see ROADMAP "Cross-cutting": add a test framework now
-  that sync logic exists.
+- Sign-out first pushes any unsynced changes, then ends the session; local data stays in the browser and the app says so.
+  The header shows where data is kept: "On this device" signed out, "Saved", "Syncing…", "Offline, will sync" or "Not synced yet" signed in.
+- On a shared browser, records already synced to one account stay with that account: record ids are global, so a second account signing in here gets only data that was never synced (revisit if multi-user-per-browser becomes a real case).
+- Tests: `npm test` (unit and API contract) and `npm run test:e2e` (end-to-end persistence, see README).

@@ -8,7 +8,9 @@ export interface AuthUser {
   avatarUrl: string | null
 }
 
-export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error'
+/** idle: nothing has run yet (or signed out). offline: the last attempt could
+ *  not reach the server. error: the server refused or failed the sync. */
+export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error'
 
 interface SyncState {
   /** null = signed out; undefined-equivalent handled via authLoaded. */
@@ -17,6 +19,8 @@ interface SyncState {
   authLoaded: boolean
   status: SyncStatus
   lastSyncedAt: number | null
+  /** Local changes that have not reached the account yet. */
+  pending: boolean
   /** Bumped after a pull merges remote data so data-display pages re-read storage. */
   dataVersion: number
   /** OAuth providers the backend has configured (from /api/me); UI shows only these. */
@@ -28,6 +32,7 @@ interface SyncState {
   setAuthLoaded: () => void
   setSignInNotice: (notice: SignInNotice | null) => void
   setStatus: (status: SyncStatus) => void
+  setPending: (pending: boolean) => void
   markSynced: () => void
   bumpData: () => void
 }
@@ -37,6 +42,7 @@ export const useSyncStore = create<SyncState>((set) => ({
   authLoaded: false,
   status: 'idle',
   lastSyncedAt: null,
+  pending: false,
   dataVersion: 0,
   providers: [],
   signInNotice: null,
@@ -45,6 +51,7 @@ export const useSyncStore = create<SyncState>((set) => ({
   setAuthLoaded: () => set({ authLoaded: true }),
   setSignInNotice: (signInNotice) => set({ signInNotice }),
   setStatus: (status) => set({ status }),
+  setPending: (pending) => set({ pending }),
   markSynced: () => set({ status: 'synced', lastSyncedAt: Date.now() }),
   bumpData: () => set((s) => ({ dataVersion: s.dataVersion + 1 })),
 }))

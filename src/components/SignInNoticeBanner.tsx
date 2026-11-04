@@ -14,15 +14,18 @@ export default function SignInNoticeBanner() {
   if (!notice || user) return null
 
   const copy = SIGN_IN_NOTICES[notice]
+  // Signing out on purpose is not a problem: say it calmly.
+  const calm = notice === 'signed_out'
   const provider = providers.find((p) => p === 'github' || p === 'google') as 'github' | 'google' | undefined
 
   return (
     <div
       role="status"
-      className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-500/40 bg-amber-950/30 p-4 light:border-amber-300 light:bg-amber-50"
+      data-testid="account-notice"
+      className={`mb-6 flex items-start gap-3 rounded-2xl border p-4 ${calm ? 'border-edge bg-card' : 'border-amber-500/40 bg-amber-950/30 light:border-amber-300 light:bg-amber-50'}`}
     >
       <div className="min-w-0 flex-1">
-        <p className="font-semibold text-amber-200 light:text-amber-800">{copy.title}</p>
+        <p className={`font-semibold ${calm ? 'text-slate-200' : 'text-amber-200 light:text-amber-800'}`}>{copy.title}</p>
         <p className="mt-1 text-sm text-slate-300">{copy.body}</p>
         {copy.retry && provider && (
           <button
