@@ -10,6 +10,9 @@ import { listTokens, recordToken, revokeToken } from '../lib/tokens.ts'
 //   DELETE revoke one     (?jti= or body { jti })
 // The minted secret is returned once on POST and never stored server-side; only
 // the jti + metadata live in the registry (see _lib/tokens).
+// Live (unrevoked) tokens one account may hold at once.
+const MAX_LIVE_TOKENS = 20
+
 export default async function token(ctx: ApiContext): Promise<Response> {
   const userId = getUserId(ctx)
   if (!userId) return ctx.json(401, { error: 'not signed in' })
@@ -19,6 +22,16 @@ export default async function token(ctx: ApiContext): Promise<Response> {
     const db = getDb(ctx.env)
 
     if (ctx.method === 'POST') {
+      if (ctx.env.WRITE_LIMITER && !(await ctx.env.WRITE_LIMITER.limit({ key: `token:${userId}` })).success) {
+        return ctx.tooManyRequests()
+      }
+      const live = Number(
+        (await db.execute({
+          sql: `SELECT COUNT(*) AS n FROM access_tokens WHERE user_id = ? AND revoked_at IS NULL`,
+          args: [userId],
+        })).rows[0]?.n ?? 0,
+      )
+      if (live >= MAX_LIVE_TOKENS) return ctx.json(429, { error: 'token limit reached: revoke one first' })
       const body = (ctx.body ?? {}) as { scope?: unknown; label?: unknown }
       const scope: Scope = body.scope === 'read' ? 'read' : 'readwrite'
       const label = typeof body.label === 'string' ? body.label.trim().slice(0, 60) || null : null

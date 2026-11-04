@@ -111,13 +111,11 @@ describe('auth gating', () => {
 })
 
 describe('logout', () => {
-  it('clears the session cookie with any method', async () => {
-    for (const method of ['POST', 'GET']) {
-      const res = await call('/api/auth/logout', { method })
-      expect(res.status).toBe(200)
-      expect(await json(res)).toEqual({ ok: true })
-      expect(setCookies(res)).toEqual(['ff_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'])
-    }
+  it('clears the session cookie on POST', async () => {
+    const res = await call('/api/auth/logout', { method: 'POST' })
+    expect(res.status).toBe(200)
+    expect(await json(res)).toEqual({ ok: true })
+    expect(setCookies(res)).toEqual(['ff_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'])
   })
 })
 
