@@ -1,12 +1,13 @@
 import type { Client } from '@libsql/client'
-import { decodePat, getUserId, type Scope } from './auth.ts'
+import { decodePat, type Scope } from './auth.ts'
+import { getUserId } from './sessions.ts'
 import { ensureSchema, getDb } from './db.ts'
 import type { ApiContext } from './http.ts'
 
 // S1: server-side personal-access-token registry. A PAT is valid only while a
 // matching, non-revoked row exists in access_tokens — so tokens are revocable
-// and scoped, not valid-forever signed blobs. Session cookies are unaffected
-// (they're short-lived + cleared on logout) and always count as full access.
+// and scoped, not valid-forever signed blobs. Session cookies are checked
+// against their own table (lib/sessions.ts) and always count as full access.
 
 export interface AuthResult {
   userId: string
@@ -27,7 +28,7 @@ export interface TokenInfo {
  *  neither authenticates. Trusts the DB-stored scope over the token's claim, so
  *  scope changes/revocation take effect immediately. */
 export async function resolveAuth(ctx: ApiContext): Promise<AuthResult | null> {
-  const cookieUid = getUserId(ctx)
+  const cookieUid = await getUserId(ctx)
   if (cookieUid) return { userId: cookieUid, scope: 'readwrite' }
 
   const pat = decodePat(ctx)

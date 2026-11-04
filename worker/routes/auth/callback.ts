@@ -6,12 +6,11 @@ import {
   getRedirectUri,
   hasOAuthStateCookie,
   isAllowedIdentity,
-  getUserId,
   readOAuthState,
   sanitizeReturnTo,
-  setSession,
 } from '../../lib/auth.ts'
 import { ensureSchema, getDb } from '../../lib/db.ts'
+import { getUserId, startSession } from '../../lib/sessions.ts'
 import type { ApiContext } from '../../lib/http.ts'
 import { errorSummary, logError, logWarn, oauthErrorCode } from '../../lib/log.ts'
 
@@ -53,7 +52,7 @@ export default async function callback(ctx: ApiContext): Promise<Response> {
         : !state || saved.state !== state
           ? 'state_mismatch'
           : 'missing_code'
-    const signedIn = Boolean(getUserId(ctx))
+    const signedIn = Boolean(await getUserId(ctx))
     logWarn({
       event: EVENT,
       reason,
@@ -146,7 +145,8 @@ export default async function callback(ctx: ApiContext): Promise<Response> {
       return backToApp(ctx, saved.returnTo, 'failed')
     }
 
-    setSession(ctx, userId)
+    stage = 'session_start_failed'
+    await startSession(ctx, userId)
     return backToApp(ctx, saved.returnTo, null)
   } catch (err) {
     logError({ event: EVENT, reason: stage, route: ROUTE, status: 302, provider, error: errorSummary(err) })

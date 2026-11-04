@@ -270,9 +270,16 @@ export async function revokeAccessToken(jti: string): Promise<boolean> {
   }
 }
 
-export async function logout(): Promise<void> {
+/** Signs out here, or with `everywhere` on every browser and device of the
+ *  account (access tokens keep working). */
+export async function logout(opts?: { everywhere?: boolean }): Promise<void> {
   try {
-    await fetch(apiUrl('/api/auth/logout'), { method: 'POST', credentials: 'include' })
+    await fetch(apiUrl('/api/auth/logout'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ everywhere: opts?.everywhere === true }),
+    })
   } finally {
     clearSyncCursor()
     useSyncStore.getState().setUser(null)

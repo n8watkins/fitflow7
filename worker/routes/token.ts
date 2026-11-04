@@ -1,4 +1,5 @@
-import { createAccessToken, getUserId, type Scope } from '../lib/auth.ts'
+import { createAccessToken, type Scope } from '../lib/auth.ts'
+import { getUserId } from '../lib/sessions.ts'
 import { ensureSchema, getDb } from '../lib/db.ts'
 import type { ApiContext } from '../lib/http.ts'
 import { listTokens, recordToken, revokeToken } from '../lib/tokens.ts'
@@ -15,7 +16,7 @@ import { allow } from '../lib/rateLimit.ts'
 const MAX_LIVE_TOKENS = 20
 
 export default async function token(ctx: ApiContext): Promise<Response> {
-  const userId = getUserId(ctx)
+  const userId = await getUserId(ctx)
   if (!userId) return ctx.json(401, { error: 'not signed in' })
 
   try {

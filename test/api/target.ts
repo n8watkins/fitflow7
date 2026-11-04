@@ -1,5 +1,5 @@
 import { handleApi } from '../../worker/api.ts'
-import type { ApiEnv } from './contract-helpers.ts'
+import { flushTestSessions, type ApiEnv } from './contract-helpers.ts'
 
 // The implementation the contract suite runs against: the Worker's API in
 // process, or, with API_BASE_URL set, a running Worker (`wrangler dev`) whose
@@ -11,6 +11,7 @@ const base = process.env.API_BASE_URL?.replace(/\/$/, '')
 export const remote = Boolean(base)
 
 export async function handle(request: Request, env: ApiEnv): Promise<Response> {
+  await flushTestSessions()
   if (!base) return handleApi(request, env as Parameters<typeof handleApi>[1])
   const url = new URL(request.url)
   return fetch(new Request(`${base}${url.pathname}${url.search}`, request), { redirect: 'manual' })

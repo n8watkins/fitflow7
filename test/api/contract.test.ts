@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { handle, remote } from './target.ts'
 import {
   DB_URL, ORIGIN, SECRET, cookieValue, request, sessionCookie, setCookies, testDb, unregisteredPat,
-  type ApiEnv, type Req,
+  type ApiEnv, type Req, seedTestSessions,
 } from './contract-helpers.ts'
 
 // The HTTP contract of the FitFlow 7 API: every route, method, status code,
@@ -50,6 +50,7 @@ beforeEach(async () => {
   // Any request creates the schema; then start every test from empty tables.
   await call('/api/routines/public')
   await testDb().batch(TABLES.map((t) => `DELETE FROM ${t}`), 'write')
+  await seedTestSessions()
 })
 
 describe('routing', () => {

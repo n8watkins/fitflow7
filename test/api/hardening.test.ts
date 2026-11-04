@@ -2,7 +2,8 @@ import fs from 'node:fs'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { handle, remote } from './target.ts'
 import { takeToken, type Window } from '../../worker/lib/rateLimit.ts'
-import { DB_URL, ORIGIN, SECRET, request, sessionCookie, testDb, type ApiEnv, type Req } from './contract-helpers.ts'
+import { DB_URL, ORIGIN, SECRET, request, sessionCookie, testDb, type ApiEnv, type Req, seedTestSessions,
+} from './contract-helpers.ts'
 
 // Browser-facing hardening: security headers on every API answer, no caching of
 // private answers, cross-site writes refused, and rate limits on the routes a
@@ -32,6 +33,7 @@ beforeEach(async () => {
   env = { SESSION_SECRET: SECRET, TURSO_DATABASE_URL: DB_URL }
   await call('/api/routines/public')
   await testDb().batch(['DELETE FROM access_tokens', 'DELETE FROM users'], 'write')
+  await seedTestSessions()
 })
 
 describe('security headers', () => {
