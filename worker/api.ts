@@ -29,6 +29,8 @@ const ROUTES: Record<string, Route> = {
 // the API budget (lib/rateLimit.ts).
 const AUTH_ROUTES = new Set(['/api/auth/login', '/api/auth/callback'])
 
+const MAX_REQUEST_BYTES = 2_000_000
+
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 function notFound(): Response {
@@ -60,6 +62,13 @@ export async function handleApi(request: Request, env: ApiEnv): Promise<Response
   const route = ROUTES[path]
   if (!route) return notFound()
 
+  // No route takes more than about 1 MB; refuse bigger bodies before reading them.
+  if (Number(request.headers.get('content-length') ?? 0) > MAX_REQUEST_BYTES) {
+    return new Response(JSON.stringify({ error: 'request too large' }), {
+      status: 413,
+      headers: { ...API_SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8' },
+    })
+  }
   const ctx = await ApiContext.from(request, env)
   if (isCrossSiteCookieWrite(request, env)) return ctx.json(403, { error: 'cross-site request refused' })
 

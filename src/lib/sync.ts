@@ -43,6 +43,34 @@ interface SyncResponse {
   bodyProfile: BodyProfile | null
 }
 
+/** Records per push. The server refuses more than 500; a long offline history
+ *  or an imported backup goes up over several requests instead. */
+export const MAX_PUSH_RECORDS = 200
+
+/** Takes up to MAX_PUSH_RECORDS records from the dirty queue, routines first.
+ *  `more` says whether anything was left for the next request. */
+function takeBatch(all: ReturnType<typeof getPendingSync>) {
+  let left = MAX_PUSH_RECORDS - (all.bodyProfile ? 1 : 0) - 1 // settings may ride along
+  const take = <T,>(list: T[]): T[] => {
+    const out = list.slice(0, Math.max(0, left))
+    left -= out.length
+    return out
+  }
+  const batch = {
+    routines: take(all.routines),
+    sessions: take(all.sessions),
+    weightLog: take(all.weightLog),
+    challengeProgress: take(all.challengeProgress),
+    bodyProfile: all.bodyProfile,
+  }
+  const more =
+    batch.routines.length < all.routines.length ||
+    batch.sessions.length < all.sessions.length ||
+    batch.weightLog.length < all.weightLog.length ||
+    batch.challengeProgress.length < all.challengeProgress.length
+  return { batch, more }
+}
+
 let inFlight = false
 let rerunQueued = false
 // Set if the server rejects a push with 403 (a read-scoped credential). The web
@@ -50,6 +78,10 @@ let rerunQueued = false
 // to pull-only so the client still receives remote changes instead of either
 // spinning on a doomed push or going dark.
 let pushForbidden = false
+
+function getPushBatch() {
+  return takeBatch(getPendingSync())
+}
 
 /** Pushes the dirty queue then pulls remote changes. Coalesces concurrent calls. */
 export async function sync(): Promise<void> {
@@ -64,7 +96,7 @@ export async function sync(): Promise<void> {
   // Pull-only once a push has been forbidden; otherwise drain the dirty queue.
   const pushed = !pushForbidden
   try {
-    const pending = getPendingSync()
+    const { batch: pending, more } = getPushBatch()
     const pendingSettings = getPendingSettings()
     const res = await fetch(apiUrl('/api/sync'), {
       method: 'POST',
@@ -131,6 +163,7 @@ export async function sync(): Promise<void> {
     applyRemoteChallengeProgress(data.challengeProgress ?? [])
     if (data.bodyProfile) applyRemoteBodyProfile(data.bodyProfile)
 
+    if (pushed && more) rerunQueued = true
     setSyncCursor(data.serverTime)
     useSyncStore.getState().markSynced()
     if (
