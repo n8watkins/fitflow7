@@ -99,7 +99,9 @@ export function workoutsLastNDays(sessions: WorkoutSession[], days: number): num
 // computeStats
 // ---------------------------------------------------------------------------
 
-export function computeStats(sessions: WorkoutSession[]): Stats {
+/** `skipDates` are skip days (lib/skipDays.ts): they keep a streak going but
+ *  add nothing to the totals. */
+export function computeStats(sessions: WorkoutSession[], skipDates: Iterable<string> = []): Stats {
   // Only completed sessions count toward everything except possibly last date.
   const completed = sessions.filter((s) => s.completed)
 
@@ -113,6 +115,7 @@ export function computeStats(sessions: WorkoutSession[]): Stats {
   for (const s of completed) {
     workoutDays.add(dayKey(new Date(s.startedAt)))
   }
+  for (const d of skipDates) workoutDays.add(d)
 
   // -------------------------------------------------------------------------
   // Current streak

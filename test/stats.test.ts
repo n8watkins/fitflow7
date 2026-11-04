@@ -138,3 +138,19 @@ describe('workoutsLastNDays', () => {
     expect(workoutsLastNDays(sessions, 3)).toBe(3) // day 3 excluded
   })
 })
+
+describe('computeStats with skip days', () => {
+  it('keeps the streak through a skipped day without adding a workout', async () => {
+    const { computeStats } = await import('../src/lib/stats')
+    const { dayKey, shiftDayKey, todayKey } = await import('../src/lib/format')
+    const today = todayKey()
+    const at = (key: string) => { const d = new Date(`${key}T12:00:00`); return d.toISOString() }
+    const mk = (key: string) => ({ id: key, routineName: 'X', startedAt: at(key), durationSeconds: 420, completed: true, exercisesCompleted: 12, totalExercises: 12 })
+    const sessions = [mk(today), mk(shiftDayKey(today, -2))]
+    expect(computeStats(sessions).currentStreak).toBe(1)
+    const withSkip = computeStats(sessions, [shiftDayKey(today, -1)])
+    expect(withSkip.currentStreak).toBe(3)
+    expect(withSkip.totalWorkouts).toBe(2)
+    expect(dayKey(new Date(at(today)))).toBe(today)
+  })
+})
