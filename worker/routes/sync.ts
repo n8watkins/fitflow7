@@ -1,6 +1,8 @@
 import type {
   BodyProfile,
   ChallengeProgress,
+  TrainingProfile,
+  VariationTier,
   Routine,
   UserSettings,
   WeightEntry,
@@ -15,6 +17,7 @@ import {
   MAX_SYNC_BODY_BYTES,
   MAX_SYNC_RECORDS,
   checkBodyProfile,
+  checkTrainingProfile,
   checkChallenge,
   checkRoutine,
   checkSession,
@@ -47,6 +50,7 @@ interface ValidPush {
   settings: SettingsPush | null
   weightLog: WeightEntry[]
   bodyProfile: BodyProfile | null
+  trainingProfile: TrainingProfile | null
   challengeProgress: ChallengeProgress[]
   rejected: Rejected[]
 }
@@ -68,7 +72,7 @@ function parsePush(raw: unknown): { status: 400 | 413; error: string } | ValidPu
     if (!Array.isArray(b[f])) return { status: 400, error: `${f} must be a list` }
     total += (b[f] as unknown[]).length
   }
-  for (const f of ['settings', 'bodyProfile'] as const) {
+  for (const f of ['settings', 'bodyProfile', 'trainingProfile'] as const) {
     if (b[f] === undefined || b[f] === null) continue
     if (typeof b[f] !== 'object' || Array.isArray(b[f])) return { status: 400, error: `${f} must be an object` }
     total += 1
@@ -98,6 +102,7 @@ function parsePush(raw: unknown): { status: 400 | 413; error: string } | ValidPu
     challengeProgress: each('challengeProgress', b.challengeProgress, checkChallenge, 'challengeId'),
     settings: one('settings', b.settings, checkSettings),
     bodyProfile: one('bodyProfile', b.bodyProfile, checkBodyProfile),
+    trainingProfile: one('trainingProfile', b.trainingProfile, checkTrainingProfile),
     rejected,
   }
 }
@@ -246,6 +251,14 @@ function weightUpsert(userId: string, e: WeightEntry, serverNow: string): InStat
   }
 }
 
+function parseVariations(raw: unknown): Record<string, VariationTier> {
+  try {
+    return JSON.parse((raw as string) || '{}') as Record<string, VariationTier>
+  } catch {
+    return {}
+  }
+}
+
 function parseDayMap(raw: unknown): Record<number, string> {
   try {
     return JSON.parse((raw as string) || '{}') as Record<number, string>
@@ -307,6 +320,7 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
     !!body.settings ||
     body.weightLog.length > 0 ||
     !!body.bodyProfile ||
+    !!body.trainingProfile ||
     body.challengeProgress.length > 0 ||
     body.rejected.length > 0
   if (auth.scope === 'read' && wantsWrite) {
@@ -369,13 +383,29 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
         args: [userId, bp.heightCm ?? null, bp.goalWeightKg ?? null, clampStamp(bp.updatedAt, serverTime), serverTime],
       })
     }
+    if (body.trainingProfile) {
+      const tp = body.trainingProfile
+      writes.push({
+        sql: `INSERT INTO training_profile (user_id, goal, level, plan_started_at, onboarding_done, variations, updated_at, server_updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(user_id) DO UPDATE SET
+                goal = excluded.goal, level = excluded.level, plan_started_at = excluded.plan_started_at,
+                onboarding_done = excluded.onboarding_done, variations = excluded.variations,
+                updated_at = excluded.updated_at, server_updated_at = excluded.server_updated_at
+              WHERE excluded.updated_at > training_profile.updated_at`,
+        args: [
+          userId, tp.goal ?? null, tp.level ?? null, tp.planStartedAt ?? null, tp.onboardingDone ? 1 : 0,
+          JSON.stringify(tp.variations ?? {}), clampStamp(tp.updatedAt, serverTime), serverTime,
+        ],
+      })
+    }
     if (writes.length > 0) await db.batch(writes, 'write')
 
     // --- Pull everything changed since the cursor (tombstones included). The
     // filter is on server_updated_at (server clock), never the client updated_at,
     // so a behind-clock device's writes can't sort before another device's cursor
     // and be silently skipped forever (H2). ---
-    const [routinesRes, sessionsRes, settingsRes, weightRes, challengeRes, bodyRes] = await Promise.all([
+    const [routinesRes, sessionsRes, settingsRes, weightRes, challengeRes, bodyRes, trainingRes] = await Promise.all([
       db.execute({
         sql: `SELECT * FROM routines WHERE user_id = ? AND server_updated_at > ?`,
         args: [userId, since],
@@ -398,6 +428,10 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
       }),
       db.execute({
         sql: `SELECT * FROM body_profile WHERE user_id = ? AND server_updated_at > ?`,
+        args: [userId, since],
+      }),
+      db.execute({
+        sql: `SELECT * FROM training_profile WHERE user_id = ? AND server_updated_at > ?`,
         args: [userId, since],
       }),
     ])
@@ -429,6 +463,18 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
         }
       : null
 
+    const trainingRow = trainingRes.rows[0]
+    const trainingProfile: TrainingProfile | null = trainingRow
+      ? {
+          ...(trainingRow.goal ? { goal: trainingRow.goal as TrainingProfile['goal'] } : {}),
+          ...(trainingRow.level ? { level: trainingRow.level as TrainingProfile['level'] } : {}),
+          ...(trainingRow.plan_started_at ? { planStartedAt: trainingRow.plan_started_at as string } : {}),
+          onboardingDone: Boolean(trainingRow.onboarding_done),
+          variations: parseVariations(trainingRow.variations),
+          updatedAt: trainingRow.updated_at as string,
+        }
+      : null
+
     return ctx.json(200, {
       serverTime,
       routines: routinesRes.rows.map((r) => rowToRoutine(r as Record<string, unknown>)),
@@ -437,6 +483,7 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
       weightLog: weightRes.rows.map((r) => rowToWeight(r as Record<string, unknown>)),
       challengeProgress: challengeRes.rows.map((r) => rowToChallenge(r as Record<string, unknown>)),
       bodyProfile,
+      trainingProfile,
       rejected: body.rejected,
     })
   } catch (err) {

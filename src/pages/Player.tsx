@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useTimerStore } from '../store/timerStore'
-import { getCoachTone, getLatestWeight, getRoutine, getSessions, getSettings, markChallengeDay } from '../lib/storage'
+import { getCoachTone, getLatestWeight, getRoutine, getSessions, getSettings, getTrainingProfile, markChallengeDay, saveTrainingProfile } from '../lib/storage'
+import { planWorkout, resolveVariation, TIER_LABEL } from '../lib/plan'
+import type { VariationTier } from '../types'
 import { computeStats } from '../lib/stats'
 import { estimateCalories } from '../lib/workout'
 import { CHALLENGE_MAP } from '../data/challenges'
@@ -116,10 +118,12 @@ export default function Player() {
   // so finishing the workout auto-marks that day complete.
   const challengeId = searchParams.get('challenge') || undefined
   const challengeDay = Math.floor(Number(searchParams.get('day')))
+  const planMode = searchParams.get('plan') === '1'
 
   const {
     routine,
     exercises,
+    baseIds,
     phase,
     currentIndex,
     secondsLeft,
@@ -137,6 +141,7 @@ export default function Player() {
     previous,
     endWorkout,
     toggleMute,
+    replaceExercises,
   } = useTimerStore()
 
   const [focusMode, setFocusMode] = useState(false)
@@ -158,20 +163,30 @@ export default function Player() {
   // ---------------------------------------------------------------------------
   const buildAndStart = useCallback((rId: string, roundsOverride?: number) => {
     const settings = getSettings()
-    const resolved = getRoutine(rId) ?? CLASSIC_7
-    const roundsToUse = roundsOverride && roundsOverride > 0 ? roundsOverride : resolved.rounds
+    const profile = getTrainingProfile()
+    // A plan workout (?plan=1) takes its rounds, timing and move difficulty
+    // from the starter plan (lib/plan.ts).
+    const plan = planMode ? planWorkout(profile, getSessions()) : null
+    const base = getRoutine(rId) ?? CLASSIC_7
+    const resolved = plan ? { ...base, workSeconds: plan.workSeconds, restSeconds: plan.restSeconds } : base
+    const roundsToUse = plan ? plan.rounds : roundsOverride && roundsOverride > 0 ? roundsOverride : resolved.rounds
     const repeated: Exercise[] = []
+    const baseIds: string[] = []
     for (let r = 0; r < roundsToUse; r++) {
       for (const id of resolved.exerciseIds) {
         const ex = EXERCISE_MAP[id]
-        if (ex) repeated.push(ex)
+        if (!ex) continue
+        // Your own easier/harder choice for a move wins; then the plan's tier.
+        const tier = profile.variations?.[id] ?? plan?.tier ?? 'standard'
+        repeated.push(resolveVariation(ex, tier, EXERCISE_MAP))
+        baseIds.push(id)
       }
     }
     // Guard: refuse to start a routine with no playable exercises. Otherwise the
     // timer would instantly "complete" and log a junk 0-exercise session (B3).
     if (repeated.length === 0) return
-    start(resolved, repeated, settings)
-  }, [start])
+    start(resolved, repeated, settings, baseIds)
+  }, [start, planMode])
 
   // ---------------------------------------------------------------------------
   // Mount: resolve routine + start timer
@@ -184,7 +199,7 @@ export default function Player() {
       reset()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routineId, roundsParam])
+  }, [routineId, roundsParam, planMode])
 
   // ---------------------------------------------------------------------------
   // Finding 5: Screen Wake Lock. Keyed on whether the workout is *active* (not
@@ -430,6 +445,24 @@ export default function Player() {
   // Rest shows the move coming up, not the one just finished.
   const shownExercise = phase === 'rest' ? nextExercise : currentExercise
   const shownLabel = phase === 'prepare' ? 'First up' : phase === 'rest' ? 'Up next' : 'Now'
+  // Easier/harder swap for the move coming up (prepare and rest only).
+  const shownIndex = phase === 'rest' ? currentIndex + 1 : currentIndex
+  const shownBase = (phase === 'prepare' || phase === 'rest') && shownExercise ? EXERCISE_MAP[baseIds[shownIndex] ?? ''] : undefined
+  const swapOptions = shownBase
+    ? (['easier', 'standard', 'harder'] as VariationTier[])
+        .map((tier) => ({ tier, exercise: resolveVariation(shownBase, tier, EXERCISE_MAP) }))
+        .filter((o) => o.tier === 'standard' || o.exercise.id !== shownBase.id)
+    : []
+  function chooseTier(tier: VariationTier) {
+    if (!shownBase) return
+    const exercise = resolveVariation(shownBase, tier, EXERCISE_MAP)
+    const indices = baseIds.map((id, i) => (id === shownBase.id && i >= shownIndex ? i : -1)).filter((i) => i >= 0)
+    replaceExercises(indices, exercise)
+    const variations = { ...(getTrainingProfile().variations ?? {}) }
+    if (tier === 'standard') delete variations[shownBase.id]
+    else variations[shownBase.id] = tier
+    saveTrainingProfile({ variations })
+  }
   const totalExercises = exercises.length
 
   // currentPhase keeps the full WorkoutPhase union type after the complete early-return below
@@ -677,6 +710,33 @@ export default function Player() {
               <h2 className="text-xl font-bold text-slate-100 lg:text-2xl">{shownExercise.name}</h2>
               {shownExercise.cue && (
                 <p className="mt-1.5 text-sm leading-relaxed text-slate-300 lg:text-base">{shownExercise.cue}</p>
+              )}
+              {swapOptions.length > 1 && (
+                <div className="mt-4">
+                  <div
+                    role="radiogroup"
+                    aria-label={`Difficulty for ${shownBase?.name ?? 'this move'}`}
+                    className={`mx-auto grid max-w-sm rounded-full border border-edge bg-surface p-1 text-sm font-semibold ${swapOptions.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}
+                  >
+                    {swapOptions.map((o) => {
+                      const active = o.exercise.id === shownExercise.id
+                      return (
+                        <button
+                          key={o.tier}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => chooseTier(o.tier)}
+                          className={`min-h-11 rounded-full px-2 py-1 leading-tight transition ${active ? 'bg-card text-slate-100 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                          {TIER_LABEL[o.tier]}
+                          <span className="block truncate text-[11px] font-normal text-slate-500">{o.exercise.name}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-1.5 text-xs text-slate-500">Your choice sticks for this move until you change it.</p>
+                </div>
               )}
               {shownExercise.instructions.length > 0 && (
                 <ol className="mx-auto mt-4 hidden max-w-md list-decimal space-y-1 pl-5 text-left text-sm leading-relaxed text-slate-400 lg:block">

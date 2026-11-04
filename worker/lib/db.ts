@@ -179,6 +179,19 @@ const SCHEMA = [
      PRIMARY KEY (user_id, challenge_id)
    )`,
   `CREATE INDEX IF NOT EXISTS idx_challenge_progress_user_updated ON challenge_progress (user_id, updated_at)`,
+  // Singleton per user: onboarding answers, the starter plan's start and the
+  // per-move easier/harder choices (variations: JSON map exercise id -> tier).
+  `CREATE TABLE IF NOT EXISTS training_profile (
+     user_id           TEXT PRIMARY KEY,
+     goal              TEXT,
+     level             TEXT,
+     plan_started_at   TEXT,
+     onboarding_done   INTEGER NOT NULL DEFAULT 0,
+     variations        TEXT NOT NULL DEFAULT '{}',
+     updated_at        TEXT NOT NULL,
+     server_updated_at TEXT
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_training_profile_user_server ON training_profile (user_id, server_updated_at)`,
 ]
 
 // Idempotent ADD COLUMN migrations for tables that predate a column. CREATE TABLE

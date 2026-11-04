@@ -138,3 +138,13 @@ describe('advancePhase reducer (H1 + M3)', () => {
     }
   })
 })
+
+describe('replaceExercises', () => {
+  it('swaps upcoming moves only, never ones already done', async () => {
+    const { useTimerStore } = await import('../src/store/timerStore')
+    const a = { id: 'a', name: 'A' } as never, b = { id: 'b', name: 'B' } as never, c = { id: 'c', name: 'C' } as never
+    useTimerStore.setState({ exercises: [a, b, a, b], currentIndex: 1 })
+    useTimerStore.getState().replaceExercises([0, 2], c)
+    expect(useTimerStore.getState().exercises.map((e) => e.id)).toEqual(['a', 'b', 'c', 'b'])
+  })
+})

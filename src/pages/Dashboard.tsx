@@ -9,6 +9,7 @@ import {
   getLastRoutineId,
   getLatestWeight,
   getLengthTimes,
+  getTrainingProfile,
   getRoutine,
   getRoutines,
   getSessions,
@@ -21,6 +22,9 @@ import ExerciseVisual from '../components/ExerciseVisual'
 import ExerciseModal from '../components/ExerciseModal'
 import ScheduleWorkout from '../components/ScheduleWorkout'
 import { estimateMinutes, lengthPresets } from '../lib/workout'
+import { planWorkout } from '../lib/plan'
+import Onboarding from '../components/Onboarding'
+import PlanCard from '../components/PlanCard'
 import { IconCalendar, IconChevronRight, IconFlame, IconPlay, IconPlus, IconScale } from '../components/icons'
 import type { Exercise } from '../types'
 
@@ -198,6 +202,11 @@ export default function Dashboard() {
   const openExercise = openId ? EXERCISE_MAP[openId] : undefined
   // Brand-new user: no workouts logged and no weigh-ins. Used to nudge a first action.
   const isFresh = sessions.length === 0 && !latestWeight
+  // Onboarding and the plan card change the profile in place; bump to re-read.
+  const [trainingRev, setTrainingRev] = useState(0)
+  const training = useLiveData(() => getTrainingProfile(), [trainingRev])
+  const refreshTraining = () => setTrainingRev((r) => r + 1)
+  const plan = useMemo(() => planWorkout(training, sessions), [training, sessions])
 
   // Length presets: once, twice or three times through the featured routine.
   const [lengthTimes, setLengthTimesState] = useState<1 | 2 | 3>(() => getLengthTimes())
@@ -212,7 +221,8 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* ---- First-run welcome (vanishes after the first workout or weigh-in) ---- */}
-      {isFresh && (
+      {!training.onboardingDone && <Onboarding onDone={refreshTraining} />}
+      {isFresh && training.onboardingDone && !plan && (
         <div className="rounded-2xl border border-accent/30 bg-accent/10 p-4">
           <div className="font-semibold text-slate-100">👋 Welcome to FitFlow 7</div>
           <p className="mt-1 text-sm text-slate-400">
@@ -221,44 +231,50 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ---- Featured workout: dark card with accent glow, length presets and Start ---- */}
-      <section className="relative overflow-hidden rounded-3xl border border-accent/30 bg-gradient-to-br from-card to-surface p-6">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-accent/20 blur-3xl" />
-        <div className="relative">
-          <div className="text-xs font-bold uppercase tracking-widest text-accent">
-            {getLastRoutineId() && featured.id !== 'classic-7' ? 'Continue' : "Today's workout"}
-          </div>
-          <div className="mt-1 text-2xl font-extrabold text-slate-100">{featured.name}</div>
-          <div className="mt-0.5 text-sm text-slate-400">
-            {outline.length} exercises{lengthTimes > 1 ? ` × ${lengthTimes} rounds` : ''} · about {preset.minutes} min
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Link
-              to={workoutHref}
-              className="inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-base font-bold text-slate-900 shadow-lg shadow-accent/20 transition hover:brightness-110 active:scale-[0.98]"
-            >
-              <IconPlay className="h-4 w-4" /> Start
-            </Link>
-            <div role="radiogroup" aria-label="Workout length" className="flex rounded-full border border-edge bg-surface/60 p-1 text-sm font-semibold">
-              {presets.map((p) => (
-                <button
-                  key={p.times}
-                  type="button"
-                  role="radio"
-                  aria-checked={lengthTimes === p.times}
-                  aria-label={`${p.times === 1 ? '1 round' : `${p.times} rounds`}, about ${p.minutes} minutes`}
-                  onClick={() => chooseLength(p.times)}
-                  className={`min-h-9 rounded-full px-3.5 tabular-nums transition ${
-                    lengthTimes === p.times ? 'bg-card text-slate-100 shadow-sm' : 'text-slate-400 hover:text-slate-200'
-                  }`}
+      {plan && training.level ? (
+        <PlanCard plan={plan} level={training.level} onChange={refreshTraining} />
+      ) : (
+        <>
+          {/* ---- Featured workout: dark card with accent glow, length presets and Start ---- */}
+          <section className="relative overflow-hidden rounded-3xl border border-accent/30 bg-gradient-to-br from-card to-surface p-6">
+            <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-accent/20 blur-3xl" />
+            <div className="relative">
+              <div className="text-xs font-bold uppercase tracking-widest text-accent">
+                {getLastRoutineId() && featured.id !== 'classic-7' ? 'Continue' : "Today's workout"}
+              </div>
+              <div className="mt-1 text-2xl font-extrabold text-slate-100">{featured.name}</div>
+              <div className="mt-0.5 text-sm text-slate-400">
+                {outline.length} exercises{lengthTimes > 1 ? ` × ${lengthTimes} rounds` : ''} · about {preset.minutes} min
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Link
+                  to={workoutHref}
+                  className="inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-base font-bold text-slate-900 shadow-lg shadow-accent/20 transition hover:brightness-110 active:scale-[0.98]"
                 >
-                  {p.times === 1 ? '1 round' : `${p.times} rounds`}
-                </button>
-              ))}
+                  <IconPlay className="h-4 w-4" /> Start
+                </Link>
+                <div role="radiogroup" aria-label="Workout length" className="flex rounded-full border border-edge bg-surface/60 p-1 text-sm font-semibold">
+                  {presets.map((p) => (
+                    <button
+                      key={p.times}
+                      type="button"
+                      role="radio"
+                      aria-checked={lengthTimes === p.times}
+                      aria-label={`${p.times === 1 ? '1 round' : `${p.times} rounds`}, about ${p.minutes} minutes`}
+                      onClick={() => chooseLength(p.times)}
+                      className={`min-h-9 rounded-full px-3.5 tabular-nums transition ${
+                        lengthTimes === p.times ? 'bg-card text-slate-100 shadow-sm' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {p.times === 1 ? '1 round' : `${p.times} rounds`}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      </section>
+          </section>
+        </>
+      )}
 
       {/* ---- Stat chips ---- */}
       <section className="grid grid-cols-3 gap-3">

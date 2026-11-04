@@ -5,7 +5,7 @@ import Dashboard from '../src/pages/Dashboard'
 import Stats from '../src/pages/Stats'
 import Calendar from '../src/pages/Calendar'
 import Challenges from '../src/pages/Challenges'
-import { saveBodyProfile, saveWeightEntry } from '../src/lib/storage'
+import { saveBodyProfile, saveTrainingProfile, saveWeightEntry } from '../src/lib/storage'
 
 // B4: render smokes for the Session-6 pages. These read storage at render time
 // (via useMemo), so a server render is enough to catch a crash or a missing key
@@ -16,10 +16,23 @@ function render(ui: React.ReactElement): string {
 }
 
 describe('Dashboard render smoke', () => {
-  it('renders empty storage with the first-run welcome nudge', () => {
+  it('asks the two onboarding questions on a first visit', () => {
+    const html = render(<Dashboard />)
+    expect(html).toContain('What do you want from seven minutes a day?')
+    expect(html).toContain('All workouts')
+  })
+
+  it('shows the welcome nudge once onboarding was skipped', () => {
+    saveTrainingProfile({ onboardingDone: true })
     const html = render(<Dashboard />)
     expect(html).toContain('Welcome to FitFlow 7')
-    expect(html).toContain('All workouts')
+  })
+
+  it('shows the plan card while the plan runs', () => {
+    saveTrainingProfile({ onboardingDone: true, level: 'beginner', goal: 'habit', planStartedAt: new Date().toISOString() })
+    const html = render(<Dashboard />).replace(/<!-- -->/g, '')
+    expect(html).toContain('Week 1 of 4')
+    expect(html).toContain('Classic 7, easier moves')
   })
 
   it('drops the welcome nudge once there is data', () => {
