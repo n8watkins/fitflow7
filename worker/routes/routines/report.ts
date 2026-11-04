@@ -1,6 +1,7 @@
 import { resolveAuth } from '../../lib/tokens.ts'
 import { ensureSchema, getDb } from '../../lib/db.ts'
 import type { ApiContext } from '../../lib/http.ts'
+import { allow } from '../../lib/rateLimit.ts'
 
 // POST /api/routines/report — auth required.
 //
@@ -21,7 +22,7 @@ export default async function reportRoutine(ctx: ApiContext): Promise<Response> 
   if (!auth) return ctx.json(401, { error: 'not signed in' })
   if (auth.scope === 'read') return ctx.json(403, { error: 'read-only token cannot report' })
   const userId = auth.userId
-  if (ctx.env.WRITE_LIMITER && !(await ctx.env.WRITE_LIMITER.limit({ key: `report:${userId}` })).success) {
+  if (!(await allow(ctx.env, 'write', `report:${userId}`))) {
     return ctx.tooManyRequests()
   }
 

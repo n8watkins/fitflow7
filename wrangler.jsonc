@@ -27,14 +27,12 @@
   // for each. Static assets are still served from the edge.
   "placement": { "mode": "targeted", "region": "aws:us-east-2" },
   // Workers Logs: keep every request's logs (see "Reading the logs" in README.md).
-  // Per-minute budgets (Workers rate limiting; namespace ids are unique in the
-  // account). Sign-in is per IP; the API is per IP; token minting, publishing
-  // and reporting are per user.
-  "ratelimits": [
-    { "name": "AUTH_LIMITER", "namespace_id": "7101", "simple": { "limit": 20, "period": 60 } },
-    { "name": "API_LIMITER", "namespace_id": "7102", "simple": { "limit": 240, "period": 60 } },
-    { "name": "WRITE_LIMITER", "namespace_id": "7103", "simple": { "limit": 10, "period": 60 } }
-  ],
+  // Exact per-minute rate limits: one Durable Object per bucket and key
+  // (worker/rateLimiter.ts, budgets in worker/lib/rateLimit.ts).
+  "durable_objects": {
+    "bindings": [{ "name": "RATE_LIMITER", "class_name": "RateLimiter" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter"] }],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1

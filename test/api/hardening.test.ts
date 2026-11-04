@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { handle, remote } from './target.ts'
+import { takeToken, type Window } from '../../worker/lib/rateLimit.ts'
 import { DB_URL, ORIGIN, SECRET, request, sessionCookie, testDb, type ApiEnv, type Req } from './contract-helpers.ts'
 
 // Browser-facing hardening: security headers on every API answer, no caching of
@@ -10,16 +11,20 @@ import { DB_URL, ORIGIN, SECRET, request, sessionCookie, testDb, type ApiEnv, ty
 let env: ApiEnv & Record<string, unknown>
 const call = (path: string, opts: Req = {}) => handle(request(path, opts), env as ApiEnv)
 
-/** A stand-in for the Workers rate-limiting binding: allows `limit` calls per key. */
-function fakeLimiter(limit: number) {
-  const seen = new Map<string, number>()
+/** A stand-in for the RateLimiter Durable Object namespace, running the real
+ *  window logic with test-sized budgets per bucket. */
+function fakeLimiter(budgets: Partial<Record<'auth' | 'api' | 'write', number>>) {
+  const windows = new Map<string, Window>()
   return {
-    keys: seen,
-    async limit({ key }: { key: string }) {
-      const n = (seen.get(key) ?? 0) + 1
-      seen.set(key, n)
-      return { success: n <= limit }
-    },
+    idFromName: (name: string) => name,
+    get: (name: string) => ({
+      async hit(limit: number, periodMs: number) {
+        const bucket = name.split(':')[0] as 'auth' | 'api' | 'write'
+        const r = takeToken(windows.get(name), Date.now(), budgets[bucket] ?? limit, periodMs)
+        windows.set(name, r.window)
+        return { success: r.success }
+      },
+    }),
   }
 }
 
@@ -77,9 +82,21 @@ describe.skipIf(remote)('cross-site writes', () => {
   })
 })
 
+describe('rate-limit window', () => {
+  it('counts within a window, refuses past the limit, and starts over after the period', () => {
+    let w: Window | undefined
+    const hits = [0, 1, 2, 59_999, 60_000].map((t) => {
+      const r = takeToken(w, 1_000 + t, 3, 60_000)
+      w = r.window
+      return r.success
+    })
+    expect(hits).toEqual([true, true, true, false, true])
+  })
+})
+
 describe.skipIf(remote)('rate limits', () => {
   it('sign-in routes answer 429 once the per-IP budget is spent', async () => {
-    env.AUTH_LIMITER = fakeLimiter(2)
+    env.RATE_LIMITER = fakeLimiter({ auth: 2 })
     env.GITHUB_CLIENT_ID = 'gid'
     env.GITHUB_CLIENT_SECRET = 'gs'
     const ip = { 'cf-connecting-ip': '203.0.113.9' }
@@ -92,22 +109,29 @@ describe.skipIf(remote)('rate limits', () => {
     expect((await call('/api/auth/login?provider=github', { headers: { 'cf-connecting-ip': '203.0.113.10' } })).status).toBe(302)
   })
 
+  it('a Durable Object failure lets the request through', async () => {
+    env.RATE_LIMITER = { idFromName: (n: string) => n, get: () => ({ hit: async () => { throw new Error('down') } }) }
+    const error = (await import('vitest')).vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await call('/api/me')).status).toBe(200)
+    error.mockRestore()
+  })
+
   it('API routes answer 429 once the budget is spent', async () => {
-    env.API_LIMITER = fakeLimiter(3)
+    env.RATE_LIMITER = fakeLimiter({ api: 3 })
     const ip = { 'cf-connecting-ip': '203.0.113.9' }
     for (let i = 0; i < 3; i++) expect((await call('/api/me', { headers: ip })).status).toBe(200)
     expect((await call('/api/me', { headers: ip })).status).toBe(429)
   })
 
   it('token minting is limited per user and capped at 20 live tokens', async () => {
-    env.WRITE_LIMITER = fakeLimiter(100)
+    env.RATE_LIMITER = fakeLimiter({ write: 100 })
     const ck = { cookie: sessionCookie('u1') }
     for (let i = 0; i < 20; i++) expect((await call('/api/token', { method: 'POST', headers: ck, json: {} })).status).toBe(200)
     const over = await call('/api/token', { method: 'POST', headers: ck, json: {} })
     expect(over.status).toBe(429)
     expect(await over.json()).toEqual({ error: 'token limit reached: revoke one first' })
 
-    env.WRITE_LIMITER = fakeLimiter(1)
+    env.RATE_LIMITER = fakeLimiter({ write: 1 })
     const ck2 = { cookie: sessionCookie('u2') }
     expect((await call('/api/token', { method: 'POST', headers: ck2, json: {} })).status).toBe(200)
     expect((await call('/api/token', { method: 'POST', headers: ck2, json: {} })).status).toBe(429)
