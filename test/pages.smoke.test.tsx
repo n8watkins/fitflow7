@@ -19,13 +19,14 @@ describe('Dashboard render smoke', () => {
   it('asks the two onboarding questions on a first visit', () => {
     const html = render(<Dashboard />)
     expect(html).toContain('What do you want from seven minutes a day?')
-    expect(html).toContain('All workouts')
+    expect(html).toContain('Recent workouts')
   })
 
-  it('shows the welcome nudge once onboarding was skipped', () => {
+  it('leads with today’s workout once onboarding was skipped, with no extra welcome card', () => {
     saveTrainingProfile({ onboardingDone: true })
     const html = render(<Dashboard />)
-    expect(html).toContain('Welcome to FitFlow 7')
+    expect(html).toContain('Today&#x27;s workout')
+    expect(html).not.toContain('Welcome to FitFlow 7')
   })
 
   it('shows the plan card while the plan runs', () => {
@@ -35,11 +36,11 @@ describe('Dashboard render smoke', () => {
     expect(html).toContain('Classic 7, easier moves')
   })
 
-  it('drops the welcome nudge once there is data', () => {
+  it('shows recent workouts beside today’s workout once there is data', () => {
     saveWeightEntry('2026-06-26', 77)
     const html = render(<Dashboard />)
     expect(html).not.toContain('Welcome to FitFlow 7')
-    expect(html).toContain('All workouts')
+    expect(html).toContain('Recent workouts')
   })
 })
 

@@ -2,7 +2,8 @@ import { useState, useMemo, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { EXERCISES, EXERCISE_MAP } from '../data/exercises'
 import { CLASSIC_7 } from '../data/routines'
-import { getRoutine, saveRoutine, deleteRoutine, newId } from '../lib/storage'
+import { getRoutine, saveRoutine, deleteRoutine, newId, restoreRoutine } from '../lib/storage'
+import { useUiStore } from '../store/uiStore'
 import { fmtDuration } from '../lib/format'
 import type { Routine, Category } from '../types'
 import ExerciseVisual from '../components/ExerciseVisual'
@@ -353,12 +354,15 @@ export default function RoutineEditor() {
     navigate(`/workout/${saved.id}`)
   }, [routine, navigate])
 
+  // Deletes at once and offers Undo for a few seconds, instead of asking first.
+  const showToast = useUiStore((s) => s.showToast)
   const handleDelete = useCallback(() => {
     if (!routine || !canDelete) return
-    if (!confirm(`Delete "${routine.name}"? This cannot be undone.`)) return
+    const snapshot = getRoutine(routine.id)
     deleteRoutine(routine.id)
-    navigate('/')
-  }, [routine, canDelete, navigate])
+    navigate('/workouts')
+    showToast(`“${routine.name}” deleted`, snapshot ? () => restoreRoutine(snapshot) : undefined)
+  }, [routine, canDelete, navigate, showToast])
 
   // ---------------------------------------------------------------------------
   // Guard: not found
@@ -401,7 +405,7 @@ export default function RoutineEditor() {
           </h1>
           {isSystemCopy && (
             <p className="mt-1 rounded-lg border border-amber-700/50 bg-amber-950/30 px-3 py-1.5 text-sm text-amber-400 light:border-amber-300 light:bg-amber-50 light:text-amber-700">
-              This is a built-in routine — you're editing a copy.
+              This is a built-in routine, so you're editing a copy.
             </p>
           )}
         </div>
@@ -503,7 +507,7 @@ export default function RoutineEditor() {
 
             {noExercises && (
               <div className="rounded-xl border border-dashed border-edge py-8 text-center text-sm text-slate-500">
-                No exercises — {' '}
+                No exercises yet. {' '}
                 <span className="lg:hidden">tap “Add exercise” above.</span>
                 <span className="hidden lg:inline">add some from the panel on the right.</span>
               </div>

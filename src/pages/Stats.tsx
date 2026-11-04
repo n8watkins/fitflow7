@@ -151,13 +151,61 @@ export default function Stats() {
   const cat = bmiCategory(currentBmi)
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-100">Stats &amp; Body</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Track your weight, BMI, and workout activity. Stored on this device; switch units in Settings.
-        </p>
+        <h1 className="text-2xl font-bold text-slate-100">Progress</h1>
+        <p className="mt-1 text-sm text-slate-500">Your streaks and activity, and your weight and BMI beside them.</p>
       </div>
+
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+      {/* Left: activity, which most people check most often */}
+      <div className="min-w-0 space-y-6">
+      {/* Streaks */}
+      <Card title="Streaks">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="flex items-center gap-3 rounded-2xl border border-edge bg-card p-5">
+            <span className="text-4xl">🔥</span>
+            <div>
+              <div className="text-3xl font-bold tabular-nums leading-none text-accent">{stats.currentStreak}</div>
+              <div className="mt-1 text-sm text-slate-400">current</div>
+            </div>
+          </div>
+          <StatTile label="longest (max)" value={`${stats.longestStreak}d`} />
+          <StatTile label="total workouts" value={stats.totalWorkouts} />
+          <StatTile label="last 3 days" value={last3} />
+        </div>
+        {skips.length > 0 && (
+          <p className="mt-3 text-xs text-slate-500">Streaks count skip days ({skips.length} used).</p>
+        )}
+      </Card>
+
+      {/* Workout activity windows */}
+      <Card title="Workout activity">
+        <div className="space-y-5">
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">Last 7 days</h3>
+            <div className="grid grid-cols-3 gap-3">
+              <StatTile label="workouts" value={last7.workouts} />
+              <StatTile label="minutes" value={last7.minutes} />
+              <StatTile label="active days" value={last7.activeDays} />
+            </div>
+          </div>
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">Last 30 days</h3>
+            <div className="grid grid-cols-3 gap-3">
+              <StatTile label="workouts" value={last30.workouts} />
+              <StatTile label="minutes" value={last30.minutes} />
+              <StatTile label="active days" value={last30.activeDays} />
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <BadgeGrid badges={badges} />
+      </div>
+
+      {/* Right: body measurements */}
+      <div className="min-w-0 space-y-6">
 
       {/* First-run prompt: no height + no weigh-ins yet. */}
       {!profile.heightCm && weights.length === 0 && (
@@ -165,7 +213,7 @@ export default function Stats() {
           <span className="font-semibold text-slate-100">Set up your stats.</span> Add your height and a
           first weigh-in below to unlock BMI and weight trends. You're in{' '}
           <span className="font-medium text-accent">{unit === 'imperial' ? 'imperial (lb / ft·in)' : 'metric (kg / cm)'}</span>{' '}
-          — <Link to="/settings" className="font-medium text-accent hover:underline">switch units</Link> any time.
+          ; <Link to="/settings" className="font-medium text-accent hover:underline">switch units</Link> any time.
         </div>
       )}
 
@@ -240,48 +288,8 @@ export default function Stats() {
         )}
       </Card>
 
-      {/* Workout activity windows */}
-      <Card title="Workout activity">
-        <div className="space-y-5">
-          <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">Last 7 days</h3>
-            <div className="grid grid-cols-3 gap-3">
-              <StatTile label="workouts" value={last7.workouts} />
-              <StatTile label="minutes" value={last7.minutes} />
-              <StatTile label="active days" value={last7.activeDays} />
-            </div>
-          </div>
-          <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">Last 30 days</h3>
-            <div className="grid grid-cols-3 gap-3">
-              <StatTile label="workouts" value={last30.workouts} />
-              <StatTile label="minutes" value={last30.minutes} />
-              <StatTile label="active days" value={last30.activeDays} />
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Streaks */}
-      <Card title="Streaks">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="flex items-center gap-3 rounded-2xl border border-edge bg-card p-5">
-            <span className="text-4xl">🔥</span>
-            <div>
-              <div className="text-3xl font-bold tabular-nums leading-none text-accent">{stats.currentStreak}</div>
-              <div className="mt-1 text-sm text-slate-400">current</div>
-            </div>
-          </div>
-          <StatTile label="longest (max)" value={`${stats.longestStreak}d`} />
-          <StatTile label="total workouts" value={stats.totalWorkouts} />
-          <StatTile label="last 3 days" value={last3} />
-        </div>
-        {skips.length > 0 && (
-          <p className="mt-3 text-xs text-slate-500">Streaks count skip days ({skips.length} used).</p>
-        )}
-      </Card>
-
-      <BadgeGrid badges={badges} />
+      </div>
+      </div>
     </div>
   )
 }
@@ -473,7 +481,7 @@ function BmiCalculator({
     'w-20 rounded-lg border border-edge bg-surface px-3 py-2 text-slate-100 outline-none focus:border-accent'
 
   return (
-    <Card title="BMI calculator" subtitle="Pre-filled from your saved height and latest weigh-in — tweak it for a what-if (nothing here is saved).">
+    <Card title="BMI calculator" subtitle="Pre-filled from your saved height and latest weigh-in. Try other numbers; nothing here is saved.">
       <div className="flex flex-wrap items-end gap-6">
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">Height</label>

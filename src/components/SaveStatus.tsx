@@ -1,15 +1,17 @@
-import { Link } from 'react-router-dom'
+import { useUiStore } from '../store/uiStore'
 import { SAVE_DOT } from '../lib/saveState'
 import { useSaveState } from '../hooks/useSaveState'
 
 /** Small status chip for the header: where your data is kept right now.
- *  Links to the account settings, which explain it in full. */
+ *  Opens the account settings, which explain it in full. */
 export function SaveStatusChip({ compactBelowXl = false }: { compactBelowXl?: boolean }) {
   const state = useSaveState()
+  const openSettings = useUiStore((s) => s.openSettings)
   if (!state) return null
   return (
-    <Link
-      to="/settings#account"
+    <button
+      type="button"
+      onClick={() => openSettings('account')}
       title={state.detail}
       aria-label={`${state.label}. ${state.detail}`}
       data-testid="save-status"
@@ -18,7 +20,7 @@ export function SaveStatusChip({ compactBelowXl = false }: { compactBelowXl?: bo
     >
       <span className={`h-2 w-2 shrink-0 rounded-full ${SAVE_DOT[state.kind]} ${state.kind === 'syncing' ? 'motion-safe:animate-pulse' : ''}`} aria-hidden="true" />
       <span className={compactBelowXl ? 'sr-only xl:not-sr-only' : undefined}>{state.label}</span>
-    </Link>
+    </button>
   )
 }
 

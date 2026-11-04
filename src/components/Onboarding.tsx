@@ -57,8 +57,8 @@ export default function Onboarding({ onDone }: { onDone?: () => void }) {
   }
 
   return (
-    <section aria-labelledby="onboarding-title" className="rounded-3xl border border-accent/30 bg-card p-6">
-      <div className="flex items-center justify-between gap-3">
+    <section aria-labelledby="onboarding-title" className="p-6 pt-6">
+      <div className="flex items-center justify-between gap-3 pr-10">
         <span className="text-xs font-bold uppercase tracking-widest text-accent">Step {step} of 2</span>
         {step === 1 ? (
           <button type="button" onClick={skip} className="text-sm font-medium text-slate-400 hover:text-slate-200">

@@ -407,7 +407,7 @@ export default function Player() {
     } else {
       const exercise = exercises[currentIndex]
       if (phase !== 'idle' && exercise) {
-        document.title = `${PHASE_LABEL[phase]} — ${exercise.name} | FitFlow 7`
+        document.title = `${PHASE_LABEL[phase]}: ${exercise.name} | FitFlow 7`
       }
     }
     return () => {
@@ -509,7 +509,7 @@ export default function Player() {
           <h1 className="mb-2 text-2xl font-bold text-amber-200 light:text-amber-700">Nothing to play here</h1>
           <p className="mb-6 text-sm leading-relaxed text-slate-400">
             {blockedRoutine?.name ? `"${blockedRoutine.name}"` : 'This routine'} has no exercises we
-            recognize — it may have been imported or cloned with exercises this version doesn't include.
+            recognize. It may have been imported or cloned with exercises this version doesn't include.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
             <Link

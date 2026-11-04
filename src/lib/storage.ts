@@ -1001,6 +1001,21 @@ export function unmarkChallengeDay(challengeId: string, day: number): void {
 }
 
 /** Reset (tombstone) a challenge's progress so the user can start over. */
+/** Undo for a delete: puts the routine back exactly as it was, as the newest
+ *  version so the undo also wins on every synced device. */
+export function restoreRoutine(snapshot: Routine): void {
+  const { deletedAt: _deleted, ...live } = snapshot
+  void _deleted
+  saveRoutine({ ...live, updatedAt: now() })
+}
+
+/** Undo for a challenge reset: brings back the progress as it was. */
+export function restoreChallengeProgress(snapshot: ChallengeProgress): void {
+  const { deletedAt: _deleted, ...live } = snapshot
+  void _deleted
+  writeChallengeProgress({ ...live, updatedAt: now(), dirty: true })
+}
+
 export function resetChallenge(challengeId: string): void {
   const existing = getChallengeProgressFor(challengeId)
   if (!existing) return

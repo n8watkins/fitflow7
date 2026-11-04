@@ -9,7 +9,9 @@ import {
   markChallengeDay,
   resetChallenge,
   unmarkChallengeDay,
+  restoreChallengeProgress,
 } from '../lib/storage'
+import { useUiStore } from '../store/uiStore'
 import type { Challenge } from '../types'
 import { challengeStatus, type ChallengeStatus } from '../lib/skipDays'
 import { todayKey } from '../lib/format'
@@ -166,11 +168,21 @@ function ChallengeDetail({
     onChange()
   }
 
+  // Resets at once and offers Undo for a few seconds, instead of asking first.
+  const showToast = useUiStore((s) => s.showToast)
   function handleReset() {
-    if (confirm(`Reset your progress on "${challenge.name}"? This cannot be undone.`)) {
-      resetChallenge(challenge.id)
-      onChange()
-    }
+    const snapshot = getChallengeProgressFor(challenge.id)
+    resetChallenge(challenge.id)
+    onChange()
+    showToast(
+      `Progress on ${challenge.name} reset`,
+      snapshot
+        ? () => {
+            restoreChallengeProgress(snapshot)
+            onChange()
+          }
+        : undefined,
+    )
   }
 
   // Carry challenge + day so the Player auto-marks the day done on completion.

@@ -71,3 +71,12 @@ export async function accountSettings(userId: string): Promise<Record<string, un
   const rows = await db().execute({ sql: `SELECT * FROM settings WHERE user_id = ?`, args: [userId] })
   return rows.rows[0] as Record<string, unknown> | undefined
 }
+
+/** Marks the first-run questions as answered, so their dialog stays closed. */
+export async function skipOnboarding(context: BrowserContext): Promise<void> {
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('fitflow.trainingProfile')) {
+      localStorage.setItem('fitflow.trainingProfile', JSON.stringify({ onboardingDone: true, updatedAt: '2026-01-01T00:00:00.000Z' }))
+    }
+  })
+}

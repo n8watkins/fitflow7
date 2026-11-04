@@ -1,11 +1,15 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
-import { accountRoutines, accountSessions, accountSettings, newUser, signIn } from './auth'
+import { accountRoutines, accountSessions, accountSettings, newUser, signIn, skipOnboarding } from './auth'
 
 // Is what you do actually kept? These drive the real app and API end to end:
 // signed in, signed out, across reloads, a second device, Sign out everywhere,
 // offline, and the guest-to-account hand-over the UI promises.
 
 // The header exists twice (desktop and phone layouts); use the one on screen.
+test.beforeEach(async ({ context }) => {
+  await skipOnboarding(context)
+})
+
 const chip = (page: Page) => page.getByTestId('save-status').locator('visible=true')
 
 async function createRoutine(page: Page, name: string) {
@@ -89,6 +93,7 @@ test('a second device signed in as the same user gets the same data', async ({ b
   await expect(chip(page)).toHaveText('Saved', { timeout: 15_000 })
 
   const other = await browser.newContext()
+  await skipOnboarding(other)
   await signIn(other, user)
   const second = await other.newPage()
   await second.goto('/')
@@ -108,6 +113,7 @@ test('Sign out everywhere ends the other sessions, and their data stays on that 
   await expect(chip(page)).toHaveText('Saved', { timeout: 15_000 })
 
   const other = await browser.newContext()
+  await skipOnboarding(other)
   await signIn(other, user)
   const second = await other.newPage()
   await second.goto('/settings')
@@ -183,6 +189,7 @@ test('a settings page opened before the first sync does not overwrite newer acco
 
   // A second device opens Settings while its first sync is still slow.
   const other = await browser.newContext()
+  await skipOnboarding(other)
   await signIn(other, user)
   const second = await other.newPage()
   await second.route('**/api/sync', async (route) => {

@@ -1,5 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+// Inter, self-hosted (only the Latin subset loads for English text), so the
+// app looks the same on every OS.
+import '@fontsource-variable/inter/wght.css'
 import './index.css'
 import App from './App.tsx'
 import { gcTombstones, runMigrations } from './lib/storage'

@@ -19,6 +19,8 @@ import { useSettings } from '../hooks/useSettings'
 import { useLocation } from 'react-router-dom'
 import { SaveStatusLine } from '../components/SaveStatus'
 import TrainingSettings from '../components/TrainingSettings'
+import ConfirmDialog from '../components/ConfirmDialog'
+import type { SettingsSection } from '../store/uiStore'
 import { speak, speechAvailable, type CoachTone } from '../lib/coach'
 import {
   loginWith,
@@ -64,7 +66,7 @@ function AccountSection() {
     setTokenBusy(true)
     const t = await requestAccessToken({ scope, label: label.trim() || undefined })
     setTokenBusy(false)
-    setMinted(t ?? 'Could not create a token — try signing in again.')
+    setMinted(t ?? 'Could not create a token. Try signing in again.')
     setCopied(false)
     setLabel('')
     refreshTokens()
@@ -137,7 +139,7 @@ function AccountSection() {
                   <div className="font-medium text-slate-200">AI access tokens</div>
                   <p className="mt-0.5 text-sm text-slate-500">
                     For the private MCP server, so an AI assistant can read your stats and (with
-                    read &amp; write) log workouts. Treat each like a password — the secret is shown
+                    read &amp; write) log workouts. Treat each like a password: the secret is shown
                     once. Revoke any token here.
                   </p>
                 </div>
@@ -146,7 +148,7 @@ function AccountSection() {
                 {minted && (
                   <div className="rounded-lg border border-accent/40 bg-accent/5 p-3">
                     <p className="text-xs font-semibold text-accent">
-                      Copy this now — it won't be shown again.
+                      Copy this now. It won’t be shown again.
                     </p>
                     <textarea
                       readOnly
@@ -383,7 +385,11 @@ function VoiceCoachSetting() {
   )
 }
 
-export default function Settings() {
+/** The settings, all on one page (the /settings route) or one section at a
+ *  time inside the Settings dialog (components/SettingsDialog.tsx). */
+export default function Settings({ section, embedded = false }: { section?: SettingsSection; embedded?: boolean } = {}) {
+  const show = (s: SettingsSection) => !section || section === s
+  const [confirmClear, setConfirmClear] = useState(false)
   const signedIn = useSyncStore((s) => s.user !== null)
   // Live settings: a sync pull that lands while this page is open shows up
   // here, and each change is written on top of what is stored now, so a
@@ -421,9 +427,7 @@ export default function Settings() {
   }
 
   function handleClearHistory() {
-    if (confirm('This will permanently delete all your workout history. This cannot be undone. Continue?')) {
-      clearSessions()
-    }
+    setConfirmClear(true)
   }
 
   function handleResetDefaults() {
@@ -471,19 +475,32 @@ export default function Settings() {
   }
 
   return (
-    <div className="space-y-10">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100">Settings</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {signedIn
-              ? 'Defaults for new routines. Routines and history sync to your account.'
-              : 'Defaults for new routines. Routines and history live only in this browser.'}
-          </p>
-        </div>
+    <div className={embedded ? 'space-y-6' : 'space-y-10'}>
+      <ConfirmDialog
+        open={confirmClear}
+        title="Clear all workout history?"
+        body="Every logged workout is deleted from this device and, if you’re signed in, from your account on every device. Routines and settings stay. This can’t be undone."
+        confirmLabel="Clear history"
+        onConfirm={() => {
+          clearSessions()
+          setConfirmClear(false)
+        }}
+        onCancel={() => setConfirmClear(false)}
+      />
+      {/* Header (the dialog has its own title; the Saved note sits in its top bar) */}
+      <div className={embedded ? 'contents' : 'flex items-start justify-between gap-4'}>
+        {!embedded && (
+          <div>
+            <h1 className="text-2xl font-bold text-slate-100">Settings</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              {signedIn
+                ? 'Defaults for new routines. Routines and history sync to your account.'
+                : 'Defaults for new routines. Routines and history live only in this browser.'}
+            </p>
+          </div>
+        )}
         <span
-          className={`mt-1 rounded-full border border-emerald-800 bg-emerald-950 px-3 py-1 text-sm font-medium text-emerald-400 transition-opacity duration-300 light:border-emerald-300 light:bg-emerald-100 light:text-emerald-700 ${savedVisible ? 'opacity-100' : 'opacity-0'}`}
+          className={`rounded-full border border-emerald-800 bg-emerald-950 px-3 py-1 text-sm font-medium text-emerald-400 transition-opacity duration-300 light:border-emerald-300 light:bg-emerald-100 light:text-emerald-700 ${embedded ? 'absolute top-3.5 right-14 z-10' : 'mt-1'} ${savedVisible ? 'opacity-100' : 'opacity-0'}`}
           aria-live="polite"
         >
           Saved
@@ -491,12 +508,13 @@ export default function Settings() {
       </div>
 
       {/* Account & sync */}
-      <AccountSection />
+      {show('account') && <AccountSection />}
 
       {/* Training plan (level, goal, starter plan) */}
-      <TrainingSettings />
+      {show('training') && <TrainingSettings />}
 
       {/* Workout defaults */}
+      {show('workout') && (
       <section>
         <div className="rounded-2xl border border-edge bg-card">
           <div className="border-b border-edge px-5 py-4">
@@ -545,8 +563,10 @@ export default function Settings() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Audio */}
+      {show('audio') && (
       <section>
         <div className="rounded-2xl border border-edge bg-card">
           <div className="border-b border-edge px-5 py-4">
@@ -581,8 +601,10 @@ export default function Settings() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Appearance */}
+      {show('display') && (
       <section>
         <div className="rounded-2xl border border-edge bg-card">
           <div className="border-b border-edge px-5 py-4">
@@ -632,8 +654,10 @@ export default function Settings() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Units */}
+      {show('display') && (
       <section>
         <div className="rounded-2xl border border-edge bg-card">
           <div className="border-b border-edge px-5 py-4">
@@ -659,8 +683,10 @@ export default function Settings() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Data backup */}
+      {show('data') && (
       <section>
         <div className="rounded-2xl border border-edge bg-card">
           <div className="border-b border-edge px-5 py-4">
@@ -703,8 +729,10 @@ export default function Settings() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Reset defaults */}
+      {show('data') && (
       <section>
         <div className="rounded-2xl border border-edge bg-card">
           <div className="border-b border-edge px-5 py-4">
@@ -720,8 +748,10 @@ export default function Settings() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Danger zone */}
+      {show('data') && (
       <section>
         <div className="rounded-2xl border border-red-900 bg-card light:border-red-300">
           <div className="border-b border-red-900 px-5 py-4 light:border-red-300">
@@ -745,6 +775,7 @@ export default function Settings() {
           </div>
         </div>
       </section>
+      )}
     </div>
   )
 }

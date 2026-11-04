@@ -142,3 +142,12 @@ export function IconBook({ className }: IconProps) {
     </Svg>
   )
 }
+
+export function IconUser({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5" />
+    </Svg>
+  )
+}

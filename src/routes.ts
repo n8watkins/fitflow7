@@ -9,6 +9,7 @@ export const CLIENT_ROUTES = [
   '/calendar',
   '/stats',
   '/challenges',
+  '/workouts',
   '/library',
   '/history',
   '/insights',
