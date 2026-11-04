@@ -2,7 +2,16 @@
 // (worker/routes/auth/callback.ts). The app reads it once at startup, removes it
 // from the address bar and shows a banner with a way to try again.
 
-export type SignInNotice = 'expired' | 'cancelled' | 'failed' | 'unavailable' | 'not_allowed'
+export type SignInNotice =
+  | 'expired'
+  | 'cancelled'
+  | 'failed'
+  | 'unavailable'
+  | 'not_allowed'
+  // Not from the callback: shown by the app itself after signing out here, or
+  // when the session ended elsewhere (Sign out everywhere, expiry).
+  | 'signed_out'
+  | 'session_ended'
 
 export interface SignInNoticeCopy {
   title: string
@@ -37,11 +46,23 @@ export const SIGN_IN_NOTICES: Record<SignInNotice, SignInNoticeCopy> = {
     body: 'This deployment only accepts specific accounts. Your workouts still save on this device.',
     retry: false,
   },
+  signed_out: {
+    title: 'Signed out',
+    body: 'Your workouts, routines and settings stay on this device and keep saving here. Sign in again to sync them with your account.',
+    retry: false,
+  },
+  session_ended: {
+    title: 'You were signed out',
+    body: 'Your session ended, for example after Sign out everywhere. Nothing was lost: changes stay on this device and sync when you sign in again.',
+    retry: true,
+  },
 }
+
+const APP_NOTICES = new Set(['signed_out', 'session_ended'])
 
 export function parseSignInNotice(raw: string | null): SignInNotice | null {
   if (raw === null) return null
-  return Object.hasOwn(SIGN_IN_NOTICES, raw) ? (raw as SignInNotice) : 'failed'
+  return Object.hasOwn(SIGN_IN_NOTICES, raw) && !APP_NOTICES.has(raw) ? (raw as SignInNotice) : 'failed'
 }
 
 /** Reads `?signin=` from the current URL and removes it, so a reload or a shared

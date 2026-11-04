@@ -10,9 +10,12 @@ import {
   clearSyncCursor,
   getPendingSettings,
   getPendingSync,
+  getSignedInHere,
   getSyncCursor,
+  hasPendingChanges,
   markSettingsSynced,
   markSynced,
+  setSignedInHere,
   setSyncCursor,
 } from './storage'
 import { useSyncStore, type AuthUser } from '../store/syncStore'
@@ -81,7 +84,7 @@ function takeBatch(all: ReturnType<typeof getPendingSync>) {
   return { batch, more }
 }
 
-let inFlight = false
+let running: Promise<void> | null = null
 let rerunQueued = false
 // Set if the server rejects a push with 403 (a read-scoped credential). The web
 // client is always cookie/readwrite so this is defensive; once set we fall back
@@ -93,14 +96,27 @@ function getPushBatch() {
   return takeBatch(getPendingSync())
 }
 
-/** Pushes the dirty queue then pulls remote changes. Coalesces concurrent calls. */
-export async function sync(): Promise<void> {
-  if (!useSyncStore.getState().user) return
-  if (inFlight) {
+/** Pushes the dirty queue then pulls remote changes. Coalesces concurrent
+ *  calls: a call during a run queues one more run, and every caller's promise
+ *  settles once the queue is drained (sign-out waits on it). */
+export function sync(): Promise<void> {
+  if (!useSyncStore.getState().user) return Promise.resolve()
+  if (running) {
     rerunQueued = true
-    return
+    return running
   }
-  inFlight = true
+  running = (async () => {
+    do {
+      rerunQueued = false
+      await syncOnce()
+    } while (rerunQueued && useSyncStore.getState().user)
+  })().finally(() => {
+    running = null
+  })
+  return running
+}
+
+async function syncOnce(): Promise<void> {
   const store = useSyncStore.getState()
   store.setStatus('syncing')
   // Pull-only once a push has been forbidden; otherwise drain the dirty queue.
@@ -130,9 +146,9 @@ export async function sync(): Promise<void> {
     })
 
     if (res.status === 401) {
-      // Session expired/absent — drop to signed-out.
-      useSyncStore.getState().setUser(null)
-      useSyncStore.getState().setStatus('idle')
+      // The session ended elsewhere (Sign out everywhere) or expired. Local data
+      // stays and keeps its dirty flags, so nothing is lost; say so.
+      endLocalSession('session_ended')
       return
     }
     if (res.status === 403) {
@@ -149,7 +165,7 @@ export async function sync(): Promise<void> {
       return
     }
     if (!res.ok) {
-      useSyncStore.getState().setStatus('error')
+      useSyncStore.getState().setStatus(navigator.onLine === false ? 'offline' : 'error')
       return
     }
 
@@ -182,6 +198,7 @@ export async function sync(): Promise<void> {
     if (pushed && more) rerunQueued = true
     setSyncCursor(data.serverTime)
     useSyncStore.getState().markSynced()
+    useSyncStore.getState().setPending(pushed && hasPendingChanges())
     if (
       data.routines.length ||
       data.sessions.length ||
@@ -194,15 +211,22 @@ export async function sync(): Promise<void> {
     ) {
       useSyncStore.getState().bumpData()
     }
-  } catch {
-    useSyncStore.getState().setStatus('error')
-  } finally {
-    inFlight = false
-    if (rerunQueued) {
-      rerunQueued = false
-      void sync()
-    }
+  } catch (err) {
+    // fetch rejects with a TypeError when the network is unreachable.
+    const offline = navigator.onLine === false || err instanceof TypeError
+    useSyncStore.getState().setStatus(offline ? 'offline' : 'error')
   }
+}
+
+/** Drops to signed out on this device, keeping all local data. */
+function endLocalSession(notice: 'signed_out' | 'session_ended'): void {
+  clearSyncCursor()
+  setSignedInHere(false)
+  const store = useSyncStore.getState()
+  store.setUser(null)
+  store.setStatus('idle')
+  store.setPending(false)
+  store.setSignInNotice(notice)
 }
 
 // Debounce local-write bursts (e.g. a settings stepper) into one push.
@@ -220,6 +244,14 @@ export async function bootstrapAuth(): Promise<void> {
   try {
     const res = await fetch(apiUrl('/api/me'), { credentials: 'include' })
     const data = (await res.json()) as { user: AuthUser | null; providers?: string[] }
+    if (data.user) {
+      setSignedInHere(true)
+      useSyncStore.getState().setPending(hasPendingChanges())
+    } else if (getSignedInHere()) {
+      // Signed in last time, but the session is gone (Sign out everywhere on
+      // another device, or it expired): say so instead of silently switching.
+      endLocalSession('session_ended')
+    }
     useSyncStore.getState().setUser(data.user ?? null)
     useSyncStore.getState().setProviders(data.providers ?? [])
     if (data.user) void sync()
@@ -292,6 +324,14 @@ export async function revokeAccessToken(jti: string): Promise<boolean> {
  *  account (access tokens keep working). */
 export async function logout(opts?: { everywhere?: boolean }): Promise<void> {
   try {
+    // Send unsynced changes first, so a sign-out right after a workout still
+    // lands it in the account. Offline, give up after a few seconds: the
+    // changes stay on this device either way.
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+      debounceTimer = null
+    }
+    await Promise.race([sync(), new Promise((r) => setTimeout(r, 5000))])
     await fetch(apiUrl('/api/auth/logout'), {
       method: 'POST',
       credentials: 'include',
@@ -299,16 +339,21 @@ export async function logout(opts?: { everywhere?: boolean }): Promise<void> {
       body: JSON.stringify({ everywhere: opts?.everywhere === true }),
     })
   } finally {
-    clearSyncCursor()
-    useSyncStore.getState().setUser(null)
-    useSyncStore.getState().setStatus('idle')
+    endLocalSession('signed_out')
   }
 }
 
 /** Wires the background sync triggers. Call once at app startup. */
 export function startSyncListeners(): void {
-  window.addEventListener('fitflow:localwrite', () => scheduleSync())
+  window.addEventListener('fitflow:localwrite', () => {
+    if (useSyncStore.getState().user) useSyncStore.getState().setPending(true)
+    scheduleSync()
+  })
   window.addEventListener('focus', () => void sync())
+  window.addEventListener('online', () => void sync())
+  window.addEventListener('offline', () => {
+    if (useSyncStore.getState().user) useSyncStore.getState().setStatus('offline')
+  })
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') void sync()
   })

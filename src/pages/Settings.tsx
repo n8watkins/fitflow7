@@ -16,6 +16,8 @@ import { applyTheme } from '../lib/theme'
 import { dayKey } from '../lib/format'
 import { useSyncStore } from '../store/syncStore'
 import { useSettings } from '../hooks/useSettings'
+import { useLocation } from 'react-router-dom'
+import { SaveStatusLine } from '../components/SaveStatus'
 import TrainingSettings from '../components/TrainingSettings'
 import { speak, speechAvailable, type CoachTone } from '../lib/coach'
 import {
@@ -34,7 +36,6 @@ import {
 function AccountSection() {
   const user = useSyncStore((s) => s.user)
   const authLoaded = useSyncStore((s) => s.authLoaded)
-  const lastSyncedAt = useSyncStore((s) => s.lastSyncedAt)
   const providers = useSyncStore((s) => s.providers)
   const [minted, setMinted] = useState<string | null>(null)
   const [tokenBusy, setTokenBusy] = useState(false)
@@ -85,7 +86,7 @@ function AccountSection() {
   }
 
   return (
-    <section>
+    <section id="account" className="scroll-mt-6">
       <div className="rounded-2xl border border-edge bg-card">
         <div className="border-b border-edge px-5 py-4">
           <h2 className="font-semibold text-slate-200">Account &amp; Sync</h2>
@@ -93,6 +94,7 @@ function AccountSection() {
             Optional. Sign in to back up routines, history, and settings and sync across devices.
             The app works fully without an account.
           </p>
+          <SaveStatusLine className="mt-3" />
         </div>
         <div className="px-5 py-4">
           {!authLoaded ? (
@@ -104,11 +106,9 @@ function AccountSection() {
                   <div className="truncate font-medium text-slate-200">
                     {user.name ?? user.email ?? 'Signed in'}
                   </div>
-                  <div className="mt-0.5 text-sm text-slate-500">
-                    {lastSyncedAt
-                      ? `Last synced ${new Date(lastSyncedAt).toLocaleTimeString()}`
-                      : 'Syncing…'}
-                  </div>
+                  {user.email && user.email !== user.name && (
+                    <div className="mt-0.5 truncate text-sm text-slate-500">{user.email}</div>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -127,7 +127,8 @@ function AccountSection() {
                 </div>
               </div>
               <p className="-mt-2 text-xs text-slate-500">
-                Sign out everywhere ends every session on this account, on every device. AI access tokens below keep working.
+                Signing out keeps everything on this device, and it keeps saving here; it syncs again when you sign back in.
+                Sign out everywhere also ends every other session on this account. AI access tokens below keep working.
               </p>
 
               {/* MCP access tokens */}
@@ -233,6 +234,11 @@ function AccountSection() {
           ) : providers.length === 0 ? (
             <div className="text-sm text-slate-500">Sign-in isn’t available right now.</div>
           ) : (
+            <div className="space-y-3">
+            <p className="text-sm text-slate-400">
+              When you sign in, everything saved on this device is added to your account, and anything already in
+              your account comes to this device.
+            </p>
             <div className="flex flex-wrap gap-3">
               {providers.map((p) => (
                 <button
@@ -243,6 +249,7 @@ function AccountSection() {
                   Sign in with {p === 'github' ? 'GitHub' : p === 'google' ? 'Google' : p}
                 </button>
               ))}
+            </div>
             </div>
           )}
         </div>
@@ -388,6 +395,11 @@ export default function Settings() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [importMsg, setImportMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const bumpData = useSyncStore((s) => s.bumpData)
+  const { hash } = useLocation()
+  // The header's save chip links to #account: bring that section into view.
+  useEffect(() => {
+    if (hash === '#account') document.getElementById('account')?.scrollIntoView({ block: 'start' })
+  }, [hash])
 
   function flashSaved() {
     setSavedVisible(true)

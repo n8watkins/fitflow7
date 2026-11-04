@@ -13,6 +13,7 @@ import { coachLine, speak, speechAvailable, stopSpeaking, type CoachMoment } fro
 import { EXERCISE_MAP } from '../data/exercises'
 import { CLASSIC_7 } from '../data/routines'
 import ExerciseVisual from '../components/ExerciseVisual'
+import { SaveStatusLine } from '../components/SaveStatus'
 import {
   cueStart,
   cueWorkStart,
@@ -586,6 +587,8 @@ export default function Player() {
               </div>
             ))}
           </div>
+
+          <SaveStatusLine className="-mt-4 mb-6 justify-center text-left" />
 
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
             <Link

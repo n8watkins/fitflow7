@@ -151,8 +151,62 @@ describe('client sync engine (M5)', () => {
     expect(calls).toBe(1) // only the first actually fetched
 
     release[0]()
+    await vi.waitFor(() => expect(calls).toBe(2)) // the single queued rerun fired
+    release[1]()
+    // Every caller settles once the queue is drained (sign-out relies on it).
     await Promise.all([p1, p2, p3])
-    expect(calls).toBe(2) // the single queued rerun fired — not three fetches
-    release[1]?.() // resolve the rerun's pending fetch
+    expect(calls).toBe(2) // not three fetches
+  })
+
+  it('reports offline, not an error, when the network is unreachable', async () => {
+    const { sync, useSyncStore } = await loadSync()
+    stubFetch(() => Promise.reject(new TypeError('Failed to fetch')))
+    await sync.sync()
+    expect(useSyncStore.getState().status).toBe('offline')
+  })
+
+  it('a 401 signs out here, says why, and keeps unsynced data queued', async () => {
+    const { sync, storage, useSyncStore } = await loadSync()
+    storage.saveRoutine(makeRoutine({ id: 'keep' }))
+    stubFetch(() => ({ ok: false, status: 401, json: async () => ({}) }))
+    await sync.sync()
+    expect(useSyncStore.getState().user).toBeNull()
+    expect(useSyncStore.getState().signInNotice).toBe('session_ended')
+    expect(storage.getPendingSync().routines.map((r) => r.id)).toEqual(['keep'])
+  })
+
+  it('sign-out pushes pending changes before ending the session', async () => {
+    const { sync, storage, useSyncStore } = await loadSync()
+    storage.saveRoutine(makeRoutine({ id: 'late' }))
+    const order: string[] = []
+    stubFetch((url, init) => {
+      if (url.includes('/api/sync')) {
+        const body = JSON.parse(init?.body ?? '{}') as { routines?: { id: string }[] }
+        order.push(`sync:${(body.routines ?? []).map((r) => r.id).join(',')}`)
+        return { ok: true, status: 200, json: async () => okBody() }
+      }
+      order.push('logout')
+      return { ok: true, status: 200, json: async () => ({}) }
+    })
+    await sync.logout()
+    expect(order).toEqual(['sync:late', 'logout'])
+    expect(storage.getPendingSync().routines).toEqual([])
+    expect(useSyncStore.getState().signInNotice).toBe('signed_out')
+  })
+
+  it('says the session ended when a signed-in device finds itself signed out', async () => {
+    const { sync, storage, useSyncStore } = await loadSync()
+    storage.setSignedInHere(true)
+    stubFetch(() => ({ ok: true, status: 200, json: async () => ({ user: null, providers: [] }) }))
+    await sync.bootstrapAuth()
+    expect(useSyncStore.getState().signInNotice).toBe('session_ended')
+    expect(storage.getSignedInHere()).toBe(false)
+  })
+
+  it('shows no notice on a device that was never signed in', async () => {
+    const { sync, useSyncStore } = await loadSync()
+    stubFetch(() => ({ ok: true, status: 200, json: async () => ({ user: null, providers: [] }) }))
+    await sync.bootstrapAuth()
+    expect(useSyncStore.getState().signInNotice).toBeNull()
   })
 })
