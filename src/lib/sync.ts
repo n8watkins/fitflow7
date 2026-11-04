@@ -21,11 +21,11 @@ import type {
   TrainingProfile,
   ChallengeProgress,
   Routine,
-  UserSettings,
   WeightEntry,
   WorkoutSession,
 } from '../types'
 import { apiUrl } from './api'
+import type { RemoteSettings } from './storage'
 import type { SkipDay } from './skipDays'
 
 // ---------------------------------------------------------------------------
@@ -41,7 +41,8 @@ interface SyncResponse {
   serverTime: string
   routines: Routine[]
   sessions: WorkoutSession[]
-  settings: { value: UserSettings; updatedAt: string } | null
+  /** exerciseImages is absent until some client has saved it. */
+  settings: { value: RemoteSettings; updatedAt: string } | null
   weightLog: WeightEntry[]
   skipDays?: SkipDay[]
   challengeProgress: ChallengeProgress[]

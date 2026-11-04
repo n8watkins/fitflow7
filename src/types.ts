@@ -93,7 +93,12 @@ export type UserSettings = {
   audioCuesEnabled: boolean
   /** Display units for weight/height/BMI. Rides the existing settings sync. */
   unitSystem: UnitSystem
+  /** Photos where a move has one (drawn figures elsewhere), or drawn figures
+   *  for every move. Syncs with the other settings. */
+  exerciseImages: ExerciseImages
 }
+
+export type ExerciseImages = 'photos' | 'illustrations'
 
 export const DEFAULT_SETTINGS: UserSettings = {
   defaultWorkSeconds: 30,
@@ -102,6 +107,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   countdownSeconds: 5,
   audioCuesEnabled: true,
   unitSystem: 'imperial',
+  exerciseImages: 'photos',
 }
 
 // ---------------------------------------------------------------------------

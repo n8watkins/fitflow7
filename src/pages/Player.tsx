@@ -737,8 +737,8 @@ export default function Player() {
                 key={shownExercise.id}
                 exercise={shownExercise}
                 autoPlay
-                imgClassName="mx-auto mb-3 max-h-44 w-full rounded-2xl bg-surface object-contain lg:max-h-80"
-                emojiClassName="mb-3 inline-block text-7xl leading-none lg:text-9xl"
+                imgClassName="mx-auto mb-3 flex h-44 w-full rounded-2xl bg-surface object-contain lg:h-80"
+               
               />
               <h2 className="text-xl font-bold text-slate-100 lg:text-2xl">{shownExercise.name}</h2>
               {shownExercise.cue && (
@@ -787,7 +787,7 @@ export default function Player() {
           <div className="mt-4 lg:col-start-2">
             <div className="rounded-xl border border-edge bg-card/60 px-4 py-3">
               <div className="flex items-center gap-3">
-                <ExerciseVisual exercise={nextExercise} imgClassName="h-9 w-9 rounded-md object-cover" emojiClassName="inline-flex h-9 w-9 items-center justify-center text-2xl leading-none" />
+                <ExerciseVisual exercise={nextExercise} imgClassName="h-9 w-9 rounded-md object-cover" />
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
                     Up Next

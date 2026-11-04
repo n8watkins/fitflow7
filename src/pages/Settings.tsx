@@ -15,6 +15,7 @@ import {
 import { applyTheme } from '../lib/theme'
 import { dayKey } from '../lib/format'
 import { useSyncStore } from '../store/syncStore'
+import { useSettings } from '../hooks/useSettings'
 import TrainingSettings from '../components/TrainingSettings'
 import { speak, speechAvailable, type CoachTone } from '../lib/coach'
 import {
@@ -377,7 +378,10 @@ function VoiceCoachSetting() {
 
 export default function Settings() {
   const signedIn = useSyncStore((s) => s.user !== null)
-  const [settings, setSettings] = useState<UserSettings>(() => getSettings())
+  // Live settings: a sync pull that lands while this page is open shows up
+  // here, and each change is written on top of what is stored now, so a
+  // screen opened before the pull can never write old values back (it did).
+  const settings = useSettings()
   const [theme, setTheme] = useState<ThemePref>(() => getThemePref())
   const [savedVisible, setSavedVisible] = useState(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -385,23 +389,15 @@ export default function Settings() {
   const [importMsg, setImportMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const bumpData = useSyncStore((s) => s.bumpData)
 
-  // Auto-save whenever settings change (after initial mount)
-  const isFirstRender = useRef(true)
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false
-      return
-    }
-    saveSettings(settings)
-
-    // Show "Saved" flash
+  function flashSaved() {
     setSavedVisible(true)
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => setSavedVisible(false), 1800)
-  }, [settings])
+  }
 
   function update<K extends keyof UserSettings>(key: K, value: UserSettings[K]) {
-    setSettings((prev) => ({ ...prev, [key]: value }))
+    saveSettings({ ...getSettings(), [key]: value })
+    flashSaved()
   }
 
   // Theme is a device-local display pref (not in UserSettings / not synced):
@@ -419,7 +415,8 @@ export default function Settings() {
   }
 
   function handleResetDefaults() {
-    setSettings(DEFAULT_SETTINGS)
+    saveSettings(DEFAULT_SETTINGS)
+    flashSaved()
   }
 
   function handleExport() {
@@ -445,7 +442,6 @@ export default function Settings() {
           return
         }
         const result = importData(parsed)
-        if (result.settings) setSettings(getSettings())
         bumpData() // refresh Dashboard/History reads
         const extras: string[] = []
         if (result.weightEntries) extras.push(`${result.weightEntries} weigh-in${result.weightEntries === 1 ? '' : 's'}`)
@@ -598,6 +594,29 @@ export default function Settings() {
                 {t}
               </button>
             ))}
+          </div>
+          <div className="flex flex-col gap-3 border-t border-edge px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="font-medium text-slate-200" id="exercise-images-label">Exercise images</div>
+              <div className="mt-0.5 text-sm text-slate-500">
+                {settings.exerciseImages === 'photos'
+                  ? 'Photos where a move has one, drawn figures for the rest.'
+                  : 'Drawn figures for every move, in one style.'}
+              </div>
+            </div>
+            <div role="radiogroup" aria-labelledby="exercise-images-label" className="flex shrink-0 self-start overflow-hidden rounded-lg border border-edge text-sm font-medium sm:self-auto">
+              {(['photos', 'illustrations'] as const).map((v) => (
+                <button
+                  key={v}
+                  role="radio"
+                  aria-checked={settings.exerciseImages === v}
+                  onClick={() => update('exerciseImages', v)}
+                  className={`px-3 py-1.5 transition ${settings.exerciseImages === v ? 'bg-accent text-slate-900' : 'bg-card text-slate-300 hover:bg-card-hover'}`}
+                >
+                  {v === 'photos' ? 'Photos' : 'Illustrations'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </section>

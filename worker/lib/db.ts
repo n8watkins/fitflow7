@@ -89,6 +89,7 @@ const SCHEMA = [
      default_rounds       INTEGER NOT NULL,
      countdown_seconds    INTEGER NOT NULL,
      audio_cues_enabled   INTEGER NOT NULL,
+     exercise_images      TEXT,
      updated_at           TEXT NOT NULL,
      server_updated_at    TEXT
    )`,
@@ -213,6 +214,8 @@ const SCHEMA = [
 const SYNCED_TABLES = ['routines', 'sessions', 'settings', 'weight_log', 'body_profile', 'challenge_progress']
 const ALTERS = [
   `ALTER TABLE challenge_progress ADD COLUMN cleared_days TEXT NOT NULL DEFAULT '{}'`,
+  // 'photos' or 'illustrations'; NULL until a client saves the preference.
+  `ALTER TABLE settings ADD COLUMN exercise_images TEXT`,
   // H2: server-stamped sync watermark on every synced table.
   ...SYNCED_TABLES.map((t) => `ALTER TABLE ${t} ADD COLUMN server_updated_at TEXT`),
   ...SYNCED_TABLES.map((t) => `CREATE INDEX IF NOT EXISTS idx_${t}_user_server ON ${t} (user_id, server_updated_at)`),
