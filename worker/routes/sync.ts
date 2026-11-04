@@ -18,6 +18,8 @@ import {
   MAX_SYNC_RECORDS,
   checkBodyProfile,
   checkTrainingProfile,
+  checkSkipDay,
+  type SkipDayRecord,
   checkChallenge,
   checkRoutine,
   checkSession,
@@ -49,13 +51,14 @@ interface ValidPush {
   sessions: WorkoutSession[]
   settings: SettingsPush | null
   weightLog: WeightEntry[]
+  skipDays: SkipDayRecord[]
   bodyProfile: BodyProfile | null
   trainingProfile: TrainingProfile | null
   challengeProgress: ChallengeProgress[]
   rejected: Rejected[]
 }
 
-const LIST_FIELDS = ['routines', 'sessions', 'weightLog', 'challengeProgress'] as const
+const LIST_FIELDS = ['routines', 'sessions', 'weightLog', 'challengeProgress', 'skipDays'] as const
 const ROUTE = '/api/sync'
 
 /** Checks a push's shape and size, and each record on its own. Returns the
@@ -99,6 +102,7 @@ function parsePush(raw: unknown): { status: 400 | 413; error: string } | ValidPu
     routines: each('routines', b.routines, checkRoutine, 'id'),
     sessions: each('sessions', b.sessions, checkSession, 'id'),
     weightLog: each('weightLog', b.weightLog, checkWeight, 'id'),
+    skipDays: each('skipDays', b.skipDays, checkSkipDay, 'date'),
     challengeProgress: each('challengeProgress', b.challengeProgress, checkChallenge, 'challengeId'),
     settings: one('settings', b.settings, checkSettings),
     bodyProfile: one('bodyProfile', b.bodyProfile, checkBodyProfile),
@@ -319,6 +323,7 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
     body.sessions.length > 0 ||
     !!body.settings ||
     body.weightLog.length > 0 ||
+    body.skipDays.length > 0 ||
     !!body.bodyProfile ||
     !!body.trainingProfile ||
     body.challengeProgress.length > 0 ||
@@ -370,6 +375,17 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
       })
     }
     for (const e of body.weightLog) writes.push(weightUpsert(userId, e, serverTime))
+    for (const d of body.skipDays) {
+      writes.push({
+        sql: `INSERT INTO skip_days (user_id, date, created_at, updated_at, server_updated_at, deleted_at)
+              VALUES (?, ?, ?, ?, ?, ?)
+              ON CONFLICT(user_id, date) DO UPDATE SET
+                updated_at = excluded.updated_at, server_updated_at = excluded.server_updated_at,
+                deleted_at = excluded.deleted_at
+              WHERE excluded.updated_at > skip_days.updated_at`,
+        args: [userId, d.date, d.createdAt, clampStamp(d.updatedAt, serverTime), serverTime, d.deletedAt ?? null],
+      })
+    }
     for (const c of body.challengeProgress) writes.push(challengeUpsert(userId, c, serverTime))
     if (body.bodyProfile) {
       const bp = body.bodyProfile
@@ -405,7 +421,7 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
     // filter is on server_updated_at (server clock), never the client updated_at,
     // so a behind-clock device's writes can't sort before another device's cursor
     // and be silently skipped forever (H2). ---
-    const [routinesRes, sessionsRes, settingsRes, weightRes, challengeRes, bodyRes, trainingRes] = await Promise.all([
+    const [routinesRes, sessionsRes, settingsRes, weightRes, challengeRes, bodyRes, trainingRes, skipRes] = await Promise.all([
       db.execute({
         sql: `SELECT * FROM routines WHERE user_id = ? AND server_updated_at > ?`,
         args: [userId, since],
@@ -432,6 +448,10 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
       }),
       db.execute({
         sql: `SELECT * FROM training_profile WHERE user_id = ? AND server_updated_at > ?`,
+        args: [userId, since],
+      }),
+      db.execute({
+        sql: `SELECT * FROM skip_days WHERE user_id = ? AND server_updated_at > ?`,
         args: [userId, since],
       }),
     ])
@@ -481,6 +501,13 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
       sessions: sessionsRes.rows.map((r) => rowToSession(r as Record<string, unknown>)),
       settings,
       weightLog: weightRes.rows.map((r) => rowToWeight(r as Record<string, unknown>)),
+      skipDays: skipRes.rows.map((r) => ({
+        id: r.date as string,
+        date: r.date as string,
+        createdAt: r.created_at as string,
+        updatedAt: r.updated_at as string,
+        ...(r.deleted_at ? { deletedAt: r.deleted_at as string } : {}),
+      })),
       challengeProgress: challengeRes.rows.map((r) => rowToChallenge(r as Record<string, unknown>)),
       bodyProfile,
       trainingProfile,

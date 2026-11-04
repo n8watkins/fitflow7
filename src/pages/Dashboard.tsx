@@ -10,6 +10,7 @@ import {
   getLatestWeight,
   getLengthTimes,
   getTrainingProfile,
+  getSkipDays,
   getRoutine,
   getRoutines,
   getSessions,
@@ -25,6 +26,9 @@ import { estimateMinutes, lengthPresets } from '../lib/workout'
 import { planWorkout } from '../lib/plan'
 import Onboarding from '../components/Onboarding'
 import PlanCard from '../components/PlanCard'
+import SkipDayPrompt from '../components/SkipDayPrompt'
+import { challengeStatus } from '../lib/skipDays'
+import { todayKey } from '../lib/format'
 import { IconCalendar, IconChevronRight, IconFlame, IconPlay, IconPlus, IconScale } from '../components/icons'
 import type { Exercise } from '../types'
 
@@ -51,7 +55,9 @@ function activeChallenge() {
       (b.progress.updatedAt ?? '').localeCompare(a.progress.updatedAt ?? ''),
   )
   const best = progress[0]
-  const nextDay = best.challenge.days.find((d) => d.routineId && !best.progress.completedDays[d.day])
+  // Days covered by a skip day aren't "next" either.
+  const skipped = challengeStatus(best.total, best.progress, getSkipDays(), todayKey()).skipped
+  const nextDay = best.challenge.days.find((d) => d.routineId && !best.progress.completedDays[d.day] && !skipped.has(d.day))
   return { ...best, nextDay }
 }
 
@@ -173,7 +179,10 @@ export default function Dashboard() {
   const [openId, setOpenId] = useState<string | null>(null)
 
   const sessions = useLiveData(() => getSessions())
-  const stats = useMemo(() => computeStats(sessions), [sessions])
+  // Using or undoing a skip day bumps skipRev so the streak re-reads.
+  const [skipRev, setSkipRev] = useState(0)
+  const skipDates = useLiveData(() => getSkipDays().map((d) => d.date), [skipRev])
+  const stats = useMemo(() => computeStats(sessions, skipDates), [sessions, skipDates])
   const settings = useLiveData(() => getSettings())
   const latestWeight = useLiveData(() => getLatestWeight())
   const userRoutines = useLiveData(() => getRoutines())
@@ -311,6 +320,8 @@ export default function Dashboard() {
           tint="bg-violet-500/15 text-violet-400"
         />
       </section>
+
+      <SkipDayPrompt onChange={() => setSkipRev((r) => r + 1)} />
 
       {/* ---- Challenge progress / banner ---- */}
       <ChallengeWidget />

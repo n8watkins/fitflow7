@@ -9,7 +9,11 @@ import {
   saveBodyProfile,
   saveWeightEntry,
   deleteWeightEntry,
+  getChallengeProgressAll,
+  getSkipDays,
 } from '../lib/storage'
+import { badgeStatus } from '../lib/badges'
+import { BadgeGrid } from '../components/Achievements'
 import { computeStats, statsForLastDays, workoutsLastNDays } from '../lib/stats'
 import {
   bmiCategory,
@@ -135,7 +139,10 @@ export default function Stats() {
   const sessions = useLiveData(() => getSessions(), [rev])
 
   const latest = weights.length ? weights[weights.length - 1] : undefined
-  const stats = useMemo(() => computeStats(sessions), [sessions])
+  const skips = useLiveData(() => getSkipDays(), [rev])
+  const challenges = useLiveData(() => getChallengeProgressAll(), [rev])
+  const stats = useMemo(() => computeStats(sessions, skips.map((d) => d.date)), [sessions, skips])
+  const badges = useMemo(() => badgeStatus({ sessions, challenges, skips }), [sessions, challenges, skips])
   const last7 = useMemo(() => statsForLastDays(sessions, 7), [sessions])
   const last30 = useMemo(() => statsForLastDays(sessions, 30), [sessions])
   const last3 = useMemo(() => workoutsLastNDays(sessions, 3), [sessions])
@@ -269,7 +276,12 @@ export default function Stats() {
           <StatTile label="total workouts" value={stats.totalWorkouts} />
           <StatTile label="last 3 days" value={last3} />
         </div>
+        {skips.length > 0 && (
+          <p className="mt-3 text-xs text-slate-500">Streaks count skip days ({skips.length} used).</p>
+        )}
       </Card>
+
+      <BadgeGrid badges={badges} />
     </div>
   )
 }

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useTimerStore } from '../store/timerStore'
-import { getCoachTone, getLatestWeight, getRoutine, getSessions, getSettings, getTrainingProfile, markChallengeDay, saveTrainingProfile } from '../lib/storage'
+import { getChallengeProgressAll, getCoachTone, getLatestWeight, getRoutine, getSessions, getSettings, getSkipDays, getTrainingProfile, markChallengeDay, saveTrainingProfile } from '../lib/storage'
+import { badgeStatus, newlyEarned } from '../lib/badges'
+import { NewBadgeCard } from '../components/Achievements'
 import { planWorkout, resolveVariation, TIER_LABEL } from '../lib/plan'
 import type { VariationTier } from '../types'
 import { computeStats } from '../lib/stats'
@@ -430,12 +432,30 @@ export default function Player() {
   const finish = useMemo(() => {
     if (phase !== 'complete' || !startedAt || !completedAt) return null
     const seconds = Math.round((new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000)
+    const sessions = getSessions()
+    const skips = getSkipDays()
+    // Badges this workout earned: history with it vs without it. The challenge
+    // day is marked in an effect after this render, so count it in here.
+    const challenges = getChallengeProgressAll()
+    const withDay = challengeId && challengeDay > 0 && exercisesCompleted >= exercises.length
+      ? (() => {
+          const existing = challenges.find((c) => c.challengeId === challengeId)
+          const marked = { challengeId, startedAt: existing?.startedAt ?? startedAt, completedDays: { ...(existing?.completedDays ?? {}), [challengeDay]: completedAt } }
+          return [...challenges.filter((c) => c.challengeId !== challengeId), marked]
+        })()
+      : challenges
+    const earned = newlyEarned(
+      { sessions: sessions.filter((x) => x.startedAt !== startedAt), challenges, skips },
+      { sessions, challenges: withDay, skips },
+    )
+    const statuses = new Map(badgeStatus({ sessions, challenges: withDay, skips }).map((b) => [b.id, b]))
     return {
       seconds,
-      streak: computeStats(getSessions()).currentStreak,
+      streak: computeStats(sessions, skips.map((d) => d.date)).currentStreak,
       calories: estimateCalories(seconds, getLatestWeight()?.weightKg),
+      badges: earned.map((id) => statuses.get(id)!).filter(Boolean),
     }
-  }, [phase, startedAt, completedAt])
+  }, [phase, startedAt, completedAt, challengeId, challengeDay, exercisesCompleted, exercises.length])
 
   // ---------------------------------------------------------------------------
   // Derived values
@@ -534,6 +554,19 @@ export default function Player() {
           <p className="text-slate-400">{routine?.name ?? 'Workout'}</p>
           {endedEarly && (
             <p className="mt-1 text-xs text-amber-400 light:text-amber-600">Ended early</p>
+          )}
+
+          {finish && finish.badges.length > 0 && (
+            <div className="mt-5 space-y-2">
+              {finish.badges.slice(0, 2).map((b) => (
+                <NewBadgeCard key={b.id} badge={b} />
+              ))}
+              {finish.badges.length > 2 && (
+                <Link to="/stats" className="block text-xs font-medium text-amber-400 hover:underline light:text-amber-700">
+                  +{finish.badges.length - 2} more on your Stats page
+                </Link>
+              )}
+            </div>
           )}
 
           {challengeDone && (

@@ -192,6 +192,18 @@ const SCHEMA = [
      server_updated_at TEXT
    )`,
   `CREATE INDEX IF NOT EXISTS idx_training_profile_user_server ON training_profile (user_id, server_updated_at)`,
+  // Skip days: up to three missed days a month that still count as active.
+  // One row per user and local date; deleted_at undoes a skip on every device.
+  `CREATE TABLE IF NOT EXISTS skip_days (
+     user_id           TEXT NOT NULL,
+     date              TEXT NOT NULL,
+     created_at        TEXT NOT NULL,
+     updated_at        TEXT NOT NULL,
+     server_updated_at TEXT,
+     deleted_at        TEXT,
+     PRIMARY KEY (user_id, date)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_skip_days_user_server ON skip_days (user_id, server_updated_at)`,
 ]
 
 // Idempotent ADD COLUMN migrations for tables that predate a column. CREATE TABLE

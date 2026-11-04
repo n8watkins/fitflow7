@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useLiveData } from '../hooks/useLiveData'
-import { getSessions } from '../lib/storage'
+import { getSessions, getSkipDays } from '../lib/storage'
 import { computeStats, computeInsights, type HeatmapDay } from '../lib/stats'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -125,7 +125,8 @@ function StatTile({ label, value }: { label: string; value: string | number }) {
 
 export default function Insights() {
   const sessions = useLiveData(() => getSessions())
-  const stats = useMemo(() => computeStats(sessions), [sessions])
+  const skipDates = useLiveData(() => getSkipDays().map((d) => d.date))
+  const stats = useMemo(() => computeStats(sessions, skipDates), [sessions, skipDates])
   const insights = useMemo(() => computeInsights(sessions), [sessions])
 
   if (stats.totalWorkouts === 0) {

@@ -1,6 +1,7 @@
 import {
   applyRemoteBodyProfile,
   applyRemoteTrainingProfile,
+  applyRemoteSkipDays,
   applyRemoteChallengeProgress,
   applyRemoteRoutines,
   applyRemoteSessions,
@@ -25,6 +26,7 @@ import type {
   WorkoutSession,
 } from '../types'
 import { apiUrl } from './api'
+import type { SkipDay } from './skipDays'
 
 // ---------------------------------------------------------------------------
 // Client sync engine. Offline-first: every write stays local; this layer pushes
@@ -41,6 +43,7 @@ interface SyncResponse {
   sessions: WorkoutSession[]
   settings: { value: UserSettings; updatedAt: string } | null
   weightLog: WeightEntry[]
+  skipDays?: SkipDay[]
   challengeProgress: ChallengeProgress[]
   bodyProfile: BodyProfile | null
   trainingProfile?: TrainingProfile | null
@@ -63,6 +66,7 @@ function takeBatch(all: ReturnType<typeof getPendingSync>) {
     routines: take(all.routines),
     sessions: take(all.sessions),
     weightLog: take(all.weightLog),
+    skipDays: take(all.skipDays),
     challengeProgress: take(all.challengeProgress),
     bodyProfile: all.bodyProfile,
     trainingProfile: all.trainingProfile,
@@ -71,6 +75,7 @@ function takeBatch(all: ReturnType<typeof getPendingSync>) {
     batch.routines.length < all.routines.length ||
     batch.sessions.length < all.sessions.length ||
     batch.weightLog.length < all.weightLog.length ||
+    batch.skipDays.length < all.skipDays.length ||
     batch.challengeProgress.length < all.challengeProgress.length
   return { batch, more }
 }
@@ -114,6 +119,7 @@ export async function sync(): Promise<void> {
               sessions: pending.sessions,
               settings: pendingSettings,
               weightLog: pending.weightLog,
+              skipDays: pending.skipDays,
               challengeProgress: pending.challengeProgress,
               bodyProfile: pending.bodyProfile ?? null,
               trainingProfile: pending.trainingProfile ?? null,
@@ -154,6 +160,7 @@ export async function sync(): Promise<void> {
         routines: pending.routines,
         sessions: pending.sessions,
         weightLog: pending.weightLog,
+        skipDays: pending.skipDays,
         challengeProgress: pending.challengeProgress,
         bodyProfile: pending.bodyProfile,
         trainingProfile: pending.trainingProfile,
@@ -166,6 +173,7 @@ export async function sync(): Promise<void> {
     applyRemoteSessions(data.sessions)
     if (data.settings) applyRemoteSettings(data.settings.value, data.settings.updatedAt)
     applyRemoteWeightLog(data.weightLog ?? [])
+    applyRemoteSkipDays(data.skipDays ?? [])
     applyRemoteChallengeProgress(data.challengeProgress ?? [])
     if (data.bodyProfile) applyRemoteBodyProfile(data.bodyProfile)
     if (data.trainingProfile) applyRemoteTrainingProfile(data.trainingProfile)
@@ -178,6 +186,7 @@ export async function sync(): Promise<void> {
       data.sessions.length ||
       data.settings ||
       data.weightLog?.length ||
+      data.skipDays?.length ||
       data.challengeProgress?.length ||
       data.bodyProfile ||
       data.trainingProfile

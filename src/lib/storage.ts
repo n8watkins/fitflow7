@@ -1,4 +1,5 @@
 import type { CoachTone } from './coach'
+import type { SkipDay } from './skipDays'
 import {
   DEFAULT_SETTINGS,
   type BodyProfile,
@@ -25,6 +26,7 @@ const KEY = {
   syncCursor: 'fitflow.syncCursor',
   bodyProfile: 'fitflow.bodyProfile',
   trainingProfile: 'fitflow.trainingProfile',
+  skipDays: 'fitflow.skipDays',
   weightLog: 'fitflow.weightLog',
   challengeProgress: 'fitflow.challengeProgress',
   theme: 'fitflow.theme',
@@ -323,6 +325,7 @@ export function getPendingSync(): {
   challengeProgress: ChallengeProgress[]
   bodyProfile?: BodyProfile
   trainingProfile?: TrainingProfile
+  skipDays: SkipDay[]
 } {
   const bodyProfile = readJSON<BodyProfile>(KEY.bodyProfile, { updatedAt: '' })
   const trainingProfile = getTrainingProfile()
@@ -333,6 +336,7 @@ export function getPendingSync(): {
     challengeProgress: readJSON<ChallengeProgress[]>(KEY.challengeProgress, []).filter((c) => c.dirty),
     bodyProfile: bodyProfile.dirty ? bodyProfile : undefined,
     trainingProfile: trainingProfile.dirty ? trainingProfile : undefined,
+    skipDays: getSkipDaysRaw().filter((d) => d.dirty),
   }
 }
 
@@ -347,6 +351,7 @@ export function markSynced(pushed: {
   challengeProgress?: { challengeId: string; updatedAt?: string }[]
   bodyProfile?: { updatedAt: string }
   trainingProfile?: { updatedAt: string }
+  skipDays?: { id: string; updatedAt?: string }[]
 }): void {
   if (pushed.routines?.length) {
     const m = new Map(pushed.routines.map((r) => [r.id, r.updatedAt]))
@@ -388,6 +393,10 @@ export function markSynced(pushed: {
     const bp = readJSON<BodyProfile>(KEY.bodyProfile, { updatedAt: '' })
     // Only clear dirty if it wasn't edited again during the round-trip.
     if (bp.updatedAt === pushed.bodyProfile.updatedAt) writeJSON(KEY.bodyProfile, { ...bp, dirty: false })
+  }
+  if (pushed.skipDays?.length) {
+    const m = new Map(pushed.skipDays.map((d) => [d.id, d.updatedAt]))
+    writeJSON(KEY.skipDays, getSkipDaysRaw().map((d) => (m.has(d.id) && d.updatedAt === m.get(d.id) ? { ...d, dirty: false } : d)))
   }
   if (pushed.trainingProfile) {
     const tp = getTrainingProfile()
@@ -590,6 +599,17 @@ export function applyRemoteBodyProfile(value: BodyProfile): void {
   }
 }
 
+/** Merges the server's skip days, newest write per date wins. */
+export function applyRemoteSkipDays(remote: SkipDay[]): void {
+  if (remote.length === 0) return
+  const byId = new Map(getSkipDaysRaw().map((d) => [d.id, d]))
+  for (const d of remote) {
+    const existing = byId.get(d.id)
+    if (!existing || (d.updatedAt ?? '') > (existing.updatedAt ?? '')) byId.set(d.id, { ...d, dirty: false })
+  }
+  writeJSON(KEY.skipDays, [...byId.values()])
+}
+
 /** Applies the server's training profile (singleton) if it's newer. */
 export function applyRemoteTrainingProfile(value: TrainingProfile): void {
   if ((value.updatedAt ?? '') > (getTrainingProfile().updatedAt ?? '')) {
@@ -629,6 +649,7 @@ export interface ExportBundle {
   challengeProgress?: ChallengeProgress[]
   /** Training profile (optional — absent in older backups). */
   trainingProfile?: TrainingProfile
+  skipDays?: SkipDay[]
 }
 
 export interface ImportResult {
@@ -655,6 +676,7 @@ export function exportData(): ExportBundle {
     bodyProfile: getBodyProfile(),
     challengeProgress: readJSON<ChallengeProgress[]>(KEY.challengeProgress, []),
     trainingProfile: getTrainingProfile(),
+    skipDays: getSkipDaysRaw(),
   }
 }
 
@@ -747,6 +769,16 @@ export function importData(bundle: ExportBundle): ImportResult {
     bodyProfile = true
   }
 
+  // Skip days — newest write per date wins.
+  if (Array.isArray(bundle.skipDays) && bundle.skipDays.length > 0) {
+    const byId = new Map(getSkipDaysRaw().map((d) => [d.id, d]))
+    for (const d of bundle.skipDays) {
+      const existing = byId.get(d.id)
+      if (!existing || (d.updatedAt ?? '') > (existing.updatedAt ?? '')) byId.set(d.id, { ...d, dirty: true })
+    }
+    writeJSON(KEY.skipDays, [...byId.values()])
+  }
+
   // Training profile — singleton, LWW by updatedAt.
   if (bundle.trainingProfile && (bundle.trainingProfile.updatedAt ?? '') > getTrainingProfile().updatedAt) {
     writeJSON(KEY.trainingProfile, { ...bundle.trainingProfile, dirty: true })
@@ -785,6 +817,35 @@ export function getTrainingProfile(): TrainingProfile {
 export function saveTrainingProfile(patch: Partial<TrainingProfile>): void {
   const next: TrainingProfile = { ...getTrainingProfile(), ...patch, updatedAt: now(), dirty: true }
   writeJSON(KEY.trainingProfile, next)
+  emitWrite()
+}
+
+// ---------------------------------------------------------------------------
+// Skip days (lib/skipDays.ts): one per local date, three a month
+// ---------------------------------------------------------------------------
+
+export function getSkipDaysRaw(): SkipDay[] {
+  return readJSON<SkipDay[]>(KEY.skipDays, [])
+}
+
+/** Live skip days (undone ones filtered out). */
+export function getSkipDays(): SkipDay[] {
+  return getSkipDaysRaw().filter((d) => !d.deletedAt)
+}
+
+/** Records a skip for `date`. The caller checks canSkip first. */
+export function addSkipDay(date: string): void {
+  const stamp = now()
+  const rest = getSkipDaysRaw().filter((d) => d.id !== date)
+  const existing = getSkipDaysRaw().find((d) => d.id === date)
+  writeJSON(KEY.skipDays, [...rest, { id: date, date, createdAt: existing?.createdAt ?? stamp, updatedAt: stamp, dirty: true }])
+  emitWrite()
+}
+
+/** Undoes a skip (a tombstone, so the undo syncs). */
+export function removeSkipDay(date: string): void {
+  const stamp = now()
+  writeJSON(KEY.skipDays, getSkipDaysRaw().map((d) => (d.id === date ? { ...d, deletedAt: stamp, updatedAt: stamp, dirty: true } : d)))
   emitWrite()
 }
 

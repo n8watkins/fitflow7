@@ -5,11 +5,15 @@ import { CHALLENGES, CHALLENGE_MAP } from '../data/challenges'
 import { SYSTEM_ROUTINES } from '../data/routines'
 import {
   getChallengeProgressFor,
+  getSkipDays,
   markChallengeDay,
   resetChallenge,
   unmarkChallengeDay,
 } from '../lib/storage'
 import type { Challenge } from '../types'
+import { challengeStatus, type ChallengeStatus } from '../lib/skipDays'
+import { todayKey } from '../lib/format'
+import SkipDayPrompt from '../components/SkipDayPrompt'
 
 const ROUTINE_NAME: Record<string, string> = Object.fromEntries(
   SYSTEM_ROUTINES.map((r) => [r.id, r.name]),
@@ -49,6 +53,24 @@ function completedCount(challengeId: string): number {
   return p ? Object.keys(p.completedDays).length : 0
 }
 
+/** Pace of a started challenge (lib/skipDays.ts), or null before day 1. */
+function paceOf(challenge: Challenge): ChallengeStatus | null {
+  const p = getChallengeProgressFor(challenge.id)
+  if (!p || p.deletedAt) return null
+  return challengeStatus(challenge.days.length, p, getSkipDays(), todayKey())
+}
+
+function PacePill({ pace }: { pace: ChallengeStatus }) {
+  if (pace.complete) return <span className="rounded-full bg-violet-500/15 px-3 py-1 text-xs font-bold text-violet-300 light:text-violet-700">Finished</span>
+  return pace.onTrack ? (
+    <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-400 light:text-emerald-700">On track</span>
+  ) : (
+    <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-bold text-amber-400 light:text-amber-700">
+      Behind by {pace.behindBy} {pace.behindBy === 1 ? 'day' : 'days'}
+    </span>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -61,7 +83,7 @@ export default function Challenges() {
   // List view — recompute counts on rev + navigation + background sync. Computed
   // unconditionally (before any early return) to satisfy the rules of hooks.
   const cards = useLiveData(
-    () => CHALLENGES.map((c) => ({ challenge: c, done: completedCount(c.id) })),
+    () => CHALLENGES.map((c) => ({ challenge: c, done: completedCount(c.id), pace: paceOf(c) })),
     [rev],
   )
 
@@ -80,7 +102,7 @@ export default function Challenges() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {cards.map(({ challenge, done }) => {
+        {cards.map(({ challenge, done, pace }) => {
           const total = challenge.days.length
           return (
             <button
@@ -92,8 +114,9 @@ export default function Challenges() {
               <div className="min-w-0 flex-1">
                 <div className="font-semibold text-slate-100">{challenge.name}</div>
                 <p className="mt-0.5 line-clamp-2 text-sm text-slate-400">{challenge.description}</p>
-                <div className="mt-1 text-xs text-slate-500">
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                   {done} / {total} days
+                  {pace && <PacePill pace={pace} />}
                 </div>
               </div>
               <Ring pct={total ? done / total : 0} size={56} />
@@ -129,8 +152,13 @@ function ChallengeDetail({
   const done = Object.keys(completed).length
   const total = challenge.days.length
 
-  // The next day that has a workout and isn't done yet — the suggested pick.
-  const nextDay = challenge.days.find((d) => d.routineId && !completed[d.day])
+  const pace = useMemo(
+    () => (progress && !progress.deletedAt ? challengeStatus(total, progress, getSkipDays(), todayKey()) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [progress, total, rev],
+  )
+  // The next day that has a workout and isn't done or skipped: the suggested pick.
+  const nextDay = challenge.days.find((d) => d.routineId && !completed[d.day] && !pace?.skipped.has(d.day))
 
   function toggle(day: number) {
     if (completed[day]) unmarkChallengeDay(challenge.id, day)
@@ -166,12 +194,21 @@ function ChallengeDetail({
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-bold text-slate-100">{challenge.name}</h1>
           <p className="mt-1 text-sm text-slate-400">{challenge.description}</p>
-          <div className="mt-2 text-sm text-slate-300">
-            <span className="font-semibold text-accent">{done}</span> of {total} days complete
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-300">
+            <span>
+              <span className="font-semibold text-accent">{done}</span> of {total} days complete
+              {pace && pace.skipped.size > 0 ? ` · ${pace.skipped.size} skip ${pace.skipped.size === 1 ? 'day' : 'days'}` : ''}
+            </span>
+            {pace && <PacePill pace={pace} />}
           </div>
+          {pace && !pace.complete && pace.todayDay >= 1 && pace.todayDay <= total && (
+            <p className="mt-1 text-xs text-slate-500">Today is day {pace.todayDay}. Skip days keep you on track, but the last day needs a real workout.</p>
+          )}
         </div>
         <Ring pct={total ? done / total : 0} />
       </div>
+
+      {progress && <SkipDayPrompt onChange={onChange} />}
 
       {/* Suggested next day */}
       {nextDay?.routineId && (
@@ -196,13 +233,16 @@ function ChallengeDetail({
       <div className="grid gap-2 sm:grid-cols-2">
         {challenge.days.map((d) => {
           const isDone = !!completed[d.day]
+          const isSkipped = !isDone && !!pace?.skipped.has(d.day)
+          const isToday = pace?.todayDay === d.day
           const name = d.routineId ? ROUTINE_NAME[d.routineId] ?? 'Workout' : 'Rest'
           return (
             <div
               key={d.day}
-              className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition ${
-                isDone ? 'border-accent/40 bg-accent/10' : 'border-edge bg-card'
-              }`}
+              className={`flex min-w-0 items-center gap-3 rounded-xl border px-4 py-3 transition ${
+                isDone ? 'border-accent/40 bg-accent/10' : isSkipped ? 'border-amber-400/40 bg-amber-400/5' : 'border-edge bg-card'
+              } ${isToday ? 'ring-2 ring-accent/60' : ''}`}
+              aria-current={isToday ? 'date' : undefined}
             >
               <button
                 onClick={() => toggle(d.day)}
@@ -216,7 +256,11 @@ function ChallengeDetail({
                 {isDone ? '✓' : ''}
               </button>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-slate-100">Day {d.day}</div>
+                <div className="text-sm font-semibold text-slate-100">
+                  Day {d.day}
+                  {isToday && <span className="ml-2 text-xs font-medium text-accent">Today</span>}
+                  {isSkipped && <span className="ml-2 text-xs font-medium text-amber-400 light:text-amber-700">Skip day</span>}
+                </div>
                 <div className="truncate text-xs text-slate-400">
                   {name}
                   {d.label ? ` · ${d.label}` : ''}

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { getSessions } from '../lib/storage'
+import { getSessions, getSkipDays } from '../lib/storage'
 import { computeStats } from '../lib/stats'
 import { fmtDuration, formatDateTime } from '../lib/format'
 import { useLiveData } from '../hooks/useLiveData'
@@ -24,7 +24,8 @@ function SummaryTile({ label, value }: { label: string; value: string | number }
 export default function History() {
   // Re-reads on navigation and after a background sync (see useLiveData).
   const sessions = useLiveData(() => getSessions())
-  const stats = useMemo(() => computeStats(sessions), [sessions])
+  const skipDates = useLiveData(() => getSkipDays().map((d) => d.date))
+  const stats = useMemo(() => computeStats(sessions, skipDates), [sessions, skipDates])
 
   return (
     <div className="space-y-10">

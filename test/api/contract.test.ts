@@ -180,7 +180,7 @@ describe('sync - LWW + tombstones + user scoping', () => {
     expect(res.status).toBe(200)
     const body = await json(res)
     expect(Object.keys(body).sort()).toEqual(
-      ['bodyProfile', 'challengeProgress', 'rejected', 'routines', 'serverTime', 'sessions', 'settings', 'trainingProfile', 'weightLog'])
+      ['bodyProfile', 'challengeProgress', 'rejected', 'routines', 'serverTime', 'sessions', 'settings', 'skipDays', 'trainingProfile', 'weightLog'])
     expect(Date.parse(body.serverTime as string)).not.toBeNaN()
   })
 

@@ -20,7 +20,7 @@ import type {
 export const MAX_SYNC_BODY_BYTES = 1_000_000
 export const MAX_SYNC_RECORDS = 500
 
-export type Collection = 'routines' | 'sessions' | 'weightLog' | 'challengeProgress' | 'settings' | 'bodyProfile' | 'trainingProfile'
+export type Collection = 'routines' | 'sessions' | 'weightLog' | 'challengeProgress' | 'settings' | 'bodyProfile' | 'trainingProfile' | 'skipDays'
 
 export interface Rejected {
   collection: Collection
@@ -186,6 +186,21 @@ export const checkBodyProfile = (raw: unknown): Check<BodyProfile> =>
     goalWeightKg: optNum(o, 'goalWeightKg', 1, 1000),
     updatedAt: date(o, 'updatedAt'),
   }))
+
+export interface SkipDayRecord {
+  id: string
+  date: string
+  createdAt: string
+  updatedAt?: string
+  deletedAt?: string
+}
+
+export const checkSkipDay = (raw: unknown): Check<SkipDayRecord> =>
+  record(raw, (o) => {
+    if (typeof o.date !== 'string' || !DAY_RE.test(o.date) || Number.isNaN(Date.parse(o.date))) fail('date must be YYYY-MM-DD')
+    if (o.id !== o.date) fail('id must be the date')
+    return { id: o.date, date: o.date, createdAt: date(o, 'createdAt'), updatedAt: optDate(o, 'updatedAt'), deletedAt: optDate(o, 'deletedAt') }
+  })
 
 const GOALS = new Set(['habit', 'strength', 'cardio'])
 const LEVELS = new Set(['beginner', 'intermediate', 'advanced'])
