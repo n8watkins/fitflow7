@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { type ThemePref, type UserSettings, DEFAULT_SETTINGS } from '../types'
 import {
+  getCoachTone,
   getSettings,
+  setCoachTone,
   getThemePref,
   saveSettings,
   setThemePref,
@@ -13,6 +15,7 @@ import {
 import { applyTheme } from '../lib/theme'
 import { dayKey } from '../lib/format'
 import { useSyncStore } from '../store/syncStore'
+import { speak, speechAvailable, type CoachTone } from '../lib/coach'
 import {
   loginWith,
   logout,
@@ -318,6 +321,59 @@ function Stepper({ label, description, value, min, max, step = 1, unit, onChange
 // Main component
 // ---------------------------------------------------------------------------
 
+// Voice coach tone: device-local (lib/storage getCoachTone), with a test line.
+const COACH_TONES: { value: CoachTone; label: string }[] = [
+  { value: 'energetic', label: 'Energetic' },
+  { value: 'calm', label: 'Calm' },
+  { value: 'off', label: 'Off' },
+]
+
+function VoiceCoachSetting() {
+  const [tone, setTone] = useState<CoachTone>(() => getCoachTone())
+  const available = speechAvailable()
+  function choose(next: CoachTone) {
+    setTone(next)
+    setCoachTone(next)
+  }
+  return (
+    <div className="mt-3 border-t border-edge pt-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-slate-200" id="voice-coach-label">Voice coach</div>
+          <div className="mt-0.5 text-sm text-slate-500">
+            {available
+              ? 'Says each move, halfway, ten seconds left and what’s next. Uses your device’s voices, so it works offline.'
+              : 'This browser has no speech voices, so the coach is shown as text only.'}
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div role="radiogroup" aria-labelledby="voice-coach-label" className="flex overflow-hidden rounded-lg border border-edge text-sm font-medium">
+            {COACH_TONES.map((t) => (
+              <button
+                key={t.value}
+                role="radio"
+                aria-checked={tone === t.value}
+                onClick={() => choose(t.value)}
+                className={`px-3 py-1.5 transition ${tone === t.value ? 'bg-accent text-slate-900' : 'bg-card text-slate-300 hover:bg-card-hover'}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {available && tone !== 'off' && (
+            <button
+              onClick={() => speak(tone === 'calm' ? 'Wall Sit. Begin.' : 'Jumping Jacks. Go!', tone)}
+              className="rounded-lg border border-edge bg-card px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:bg-card-hover"
+            >
+              Test voice
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Settings() {
   const signedIn = useSyncStore((s) => s.user !== null)
   const [settings, setSettings] = useState<UserSettings>(() => getSettings())
@@ -509,6 +565,7 @@ export default function Settings() {
                 />
               </button>
             </label>
+            <VoiceCoachSetting />
           </div>
         </div>
       </section>

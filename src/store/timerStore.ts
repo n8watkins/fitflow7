@@ -268,7 +268,9 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       secondsLeft: seconds,
       totalSeconds: seconds,
       isPaused: false,
-      isMuted: !settings.audioCuesEnabled,
+      // Mute is the in-workout switch for all sound; the Settings toggles for
+      // beeps and the voice coach are applied by the Player.
+      isMuted: false,
       startedAt: new Date().toISOString(),
       completedAt: undefined,
       exercisesCompleted: 0,
