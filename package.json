@@ -22,6 +22,8 @@
     "@capacitor/core": "^8.6.0",
     "@capgo/capacitor-health": "^8.11.14",
     "@libsql/client": "^0.18.0",
+    "@sentry/browser": "^11.10.0",
+    "@sentry/cloudflare": "^11.10.0",
     "@tailwindcss/vite": "^4.3.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
