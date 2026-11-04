@@ -10,8 +10,8 @@
  *
  * Bump CACHE when you want every client to drop the old cached build.
  */
-const CACHE = 'fitflow7-v2'
-const APP_SHELL = ['/', '/index.html', '/favicon.svg', '/icon.svg', '/manifest.webmanifest']
+const CACHE = 'fitflow7-v3'
+const APP_SHELL = ['/', '/index.html', '/theme-boot.js', '/favicon.svg', '/icon.svg', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

@@ -27,6 +27,14 @@
   // for each. Static assets are still served from the edge.
   "placement": { "mode": "targeted", "region": "aws:us-east-2" },
   // Workers Logs: keep every request's logs (see "Reading the logs" in README.md).
+  // Per-minute budgets (Workers rate limiting; namespace ids are unique in the
+  // account). Sign-in is per IP; the API is per IP; token minting, publishing
+  // and reporting are per user.
+  "ratelimits": [
+    { "name": "AUTH_LIMITER", "namespace_id": "7101", "simple": { "limit": 20, "period": 60 } },
+    { "name": "API_LIMITER", "namespace_id": "7102", "simple": { "limit": 240, "period": 60 } },
+    { "name": "WRITE_LIMITER", "namespace_id": "7103", "simple": { "limit": 10, "period": 60 } }
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1

@@ -92,7 +92,13 @@ export async function sync(): Promise<void> {
       return
     }
     if (res.status === 403) {
-      // Read-scoped credential can't push — switch to pull-only and re-run so we
+      if (!pushed) {
+        // Even a pull was refused: stop here rather than retrying in a loop. The
+        // next focus or local write tries again.
+        useSyncStore.getState().setStatus('error')
+        return
+      }
+      // Read-scoped credential can't push: switch to pull-only and re-run so we
       // still pull remote changes (the dirty queue simply never pushes).
       pushForbidden = true
       rerunQueued = true

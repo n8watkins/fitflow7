@@ -106,6 +106,16 @@ describe('client sync engine (M5)', () => {
     expect(storage.getPendingSync().routines.some((r) => r.id === 'a')).toBe(true) // still dirty
   })
 
+  it('stops instead of looping when even the pull-only rerun is refused (403)', async () => {
+    const { storage, sync, useSyncStore } = await loadSync()
+    storage.saveRoutine(makeRoutine({ id: 'a' }))
+    const fn = stubFetch(() => ({ ok: false, status: 403, json: async () => ({}) }))
+    await sync.sync()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(fn).toHaveBeenCalledTimes(2) // the push, then one pull-only try
+    expect(useSyncStore.getState().status).toBe('error')
+  })
+
   it('coalesces concurrent calls into one in-flight + one rerun', async () => {
     const { sync } = await loadSync()
     let calls = 0

@@ -5,6 +5,7 @@
 /** The Worker env as the API reads it. All but SESSION_SECRET are optional
  *  secrets: each feature stays off while its value is missing. */
 export type ApiEnv = Pick<Env, 'SESSION_SECRET'> &
+  Partial<Pick<Env, 'AUTH_LIMITER' | 'API_LIMITER' | 'WRITE_LIMITER'>> &
   Partial<Record<
     | 'TURSO_DATABASE_URL'
     | 'TURSO_AUTH_TOKEN'
@@ -24,6 +25,18 @@ export class InvalidJsonError extends Error {
   constructor() {
     super('Invalid JSON')
   }
+}
+
+/** Headers on every API answer. The API serves JSON and redirects, never a page,
+ *  so its CSP allows nothing; the app's own CSP is in public/_headers. Answers
+ *  can carry a user's data, so no cache may store them. */
+export const API_SECURITY_HEADERS: Record<string, string> = {
+  'Cache-Control': 'private, no-store',
+  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
 }
 
 export class ApiContext {
@@ -67,8 +80,18 @@ export class ApiContext {
     this.cookies.push(cookie)
   }
 
-  json(status: number, value: unknown): Response {
-    return this.respond(status, JSON.stringify(value), 'application/json; charset=utf-8')
+  json(status: number, value: unknown, extraHeaders?: Record<string, string>): Response {
+    return this.respond(status, JSON.stringify(value), 'application/json; charset=utf-8', extraHeaders)
+  }
+
+  /** 429 with Retry-After, for a spent rate-limit budget (the bindings count per minute). */
+  tooManyRequests(error = 'too many requests'): Response {
+    return this.json(429, { error }, { 'Retry-After': '60' })
+  }
+
+  /** The caller's address as Cloudflare saw it. */
+  get clientIp(): string {
+    return this.headers.get('cf-connecting-ip') ?? 'unknown'
   }
 
   /** A plain message, served as text/html. */
@@ -82,14 +105,15 @@ export class ApiContext {
     return new Response(null, { status, headers })
   }
 
-  private respond(status: number, body: string, contentType: string): Response {
+  private respond(status: number, body: string, contentType: string, extraHeaders?: Record<string, string>): Response {
     const headers = this.baseHeaders()
     headers.set('Content-Type', contentType)
+    for (const [k, v] of Object.entries(extraHeaders ?? {})) headers.set(k, v)
     return new Response(body, { status, headers })
   }
 
   private baseHeaders(): Headers {
-    const headers = new Headers({ 'Cache-Control': 'public, max-age=0, must-revalidate' })
+    const headers = new Headers(API_SECURITY_HEADERS)
     for (const cookie of this.cookies) headers.append('Set-Cookie', cookie)
     return headers
   }

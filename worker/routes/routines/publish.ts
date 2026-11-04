@@ -43,6 +43,9 @@ export default async function publishRoutine(ctx: ApiContext): Promise<Response>
   if (!auth) return ctx.json(401, { error: 'not signed in' })
   if (auth.scope === 'read') return ctx.json(403, { error: 'read-only token cannot publish' })
   const userId = auth.userId
+  if (ctx.env.WRITE_LIMITER && !(await ctx.env.WRITE_LIMITER.limit({ key: `publish:${userId}` })).success) {
+    return ctx.tooManyRequests()
+  }
 
   const body = (ctx.body ?? {}) as PublishBody
   const routine = body.routine ?? {}
