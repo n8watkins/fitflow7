@@ -5,6 +5,7 @@ import { CLASSIC_7 } from '../data/routines'
 import { getRoutine, saveRoutine, deleteRoutine, newId } from '../lib/storage'
 import { fmtDuration } from '../lib/format'
 import type { Routine, Category } from '../types'
+import ExerciseVisual from '../components/ExerciseVisual'
 
 function estimateDuration(routine: Pick<Routine, 'exerciseIds' | 'workSeconds' | 'restSeconds' | 'rounds'>): number {
   const count = routine.exerciseIds.length
@@ -119,7 +120,7 @@ function ExerciseRow({ exId, index, total, onMoveUp, onMoveDown, onRemove }: Exe
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-edge bg-card px-4 py-3 transition hover:bg-card-hover">
-      <span className="flex-shrink-0 text-2xl">{ex.icon}</span>
+      <span className="flex-shrink-0"><ExerciseVisual exercise={ex} imgClassName="h-9 w-9 rounded-md object-cover" emojiClassName="inline-flex h-9 w-9 items-center justify-center text-2xl leading-none" /></span>
       <div className="min-w-0 flex-1">
         <p className="truncate font-semibold text-slate-100">{ex.name}</p>
         <p className="truncate text-sm text-slate-400">
@@ -238,7 +239,7 @@ function ExercisePicker({ onAdd }: ExercisePickerProps) {
             onClick={() => onAdd(ex.id)}
             className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-card-hover"
           >
-            <span className="flex-shrink-0 text-xl">{ex.icon}</span>
+            <span className="flex-shrink-0"><ExerciseVisual exercise={ex} imgClassName="h-7 w-7 rounded-md object-cover" emojiClassName="inline-flex h-7 w-7 items-center justify-center text-2xl leading-none" /></span>
             <span className="flex-1 min-w-0">
               <span className="block truncate text-sm font-medium text-slate-200">{ex.name}</span>
               <span className="block truncate text-xs text-slate-500">{ex.difficulty}</span>

@@ -5,7 +5,7 @@ import { getCoachTone, getLatestWeight, getRoutine, getSessions, getSettings, ma
 import { computeStats } from '../lib/stats'
 import { estimateCalories } from '../lib/workout'
 import { CHALLENGE_MAP } from '../data/challenges'
-import { coachLine, speak, stopSpeaking, type CoachMoment } from '../lib/coach'
+import { coachLine, speak, speechAvailable, stopSpeaking, type CoachMoment } from '../lib/coach'
 import { EXERCISE_MAP } from '../data/exercises'
 import { CLASSIC_7 } from '../data/routines'
 import ExerciseVisual from '../components/ExerciseVisual'
@@ -290,8 +290,8 @@ export default function Player() {
   }, [coachTone, phase, currentIndex, secondsLeft, isPaused, isMuted, coachMoment])
   useEffect(() => () => stopSpeaking(), [])
 
-  // The caption shows the coach's latest line in this phase, so it reads the
-  // same with the sound off and screen readers hear it (aria-live).
+  // The caption holds the coach's latest line in this phase: visible while
+  // muted, and always read to screen readers (aria-live).
   const coachCaption = useMemo(() => {
     if (coachTone === 'off' || phase === 'idle') return null
     if (phase === 'complete') return coachLine(coachMoment(0), coachTone)
@@ -301,6 +301,7 @@ export default function Player() {
     }
     return null
   }, [coachTone, phase, secondsLeft, totalSeconds, coachMoment])
+  const showCaption = isMuted || !speechAvailable()
 
   // ---------------------------------------------------------------------------
   // Keyboard shortcuts
@@ -560,7 +561,7 @@ export default function Player() {
         {/* Exercise name */}
         {currentExercise && (
           <p className="mt-6 text-center text-2xl font-semibold text-slate-200">
-            {currentExercise.icon} {currentExercise.name}
+            {currentExercise.name}
           </p>
         )}
 
@@ -642,13 +643,16 @@ export default function Player() {
           {/* Paused badge sits under the number (it used to overlap the digits),
               and the coach caption below it: fixed height, so neither shifts the
               layout when it appears. */}
-          <div className="mt-3 flex min-h-10 items-center justify-center">
+          <div className="mt-3 flex min-h-6 items-center justify-center">
             {isPaused ? (
               <span className="rounded-full bg-slate-700 px-3 py-0.5 text-xs font-bold tracking-wider text-slate-300">
                 PAUSED
               </span>
             ) : (
-              <p aria-live="polite" className="max-w-sm text-center text-sm text-slate-400">
+              // The coach's words show on screen only while muted (or when the
+              // browser can't speak); otherwise they'd repeat the card below.
+              // Screen readers always get them through the live region.
+              <p aria-live="polite" className={showCaption ? 'max-w-sm text-center text-sm text-slate-400' : 'sr-only'}>
                 {coachCaption ?? ''}
               </p>
             )}
@@ -690,7 +694,7 @@ export default function Player() {
           <div className="mt-4 lg:col-start-2">
             <div className="rounded-xl border border-edge bg-card/60 px-4 py-3">
               <div className="flex items-center gap-3">
-                <span className="text-2xl leading-none">{nextExercise.icon}</span>
+                <ExerciseVisual exercise={nextExercise} imgClassName="h-9 w-9 rounded-md object-cover" emojiClassName="inline-flex h-9 w-9 items-center justify-center text-2xl leading-none" />
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
                     Up Next

@@ -230,7 +230,7 @@ export default function Dashboard() {
           </div>
           <div className="mt-1 text-2xl font-extrabold text-slate-100">{featured.name}</div>
           <div className="mt-0.5 text-sm text-slate-400">
-            {outline.length} exercises{lengthTimes > 1 ? ` × ${lengthTimes}` : ''} · ~{preset.minutes} min
+            {outline.length} exercises{lengthTimes > 1 ? ` × ${lengthTimes} rounds` : ''} · about {preset.minutes} min
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Link
@@ -246,13 +246,13 @@ export default function Dashboard() {
                   type="button"
                   role="radio"
                   aria-checked={lengthTimes === p.times}
-                  aria-label={`${p.minutes} minutes`}
+                  aria-label={`${p.times === 1 ? '1 round' : `${p.times} rounds`}, about ${p.minutes} minutes`}
                   onClick={() => chooseLength(p.times)}
                   className={`min-h-9 rounded-full px-3.5 tabular-nums transition ${
                     lengthTimes === p.times ? 'bg-card text-slate-100 shadow-sm' : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  {p.minutes} min
+                  {p.times === 1 ? '1 round' : `${p.times} rounds`}
                 </button>
               ))}
             </div>
@@ -316,7 +316,7 @@ export default function Dashboard() {
           to={workoutHref}
           className="flex items-center justify-center gap-2 rounded-2xl border border-edge bg-card py-3 text-center text-sm font-semibold text-accent transition active:scale-[0.99] hover:bg-card-hover"
         >
-          <IconPlay className="h-4 w-4" /> Start {featured.name}{lengthTimes > 1 ? ` · ${preset.minutes} min` : ''}
+          <IconPlay className="h-4 w-4" /> Start {featured.name}{lengthTimes > 1 ? ` · ${lengthTimes} rounds` : ''}
         </Link>
       </section>
 
