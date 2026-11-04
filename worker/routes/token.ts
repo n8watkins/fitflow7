@@ -2,6 +2,7 @@ import { createAccessToken, getUserId, type Scope } from '../lib/auth.ts'
 import { ensureSchema, getDb } from '../lib/db.ts'
 import type { ApiContext } from '../lib/http.ts'
 import { listTokens, recordToken, revokeToken } from '../lib/tokens.ts'
+import { allow } from '../lib/rateLimit.ts'
 
 // /api/token — personal access token management. Cookie-authed only: you manage
 // tokens from a real signed-in web session, never with a token itself.
@@ -22,7 +23,7 @@ export default async function token(ctx: ApiContext): Promise<Response> {
     const db = getDb(ctx.env)
 
     if (ctx.method === 'POST') {
-      if (ctx.env.WRITE_LIMITER && !(await ctx.env.WRITE_LIMITER.limit({ key: `token:${userId}` })).success) {
+      if (!(await allow(ctx.env, 'write', `token:${userId}`))) {
         return ctx.tooManyRequests()
       }
       const live = Number(

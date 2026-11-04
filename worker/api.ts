@@ -1,5 +1,6 @@
 import { API_SECURITY_HEADERS, ApiContext, InvalidJsonError, type ApiEnv, type Route } from './lib/http.ts'
 import { errorSummary, logError } from './lib/log.ts'
+import { allow } from './lib/rateLimit.ts'
 import me from './routes/me.ts'
 import sync from './routes/sync.ts'
 import token from './routes/token.ts'
@@ -25,8 +26,7 @@ const ROUTES: Record<string, Route> = {
 }
 
 // Sign-in routes get their own, smaller per-IP budget; every other route shares
-// the API budget. Both are Workers rate-limiting bindings (wrangler.jsonc); a
-// missing binding (tests, local runs without one) means no limit.
+// the API budget (lib/rateLimit.ts).
 const AUTH_ROUTES = new Set(['/api/auth/login', '/api/auth/callback'])
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
@@ -63,12 +63,7 @@ export async function handleApi(request: Request, env: ApiEnv): Promise<Response
   const ctx = await ApiContext.from(request, env)
   if (isCrossSiteCookieWrite(request, env)) return ctx.json(403, { error: 'cross-site request refused' })
 
-  const isAuth = AUTH_ROUTES.has(path)
-  const limiter = isAuth ? env.AUTH_LIMITER : env.API_LIMITER
-  if (limiter) {
-    const { success } = await limiter.limit({ key: `${isAuth ? 'auth' : 'api'}:${ctx.clientIp}` })
-    if (!success) return ctx.tooManyRequests()
-  }
+  if (!(await allow(env, AUTH_ROUTES.has(path) ? 'auth' : 'api', ctx.clientIp))) return ctx.tooManyRequests()
 
   try {
     return await route(ctx)

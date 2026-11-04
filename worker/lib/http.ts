@@ -5,7 +5,7 @@
 /** The Worker env as the API reads it. All but SESSION_SECRET are optional
  *  secrets: each feature stays off while its value is missing. */
 export type ApiEnv = Pick<Env, 'SESSION_SECRET'> &
-  Partial<Pick<Env, 'AUTH_LIMITER' | 'API_LIMITER' | 'WRITE_LIMITER'>> &
+  Partial<Pick<Env, 'RATE_LIMITER'>> &
   Partial<Record<
     | 'TURSO_DATABASE_URL'
     | 'TURSO_AUTH_TOKEN'

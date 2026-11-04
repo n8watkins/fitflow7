@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import { resolveAuth } from '../../lib/tokens.ts'
 import { ensureSchema, getDb } from '../../lib/db.ts'
 import type { ApiContext } from '../../lib/http.ts'
+import { allow } from '../../lib/rateLimit.ts'
 
 // Exercise ids are short kebab-case slugs (see src/data/exercises.ts). Validate
 // the shape server-side so junk / injection-y ids can't be stored or served.
@@ -43,7 +44,7 @@ export default async function publishRoutine(ctx: ApiContext): Promise<Response>
   if (!auth) return ctx.json(401, { error: 'not signed in' })
   if (auth.scope === 'read') return ctx.json(403, { error: 'read-only token cannot publish' })
   const userId = auth.userId
-  if (ctx.env.WRITE_LIMITER && !(await ctx.env.WRITE_LIMITER.limit({ key: `publish:${userId}` })).success) {
+  if (!(await allow(ctx.env, 'write', `publish:${userId}`))) {
     return ctx.tooManyRequests()
   }
 
