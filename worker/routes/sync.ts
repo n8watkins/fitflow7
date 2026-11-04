@@ -10,6 +10,21 @@ import { resolveAuth } from '../lib/tokens.ts'
 import { ensureSchema, getDb } from '../lib/db.ts'
 import type { ApiContext } from '../lib/http.ts'
 import type { InStatement } from '@libsql/client'
+import { errorSummary, logError } from '../lib/log.ts'
+import {
+  MAX_SYNC_BODY_BYTES,
+  MAX_SYNC_RECORDS,
+  checkBodyProfile,
+  checkChallenge,
+  checkRoutine,
+  checkSession,
+  checkSettings,
+  checkWeight,
+  rejectedId,
+  type Collection,
+  type Rejected,
+  type SettingsPush,
+} from '../lib/validate.ts'
 
 // POST /api/sync — authenticated bidirectional sync.
 //
@@ -24,14 +39,67 @@ import type { InStatement } from '@libsql/client'
 //   collections  server records changed since `since` (tombstones included so
 //   deletes propagate). settings/bodyProfile are the row if newer, else null.
 
-interface SyncBody {
-  since?: string
-  routines?: Routine[]
-  sessions?: WorkoutSession[]
-  settings?: { value: UserSettings; updatedAt: string } | null
-  weightLog?: WeightEntry[]
-  bodyProfile?: BodyProfile | null
-  challengeProgress?: ChallengeProgress[]
+/** A push after validation: only records that passed their checks. */
+interface ValidPush {
+  since: string
+  routines: Routine[]
+  sessions: WorkoutSession[]
+  settings: SettingsPush | null
+  weightLog: WeightEntry[]
+  bodyProfile: BodyProfile | null
+  challengeProgress: ChallengeProgress[]
+  rejected: Rejected[]
+}
+
+const LIST_FIELDS = ['routines', 'sessions', 'weightLog', 'challengeProgress'] as const
+const ROUTE = '/api/sync'
+
+/** Checks a push's shape and size, and each record on its own. Returns the
+ *  reason when the request as a whole must be refused. */
+function parsePush(raw: unknown): { status: 400 | 413; error: string } | ValidPush {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { status: 400, error: 'sync body must be an object' }
+  const b = raw as Record<string, unknown>
+  if (b.since !== undefined && b.since !== null && (typeof b.since !== 'string' || Number.isNaN(Date.parse(b.since)))) {
+    return { status: 400, error: 'since must be a date' }
+  }
+  let total = 0
+  for (const f of LIST_FIELDS) {
+    if (b[f] === undefined || b[f] === null) continue
+    if (!Array.isArray(b[f])) return { status: 400, error: `${f} must be a list` }
+    total += (b[f] as unknown[]).length
+  }
+  for (const f of ['settings', 'bodyProfile'] as const) {
+    if (b[f] === undefined || b[f] === null) continue
+    if (typeof b[f] !== 'object' || Array.isArray(b[f])) return { status: 400, error: `${f} must be an object` }
+    total += 1
+  }
+  if (total > MAX_SYNC_RECORDS) return { status: 413, error: `too many records in one sync (max ${MAX_SYNC_RECORDS})` }
+
+  const rejected: Rejected[] = []
+  function each<T>(collection: Collection, list: unknown, check: (v: unknown) => { ok: true; value: T } | { ok: false; reason: string }, idKey: string): T[] {
+    const out: T[] = []
+    for (const item of (list as unknown[] | undefined) ?? []) {
+      const r = check(item)
+      if (r.ok) out.push(r.value)
+      else rejected.push({ collection, id: rejectedId(item, idKey), reason: r.reason })
+    }
+    return out
+  }
+  const one = <T,>(collection: Collection, v: unknown, check: (v: unknown) => { ok: true; value: T } | { ok: false; reason: string }): T | null => {
+    if (v === undefined || v === null) return null
+    const [value] = each(collection, [v], check, '')
+    return value ?? null
+  }
+  return {
+    since: (b.since as string | undefined) || EPOCH,
+    routines: each('routines', b.routines, checkRoutine, 'id'),
+    sessions: each('sessions', b.sessions, checkSession, 'id'),
+    weightLog: each('weightLog', b.weightLog, checkWeight, 'id'),
+    challengeProgress: each('challengeProgress', b.challengeProgress, checkChallenge, 'challengeId'),
+    settings: one('settings', b.settings, checkSettings),
+    bodyProfile: one('bodyProfile', b.bodyProfile, checkBodyProfile),
+    rejected,
+  }
 }
 
 const EPOCH = '1970-01-01T00:00:00.000Z'
@@ -226,17 +294,21 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
   if (!auth) return ctx.json(401, { error: 'not signed in' })
   const userId = auth.userId
 
-  const body = (ctx.body ?? {}) as SyncBody
-  const since = body.since || EPOCH
+  if (ctx.bodyLength > MAX_SYNC_BODY_BYTES) return ctx.json(413, { error: 'sync request too large (max 1 MB)' })
+  const parsed = parsePush(ctx.body ?? {})
+  if ('error' in parsed) return ctx.json(parsed.status, { error: parsed.error })
+  const body = parsed
+  const since = body.since
 
   // A read-scoped token may pull but never push (S1).
   const wantsWrite =
-    (body.routines?.length ?? 0) > 0 ||
-    (body.sessions?.length ?? 0) > 0 ||
+    body.routines.length > 0 ||
+    body.sessions.length > 0 ||
     !!body.settings ||
-    (body.weightLog?.length ?? 0) > 0 ||
+    body.weightLog.length > 0 ||
     !!body.bodyProfile ||
-    (body.challengeProgress?.length ?? 0) > 0
+    body.challengeProgress.length > 0 ||
+    body.rejected.length > 0
   if (auth.scope === 'read' && wantsWrite) {
     return ctx.json(403, { error: 'read-only token cannot push' })
   }
@@ -251,10 +323,10 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
 
     // --- Push (one write transaction). System routines never sync. ---
     const writes: InStatement[] = []
-    for (const r of body.routines ?? []) {
+    for (const r of body.routines) {
       if (!r.isSystem) writes.push(routineUpsert(userId, r, serverTime))
     }
-    for (const s of body.sessions ?? []) {
+    for (const s of body.sessions) {
       writes.push(sessionUpsert(userId, s, serverTime))
     }
     if (body.settings) {
@@ -283,8 +355,8 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
         ],
       })
     }
-    for (const e of body.weightLog ?? []) writes.push(weightUpsert(userId, e, serverTime))
-    for (const c of body.challengeProgress ?? []) writes.push(challengeUpsert(userId, c, serverTime))
+    for (const e of body.weightLog) writes.push(weightUpsert(userId, e, serverTime))
+    for (const c of body.challengeProgress) writes.push(challengeUpsert(userId, c, serverTime))
     if (body.bodyProfile) {
       const bp = body.bodyProfile
       writes.push({
@@ -365,8 +437,10 @@ export default async function sync(ctx: ApiContext): Promise<Response> {
       weightLog: weightRes.rows.map((r) => rowToWeight(r as Record<string, unknown>)),
       challengeProgress: challengeRes.rows.map((r) => rowToChallenge(r as Record<string, unknown>)),
       bodyProfile,
+      rejected: body.rejected,
     })
-  } catch {
+  } catch (err) {
+    logError({ event: 'sync_failed', reason: 'unhandled', route: ROUTE, status: 500, error: errorSummary(err) })
     return ctx.json(500, { error: 'sync failed' })
   }
 }

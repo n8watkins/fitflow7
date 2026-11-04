@@ -179,7 +179,7 @@ describe('sync - LWW + tombstones + user scoping', () => {
     expect(res.status).toBe(200)
     const body = await json(res)
     expect(Object.keys(body).sort()).toEqual(
-      ['bodyProfile', 'challengeProgress', 'routines', 'serverTime', 'sessions', 'settings', 'weightLog'])
+      ['bodyProfile', 'challengeProgress', 'rejected', 'routines', 'serverTime', 'sessions', 'settings', 'weightLog'])
     expect(Date.parse(body.serverTime as string)).not.toBeNaN()
   })
 
@@ -486,7 +486,7 @@ describe('B1 - body/weight/challenge sync (LWW + tombstone + scoping)', () => {
   it('challenge progress: newer wins, completedDays preserved, scoped', async () => {
     const c = (over = {}) => ({ challengeId: 'c30', completedDays: { 1: '2026-06-01T00:00:00.000Z' }, startedAt: '2026-06-01T00:00:00.000Z', updatedAt: '2026-06-01T00:00:00.000Z', ...over })
     await push('userA', { challengeProgress: [c()] })
-    await push('userA', { challengeProgress: [c({ completedDays: { 1: 'x', 2: 'y' }, updatedAt: '2026-06-05T00:00:00.000Z' })] })
+    await push('userA', { challengeProgress: [c({ completedDays: { 1: '2026-06-01T00:00:00.000Z', 2: '2026-06-02T00:00:00.000Z' }, updatedAt: '2026-06-05T00:00:00.000Z' })] })
     const row = (await pull('userA')).challengeProgress.find((x) => x.challengeId === 'c30')
     expect(Object.keys(row?.completedDays ?? {})).toEqual(['1', '2'])
     expect((await pull('userB')).challengeProgress.some((x) => x.challengeId === 'c30')).toBe(false)

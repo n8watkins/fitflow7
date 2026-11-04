@@ -59,6 +59,11 @@ export class ApiContext {
     return new ApiContext(request, env, request.body ? await request.text() : '')
   }
 
+  /** Length of the request body in characters. */
+  get bodyLength(): number {
+    return this.rawBody.length
+  }
+
   /** The first value of a query parameter. */
   query(name: string): string | undefined {
     return this.url.searchParams.get(name) ?? undefined

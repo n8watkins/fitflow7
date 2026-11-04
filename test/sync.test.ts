@@ -116,6 +116,24 @@ describe('client sync engine (M5)', () => {
     expect(useSyncStore.getState().status).toBe('error')
   })
 
+  it('pushes a long dirty queue in batches of at most 200 records', async () => {
+    const { storage, sync } = await loadSync()
+    for (let i = 0; i < 450; i++) {
+      storage.saveSession({ id: `s${i}`, routineName: 'Classic 7', startedAt: '2026-11-01T00:00:00.000Z', durationSeconds: 420,
+        completed: true, exercisesCompleted: 12, totalExercises: 12 })
+    }
+    const sizes: number[] = []
+    stubFetch((_url, init) => {
+      sizes.push((JSON.parse(init?.body ?? '{}').sessions ?? []).length)
+      return { ok: true, status: 200, json: async () => okBody() }
+    })
+    await sync.sync()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(sizes.every((n) => n <= 200)).toBe(true)
+    expect(sizes.reduce((a, b) => a + b, 0)).toBe(450)
+    expect(storage.getPendingSync().sessions).toHaveLength(0)
+  })
+
   it('coalesces concurrent calls into one in-flight + one rerun', async () => {
     const { sync } = await loadSync()
     let calls = 0
