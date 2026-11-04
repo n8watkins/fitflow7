@@ -5,8 +5,9 @@ import type { ApiContext, ApiEnv } from './http.ts'
 // Hand-rolled OAuth (GitHub / Google) + signed-cookie sessions.
 //
 // No auth SDK: the OAuth "authorization code" flow is a few fetches, and Node's
-// crypto (node:crypto, through nodejs_compat) signs our own session token (HMAC-SHA256). Sessions are
-// stateless signed tokens stored in an httpOnly cookie — no server session table.
+// crypto (node:crypto, through nodejs_compat) signs our own session token
+// (HMAC-SHA256). The httpOnly cookie names a server-side session row, so sign
+// out takes effect at once (lib/sessions.ts).
 // ---------------------------------------------------------------------------
 
 export type Provider = 'github' | 'google'
@@ -236,29 +237,32 @@ function serializeCookie(name: string, value: string, maxAgeSeconds: number): st
 // ---------------------------------------------------------------------------
 // Session API
 // ---------------------------------------------------------------------------
-/** Signs a browser-session token. `sid: true` marks it as a session (vs a
- *  `pat: true` access token); getUserId requires it, so a PAT can never be
+export const SESSION_TTL_MS = SESSION_TTL_SECONDS * 1000
+
+/** Signs a browser-session token naming its server-side session row (`sid`, see
+ *  lib/sessions.ts). A PAT (`pat: true`) has no `sid`, so it can never be
  *  replayed via the cookie to gain a full session (bypassing scope/revocation). */
-export function createSessionToken(env: ApiEnv, userId: string): string {
-  return encodeToken(env, { uid: userId, sid: true, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS })
+export function createSessionToken(env: ApiEnv, userId: string, sid: string): string {
+  return encodeToken(env, { uid: userId, sid, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS })
 }
 
-export function setSession(ctx: ApiContext, userId: string): void {
-  ctx.appendCookie(serializeCookie(SESSION_COOKIE, createSessionToken(ctx.env, userId), SESSION_TTL_SECONDS))
+export function setSessionCookie(ctx: ApiContext, userId: string, sid: string): void {
+  ctx.appendCookie(serializeCookie(SESSION_COOKIE, createSessionToken(ctx.env, userId, sid), SESSION_TTL_SECONDS))
 }
 
 export function clearSession(ctx: ApiContext): void {
   ctx.appendCookie(serializeCookie(SESSION_COOKIE, '', 0))
 }
 
-/** Returns the authenticated user id from the session cookie, or null. Only
- *  accepts genuine session tokens (`sid`) — a PAT (`pat`) presented via the
- *  cookie is rejected, so it can't bypass token scope/revocation. */
-export function getUserId(ctx: ApiContext): string | null {
+/** The signed claims in the session cookie, checked for signature and expiry
+ *  only. lib/sessions.ts then checks the session row still exists. A PAT
+ *  (`pat`) presented via the cookie is rejected, so it can't bypass token
+ *  scope/revocation. */
+export function readSessionClaims(ctx: ApiContext): { uid: string; sid: string } | null {
   const token = parseCookies(ctx)[SESSION_COOKIE]
-  const payload = decodeToken<{ uid?: string; sid?: boolean; pat?: boolean }>(ctx.env, token)
-  if (!payload?.sid || payload.pat) return null
-  return payload.uid ?? null
+  const payload = decodeToken<{ uid?: unknown; sid?: unknown; pat?: boolean }>(ctx.env, token)
+  if (!payload || payload.pat || typeof payload.sid !== 'string' || typeof payload.uid !== 'string') return null
+  return { uid: payload.uid, sid: payload.sid }
 }
 
 const PAT_TTL_SECONDS = 60 * 60 * 24 * 365 // 1 year

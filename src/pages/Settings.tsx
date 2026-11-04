@@ -105,13 +105,25 @@ function AccountSection() {
                       : 'Syncing…'}
                   </div>
                 </div>
-                <button
-                  onClick={() => void logout()}
-                  className="rounded-lg border border-edge bg-card px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-card-hover"
-                >
-                  Sign out
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => void logout()}
+                    className="rounded-lg border border-edge bg-card px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-card-hover"
+                  >
+                    Sign out
+                  </button>
+                  <button
+                    onClick={() => void logout({ everywhere: true })}
+                    title="Signs out every browser and device on this account. AI access tokens keep working."
+                    className="rounded-lg border border-edge bg-card px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-card-hover"
+                  >
+                    Sign out everywhere
+                  </button>
+                </div>
               </div>
+              <p className="-mt-2 text-xs text-slate-500">
+                Sign out everywhere ends every session on this account, on every device. AI access tokens below keep working.
+              </p>
 
               {/* MCP access tokens */}
               <div className="space-y-3 border-t border-edge pt-4">

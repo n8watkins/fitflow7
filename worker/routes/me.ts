@@ -1,4 +1,5 @@
-import { getConfiguredProviders, getUserId } from '../lib/auth.ts'
+import { getConfiguredProviders } from '../lib/auth.ts'
+import { getUserId } from '../lib/sessions.ts'
 import { ensureSchema, getDb } from '../lib/db.ts'
 import type { ApiContext } from '../lib/http.ts'
 
@@ -6,7 +7,7 @@ import type { ApiContext } from '../lib/http.ts'
 // configured OAuth providers, so the client only renders sign-in buttons that work.
 export default async function me(ctx: ApiContext): Promise<Response> {
   const providers = getConfiguredProviders(ctx.env)
-  const userId = getUserId(ctx)
+  const userId = await getUserId(ctx)
   if (!userId) return ctx.json(200, { user: null, providers })
 
   try {

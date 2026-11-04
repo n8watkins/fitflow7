@@ -125,6 +125,16 @@ const SCHEMA = [
      revoked_at   TEXT
    )`,
   `CREATE INDEX IF NOT EXISTS idx_access_tokens_user ON access_tokens (user_id, created_at)`,
+  // Browser sessions. The session cookie names a row here and is valid only
+  // while the row exists, so Sign out (one row) and Sign out everywhere (all of
+  // a user's rows) take effect at once. See lib/sessions.ts.
+  `CREATE TABLE IF NOT EXISTS auth_sessions (
+     id          TEXT PRIMARY KEY,
+     user_id     TEXT NOT NULL,
+     created_at  TEXT NOT NULL,
+     expires_at  TEXT NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions (user_id)`,
   // S1: one abuse report per (routine, user). The block threshold counts DISTINCT
   // reporters from here, so a single user can't drive a routine to blocked.
   `CREATE TABLE IF NOT EXISTS routine_reports (

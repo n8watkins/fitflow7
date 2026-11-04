@@ -89,8 +89,14 @@ describe.skipIf(remote)('sync push shape', () => {
   it('logs a database failure instead of swallowing it', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
-      env.TURSO_DATABASE_URL = 'file:/nonexistent-dir/x.db'
-      const res = await sync({})
+      // Break one table the pull reads, after sign-in has been checked.
+      await testDb().execute('ALTER TABLE weight_log RENAME TO weight_log_broken')
+      let res: Response
+      try {
+        res = await sync({})
+      } finally {
+        await testDb().execute('ALTER TABLE weight_log_broken RENAME TO weight_log')
+      }
       expect(res.status).toBe(500)
       const line = JSON.parse(String(error.mock.calls[0]?.[0])) as Record<string, unknown>
       expect(line).toMatchObject({ event: 'sync_failed', route: '/api/sync', status: 500 })

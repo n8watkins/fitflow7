@@ -43,9 +43,46 @@ export function signToken(payload: Record<string, unknown>, secret = SECRET): st
   return `${body}.${sig}`
 }
 
+/** The session id the test cookie for a user names. Sessions are server-side,
+ *  so the API also needs the row: flushTestSessions() (run by the suite's
+ *  `handle`) creates rows for every user a test signed in as. */
+export const testSessionId = (userId: string) => `test-session-${userId}`
+
+const knownUsers = new Set<string>()
+let sessionsDirty = true
+
 export function sessionCookie(userId: string): string {
-  const token = signToken({ uid: userId, sid: true, exp: Math.floor(Date.now() / 1000) + 3600 })
+  if (!knownUsers.has(userId)) {
+    knownUsers.add(userId)
+    sessionsDirty = true
+  }
+  const token = signToken({ uid: userId, sid: testSessionId(userId), exp: Math.floor(Date.now() / 1000) + 3600 })
   return `ff_session=${encodeURIComponent(token)}`
+}
+
+/** Empties auth_sessions; the next request recreates rows for known test users. */
+export async function seedTestSessions(): Promise<void> {
+  await testDb().execute('DELETE FROM auth_sessions')
+  sessionsDirty = true
+}
+
+/** Creates any missing session rows for the users tests signed in as. */
+export async function flushTestSessions(): Promise<void> {
+  if (!sessionsDirty) return
+  sessionsDirty = false
+  const expires = new Date(Date.now() + 3_600_000).toISOString()
+  try {
+    await testDb().batch(
+      [...knownUsers].map((u) => ({
+        sql: 'INSERT OR IGNORE INTO auth_sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)',
+        args: [testSessionId(u), u, new Date().toISOString(), expires],
+      })),
+      'write',
+    )
+  } catch {
+    // The table doesn't exist until the API's first request creates the schema.
+    sessionsDirty = true
+  }
 }
 
 /** A validly signed access token that was never registered in access_tokens. */
