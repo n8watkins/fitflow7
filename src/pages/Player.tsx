@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useTimerStore } from '../store/timerStore'
-import { getCoachTone, getRoutine, getSettings, markChallengeDay } from '../lib/storage'
-import { coachLine, speak, stopSpeaking, type CoachMoment } from '../lib/coach'
+import { getCoachTone, getLatestWeight, getRoutine, getSessions, getSettings, markChallengeDay } from '../lib/storage'
+import { computeStats } from '../lib/stats'
+import { estimateCalories } from '../lib/workout'
+import { CHALLENGE_MAP } from '../data/challenges'
+import { coachLine, speak, speechAvailable, stopSpeaking, type CoachMoment } from '../lib/coach'
 import { EXERCISE_MAP } from '../data/exercises'
 import { CLASSIC_7 } from '../data/routines'
 import ExerciseVisual from '../components/ExerciseVisual'
@@ -287,8 +290,8 @@ export default function Player() {
   }, [coachTone, phase, currentIndex, secondsLeft, isPaused, isMuted, coachMoment])
   useEffect(() => () => stopSpeaking(), [])
 
-  // The caption shows the coach's latest line in this phase, so it reads the
-  // same with the sound off and screen readers hear it (aria-live).
+  // The caption holds the coach's latest line in this phase: visible while
+  // muted, and always read to screen readers (aria-live).
   const coachCaption = useMemo(() => {
     if (coachTone === 'off' || phase === 'idle') return null
     if (phase === 'complete') return coachLine(coachMoment(0), coachTone)
@@ -298,6 +301,7 @@ export default function Player() {
     }
     return null
   }, [coachTone, phase, secondsLeft, totalSeconds, coachMoment])
+  const showCaption = isMuted || !speechAvailable()
 
   // ---------------------------------------------------------------------------
   // Keyboard shortcuts
@@ -406,11 +410,26 @@ export default function Player() {
     markChallengeDay(challengeId, challengeDay)
   }, [phase, challengeId, challengeDay, exercisesCompleted, exercises.length])
 
+  // Finish-screen facts, read once when the workout completes (the session is
+  // already saved by then, so the streak includes today).
+  const finish = useMemo(() => {
+    if (phase !== 'complete' || !startedAt || !completedAt) return null
+    const seconds = Math.round((new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000)
+    return {
+      seconds,
+      streak: computeStats(getSessions()).currentStreak,
+      calories: estimateCalories(seconds, getLatestWeight()?.weightKg),
+    }
+  }, [phase, startedAt, completedAt])
+
   // ---------------------------------------------------------------------------
   // Derived values
   // ---------------------------------------------------------------------------
   const currentExercise = exercises[currentIndex] ?? null
   const nextExercise = exercises[currentIndex + 1] ?? null
+  // Rest shows the move coming up, not the one just finished.
+  const shownExercise = phase === 'rest' ? nextExercise : currentExercise
+  const shownLabel = phase === 'prepare' ? 'First up' : phase === 'rest' ? 'Up next' : 'Now'
   const totalExercises = exercises.length
 
   // currentPhase keeps the full WorkoutPhase union type after the complete early-return below
@@ -463,37 +482,43 @@ export default function Player() {
   // Complete phase
   // ---------------------------------------------------------------------------
   if (currentPhase === 'complete') {
-    // Finding 3: elapsed from the timestamps captured at completion (pure during render)
-    const completedElapsed = startedAt && completedAt
-      ? Math.round((new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000)
-      : 0
     const endedEarly = exercisesCompleted < totalExercises
+    const challenge = challengeId ? CHALLENGE_MAP[challengeId] : undefined
+    const challengeDone = !endedEarly && challenge && challengeDay > 0
+    const tiles: { value: string; label: string }[] = [
+      { value: fmtDuration(finish?.seconds ?? 0), label: 'Duration' },
+      { value: `${exercisesCompleted}/${totalExercises}`, label: 'Exercises' },
+      ...(finish && finish.streak > 0 ? [{ value: `${finish.streak}`, label: 'day streak' }] : []),
+      ...(finish?.calories ? [{ value: `≈${finish.calories}`, label: 'kcal (estimate)' }] : []),
+    ]
     return (
       <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
         <div className="w-full max-w-lg rounded-2xl border border-violet-500/30 bg-violet-950/40 p-8 text-center light:border-violet-300 light:bg-violet-50">
-          <div className="mb-3 text-6xl">🎉</div>
+          <div className="mb-3 text-6xl" aria-hidden="true">{endedEarly ? '👍' : '🎉'}</div>
           <h1 className="mb-1 text-3xl font-bold text-violet-300 light:text-violet-700">
             {endedEarly ? 'Workout Ended' : 'Workout Complete!'}
           </h1>
-          <p className="mb-1 text-slate-400">{routine?.name ?? 'Workout'}</p>
+          <p className="text-slate-400">{routine?.name ?? 'Workout'}</p>
           {endedEarly && (
-            <p className="mb-5 text-xs text-amber-400 light:text-amber-600">Ended early</p>
+            <p className="mt-1 text-xs text-amber-400 light:text-amber-600">Ended early</p>
           )}
-          {!endedEarly && <div className="mb-5" />}
 
-          <div className="mb-8 grid grid-cols-2 gap-4">
-            <div className="rounded-xl bg-card p-4">
-              <p className="text-2xl font-bold tabular-nums text-slate-100">
-                {fmtDuration(completedElapsed)}
-              </p>
-              <p className="mt-1 text-xs text-slate-400">Duration</p>
-            </div>
-            <div className="rounded-xl bg-card p-4">
-              <p className="text-2xl font-bold tabular-nums text-slate-100">
-                {exercisesCompleted}/{totalExercises}
-              </p>
-              <p className="mt-1 text-xs text-slate-400">Exercises</p>
-            </div>
+          {challengeDone && (
+            <Link
+              to="/challenges"
+              className="mt-4 inline-flex items-center gap-2 rounded-full border border-violet-400/40 bg-violet-500/15 px-4 py-1.5 text-sm font-semibold text-violet-200 transition hover:bg-violet-500/25 light:border-violet-300 light:bg-violet-100 light:text-violet-800"
+            >
+              <span aria-hidden="true">✓</span> {challenge.name}: day {challengeDay} done
+            </Link>
+          )}
+
+          <div className="mt-6 mb-8 grid grid-cols-2 gap-3">
+            {tiles.map((t) => (
+              <div key={t.label} className="rounded-xl bg-card p-4">
+                <p className="text-2xl font-bold tabular-nums text-slate-100">{t.value}</p>
+                <p className="mt-1 text-xs text-slate-400">{t.label}</p>
+              </div>
+            ))}
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
@@ -536,7 +561,7 @@ export default function Player() {
         {/* Exercise name */}
         {currentExercise && (
           <p className="mt-6 text-center text-2xl font-semibold text-slate-200">
-            {currentExercise.icon} {currentExercise.name}
+            {currentExercise.name}
           </p>
         )}
 
@@ -595,175 +620,170 @@ export default function Player() {
         <ProgressBar total={totalExercises} currentIndex={currentIndex} phase={phase} />
       </div>
 
-      {/* ---- Phase label + timer ---- */}
-      <div className="flex flex-col items-center">
-        <p
-          className={`mb-1 text-sm font-bold tracking-[0.2em] uppercase ${phaseColor[phase]}`}
-        >
-          {PHASE_LABEL[phase]}
-        </p>
-
-        <div
-          className={`relative font-mono font-black tabular-nums leading-none transition-colors
-            text-8xl sm:text-9xl
-            ${phaseColor[phase]}
-            ${isPaused ? 'opacity-40' : ''}
-          `}
-        >
-          {secondsLeft}
-        </div>
-        {/* Paused badge sits under the number (it used to overlap the digits),
-            and the coach caption below it: fixed height, so neither shifts the
-            layout when it appears. */}
-        <div className="mt-3 flex min-h-10 items-center justify-center">
-          {isPaused ? (
-            <span className="rounded-full bg-slate-700 px-3 py-0.5 text-xs font-bold tracking-wider text-slate-300">
-              PAUSED
-            </span>
-          ) : (
-            <p aria-live="polite" className="max-w-sm text-center text-sm text-slate-400">
-              {coachCaption ?? ''}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* ---- Current exercise tile ---- */}
-      {currentExercise && phase !== 'complete' && (
-        <div className="mx-auto mt-6 w-full max-w-sm">
-          <div
-            className={`rounded-2xl border p-5 text-center transition-colors ${phaseBg[phase]}`}
+      {/* Phone: timer, the move, up next, controls in one column. Desktop: the
+          move on the left, the timer and controls on the right. */}
+      <div className="mx-auto grid w-full max-w-sm grid-cols-1 lg:my-auto lg:max-w-5xl lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:grid-rows-[1fr_auto_auto_1fr] lg:items-center lg:gap-x-14">
+        {/* ---- Phase label + timer ---- */}
+          <div className="flex flex-col items-center lg:col-start-2 lg:row-start-1 lg:self-end">
+          <p
+            className={`mb-1 text-sm font-bold tracking-[0.2em] uppercase ${phaseColor[phase]}`}
           >
-            <ExerciseVisual
-              exercise={currentExercise}
-              autoPlay
-              imgClassName="mx-auto mb-3 max-h-44 w-full rounded-2xl bg-surface object-contain"
-              emojiClassName="mb-3 inline-block text-7xl leading-none"
-            />
-            <h2 className="text-xl font-bold text-slate-100">{currentExercise.name}</h2>
-            {currentExercise.instructions[0] && (
-              <p className="mt-2 text-sm leading-relaxed text-slate-400 line-clamp-2">
-                {currentExercise.instructions[0]}
-              </p>
-            )}
-            {currentExercise.instructions[1] && (
-              <p className="mt-1 text-sm leading-relaxed text-slate-400 line-clamp-1">
-                {currentExercise.instructions[1]}
+            {PHASE_LABEL[phase]}
+          </p>
+
+          <div
+            className={`relative font-mono font-black tabular-nums leading-none transition-colors
+              text-8xl sm:text-9xl
+              ${phaseColor[phase]}
+              ${isPaused ? 'opacity-40' : ''}
+            `}
+          >
+            {secondsLeft}
+          </div>
+          {/* Paused badge sits under the number (it used to overlap the digits),
+              and the coach caption below it: fixed height, so neither shifts the
+              layout when it appears. */}
+          <div className="mt-3 flex min-h-6 items-center justify-center">
+            {isPaused ? (
+              <span className="rounded-full bg-slate-700 px-3 py-0.5 text-xs font-bold tracking-wider text-slate-300">
+                PAUSED
+              </span>
+            ) : (
+              // The coach's words show on screen only while muted (or when the
+              // browser can't speak); otherwise they'd repeat the card below.
+              // Screen readers always get them through the live region.
+              <p aria-live="polite" className={showCaption ? 'max-w-sm text-center text-sm text-slate-400' : 'sr-only'}>
+                {coachCaption ?? ''}
               </p>
             )}
           </div>
         </div>
-      )}
 
-      {/* ---- Up next (prominent during REST) ---- */}
-      {phase === 'rest' && nextExercise && (
-        <div className="mx-auto mt-4 w-full max-w-sm">
-          <div className="rounded-2xl border border-edge bg-card p-4 text-center">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
-              Up Next
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <span className="text-4xl leading-none">{nextExercise.icon}</span>
-              <span className="text-lg font-semibold text-slate-200">{nextExercise.name}</span>
+        {/* ---- The move on screen: the current one while working, the next one
+            during prepare and rest so you can get into position. ---- */}
+        {shownExercise && (
+          <div className="mt-6 lg:col-start-1 lg:row-span-4 lg:row-start-1 lg:mt-0">
+            <div className={`rounded-2xl border p-5 text-center transition-colors lg:p-7 ${phaseBg[phase]}`}>
+              <p className={`mb-3 text-xs font-bold uppercase tracking-[0.2em] ${phaseColor[phase]}`}>
+                {shownLabel}
+              </p>
+              <ExerciseVisual
+                key={shownExercise.id}
+                exercise={shownExercise}
+                autoPlay
+                imgClassName="mx-auto mb-3 max-h-44 w-full rounded-2xl bg-surface object-contain lg:max-h-80"
+                emojiClassName="mb-3 inline-block text-7xl leading-none lg:text-9xl"
+              />
+              <h2 className="text-xl font-bold text-slate-100 lg:text-2xl">{shownExercise.name}</h2>
+              {shownExercise.cue && (
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-300 lg:text-base">{shownExercise.cue}</p>
+              )}
+              {shownExercise.instructions.length > 0 && (
+                <ol className="mx-auto mt-4 hidden max-w-md list-decimal space-y-1 pl-5 text-left text-sm leading-relaxed text-slate-400 lg:block">
+                  {shownExercise.instructions.slice(0, 3).map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ---- Next exercise preview during WORK (smaller) ---- */}
-      {phase === 'work' && nextExercise && (
-        <div className="mx-auto mt-4 w-full max-w-sm">
-          <div className="rounded-xl border border-edge bg-card/60 px-4 py-3">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl leading-none">{nextExercise.icon}</span>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-                  Up Next
-                </p>
-                <p className="text-sm font-medium text-slate-300">{nextExercise.name}</p>
+        {/* ---- Next exercise preview during WORK (smaller) ---- */}
+        {phase === 'work' && nextExercise && (
+          <div className="mt-4 lg:col-start-2">
+            <div className="rounded-xl border border-edge bg-card/60 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <ExerciseVisual exercise={nextExercise} imgClassName="h-9 w-9 rounded-md object-cover" emojiClassName="inline-flex h-9 w-9 items-center justify-center text-2xl leading-none" />
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                    Up Next
+                  </p>
+                  <p className="text-sm font-medium text-slate-300">{nextExercise.name}</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ---- Controls ---- */}
-      {/* Mobile-first: big Pause on top, four 44px icon buttons in a row below. */}
-      <div className="mx-auto mt-6 grid w-full max-w-sm grid-cols-4 gap-2">
-        {/* Pause / Resume (full-width primary) */}
-        <button
-          onClick={togglePause}
-          disabled={phase === 'idle' || phase === 'complete'}
-          className="col-span-4 min-h-12 w-full rounded-xl bg-accent px-8 text-base font-bold text-slate-900 shadow-lg shadow-cyan-900/30 transition hover:opacity-90 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-30"
-          title="Pause/Resume (Space)"
-          aria-label={isPaused ? 'Resume workout' : 'Pause workout'}
-        >
-          {isPaused ? 'Resume' : 'Pause'}
-        </button>
+        {/* ---- Controls ---- */}
+        {/* Mobile-first: big Pause on top, four 44px icon buttons in a row below. */}
+        <div className="mt-6 grid w-full grid-cols-4 gap-2 lg:col-start-2 lg:self-start">
+          {/* Pause / Resume (full-width primary) */}
+          <button
+            onClick={togglePause}
+            disabled={phase === 'idle' || phase === 'complete'}
+            className="col-span-4 min-h-12 w-full rounded-xl bg-accent px-8 text-base font-bold text-slate-900 shadow-lg shadow-cyan-900/30 transition hover:opacity-90 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-30"
+            title="Pause/Resume (Space)"
+            aria-label={isPaused ? 'Resume workout' : 'Pause workout'}
+          >
+            {isPaused ? 'Resume' : 'Pause'}
+          </button>
 
-        {/* Previous */}
-        <button
-          onClick={previous}
-          disabled={phase === 'idle' || phase === 'complete'}
-          className="flex min-h-11 items-center justify-center rounded-xl border border-edge bg-card text-slate-300 transition-colors hover:bg-card-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-30"
-          title="Previous (←)"
-          aria-label="Previous exercise"
-        >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-
-        {/* Skip */}
-        <button
-          onClick={skip}
-          disabled={phase === 'idle' || phase === 'complete'}
-          className="flex min-h-11 items-center justify-center rounded-xl border border-edge bg-card text-slate-300 transition-colors hover:bg-card-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-30"
-          title="Skip (→)"
-          aria-label="Skip exercise"
-        >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-
-        {/* Mute toggle */}
-        <button
-          onClick={toggleMute}
-          className="flex min-h-11 items-center justify-center rounded-xl border border-edge bg-card text-slate-300 transition-colors hover:bg-card-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-          title="Mute (M)"
-          aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
-        >
-          {isMuted ? (
-            <svg className="h-5 w-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-            </svg>
-          ) : (
+          {/* Previous */}
+          <button
+            onClick={previous}
+            disabled={phase === 'idle' || phase === 'complete'}
+            className="flex min-h-11 items-center justify-center rounded-xl border border-edge bg-card text-slate-300 transition-colors hover:bg-card-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-30"
+            title="Previous (←)"
+            aria-label="Previous exercise"
+          >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M12 6v12m-3.536-9.536a5 5 0 000 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-          )}
-        </button>
+          </button>
 
-        {/* Focus mode toggle */}
-        <button
-          onClick={() => void toggleFocusMode()}
-          className="flex min-h-11 items-center justify-center rounded-xl border border-edge bg-card text-slate-300 transition-colors hover:bg-card-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-          title="Focus mode (F)"
-          aria-label="Toggle focus mode"
-        >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-          </svg>
-        </button>
-      </div>
+          {/* Skip */}
+          <button
+            onClick={skip}
+            disabled={phase === 'idle' || phase === 'complete'}
+            className="flex min-h-11 items-center justify-center rounded-xl border border-edge bg-card text-slate-300 transition-colors hover:bg-card-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-30"
+            title="Skip (→)"
+            aria-label="Skip exercise"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
 
-      {/* ---- Keyboard hints (desktop only) ---- */}
-      <div className="mx-auto mt-6 hidden w-full max-w-sm sm:block">
-        <p className="text-center text-[10px] text-slate-400">
-          Space: pause &nbsp;·&nbsp; ← → navigate &nbsp;·&nbsp; M: mute &nbsp;·&nbsp; F: focus
-        </p>
+          {/* Mute toggle */}
+          <button
+            onClick={toggleMute}
+            className="flex min-h-11 items-center justify-center rounded-xl border border-edge bg-card text-slate-300 transition-colors hover:bg-card-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            title="Mute (M)"
+            aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
+          >
+            {isMuted ? (
+              <svg className="h-5 w-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+              </svg>
+            ) : (
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M12 6v12m-3.536-9.536a5 5 0 000 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              </svg>
+            )}
+          </button>
+
+          {/* Focus mode toggle */}
+          <button
+            onClick={() => void toggleFocusMode()}
+            className="flex min-h-11 items-center justify-center rounded-xl border border-edge bg-card text-slate-300 transition-colors hover:bg-card-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            title="Focus mode (F)"
+            aria-label="Toggle focus mode"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+          </button>
+        </div>
+
+        {/* ---- Keyboard hints (desktop only) ---- */}
+        <div className="mt-6 hidden sm:block lg:col-start-2 lg:self-start">
+          <p className="text-center text-[10px] text-slate-400">
+            Space: pause &nbsp;·&nbsp; ← → navigate &nbsp;·&nbsp; M: mute &nbsp;·&nbsp; F: focus
+          </p>
+        </div>
       </div>
     </div>
   )

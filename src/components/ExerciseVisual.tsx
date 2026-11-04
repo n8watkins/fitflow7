@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { Exercise } from '../types'
+import MoveGlyph from './MoveGlyph'
 
-// Renders an exercise's bundled photo when present, falling back to its emoji
+// Renders an exercise's bundled photo when present, falling back to a neutral
+// body-position figure (MoveGlyph)
 // (and also if the image fails to load). Two-frame movement animation plays only
 // when hovered (desktop) or when a parent opts in via `autoPlay` (e.g. the
 // in-workout Player and the expanded modal) — so browse lists stay calm/static.
@@ -58,5 +60,9 @@ export default function ExerciseVisual({
       />
     )
   }
-  return <span className={emojiClassName}>{exercise.icon}</span>
+  return (
+    <span className={emojiClassName}>
+      <MoveGlyph exercise={exercise} className="inline-block h-[1em] w-[1em] align-middle text-slate-400" />
+    </span>
+  )
 }

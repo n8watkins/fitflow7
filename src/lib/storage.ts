@@ -27,6 +27,7 @@ const KEY = {
   challengeProgress: 'fitflow.challengeProgress',
   theme: 'fitflow.theme',
   voiceCoach: 'fitflow.voiceCoach',
+  lengthTimes: 'fitflow.lengthTimes',
 } as const
 
 // ---------------------------------------------------------------------------
@@ -282,6 +283,17 @@ export function getCoachTone(): CoachTone {
 
 export function setCoachTone(tone: CoachTone): void {
   writeJSON(KEY.voiceCoach, tone)
+}
+
+/** Workout length on the home screen: once, twice or three times through the
+ *  routine. Device-local, remembered between visits. */
+export function getLengthTimes(): 1 | 2 | 3 {
+  const n = readJSON<number>(KEY.lengthTimes, 1)
+  return n === 2 || n === 3 ? n : 1
+}
+
+export function setLengthTimes(times: 1 | 2 | 3): void {
+  writeJSON(KEY.lengthTimes, times)
 }
 
 type SettingsMeta = { updatedAt: string; dirty: boolean }

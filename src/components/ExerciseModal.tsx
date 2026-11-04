@@ -3,6 +3,7 @@ import type { Category, Difficulty, Exercise } from '../types'
 import { EXERCISE_MAP } from '../data/exercises'
 import ExerciseVisual from './ExerciseVisual'
 import { IconClose } from './icons'
+import MoveGlyph from './MoveGlyph'
 
 const CATEGORY_LABEL: Record<Category, string> = {
   cardio: 'Cardio',
@@ -190,7 +191,7 @@ export default function ExerciseModal({
                       onClick={() => onJump(v.id)}
                       className="inline-flex items-center gap-1.5 rounded-full border border-edge bg-surface px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-accent hover:text-accent active:scale-95"
                     >
-                      <span>{target.icon}</span>
+                      <MoveGlyph exercise={target} className="h-4 w-4" />
                       {v.label}: {target.name}
                     </button>
                   )
