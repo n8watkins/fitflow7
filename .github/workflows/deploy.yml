@@ -30,10 +30,10 @@ jobs:
         if: env.CLOUDFLARE_API_TOKEN == ''
         run: echo "::notice::CLOUDFLARE_API_TOKEN is not set, so nothing was deployed. Add the repository secret to deploy from GitHub."
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.CLOUDFLARE_API_TOKEN != ''
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: env.CLOUDFLARE_API_TOKEN != ''
         with:
           node-version: 24
