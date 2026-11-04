@@ -8,29 +8,25 @@ import {
   getChallengeProgressAll,
   getLastRoutineId,
   getLatestWeight,
+  getLengthTimes,
   getRoutine,
   getRoutines,
   getSessions,
   getSettings,
+  setLengthTimes,
 } from '../lib/storage'
 import { computeStats } from '../lib/stats'
 import { formatWeight } from '../lib/body'
 import ExerciseVisual from '../components/ExerciseVisual'
 import ExerciseModal from '../components/ExerciseModal'
 import ScheduleWorkout from '../components/ScheduleWorkout'
+import { estimateMinutes, lengthPresets } from '../lib/workout'
 import { IconCalendar, IconChevronRight, IconFlame, IconPlay, IconPlus, IconScale } from '../components/icons'
-import type { Exercise, Routine } from '../types'
+import type { Exercise } from '../types'
 
 // ---------------------------------------------------------------------------
 // Derivations
 // ---------------------------------------------------------------------------
-
-/** Rough wall-clock minutes for a routine (work + rest across all rounds). */
-function estimateMinutes(r: Routine): number {
-  const slots = r.exerciseIds.length * r.rounds
-  const secs = slots * r.workSeconds + Math.max(0, slots - 1) * r.restSeconds
-  return Math.max(1, Math.round(secs / 60))
-}
 
 /** The challenge to surface on the home page: an in-progress one, else null. */
 function activeChallenge() {
@@ -203,6 +199,16 @@ export default function Dashboard() {
   // Brand-new user: no workouts logged and no weigh-ins. Used to nudge a first action.
   const isFresh = sessions.length === 0 && !latestWeight
 
+  // Length presets: once, twice or three times through the featured routine.
+  const [lengthTimes, setLengthTimesState] = useState<1 | 2 | 3>(() => getLengthTimes())
+  const presets = lengthPresets(featured)
+  const preset = presets[lengthTimes - 1]
+  const workoutHref = lengthTimes > 1 ? `/workout/${featured.id}?rounds=${preset.rounds}` : `/workout/${featured.id}`
+  function chooseLength(times: 1 | 2 | 3) {
+    setLengthTimesState(times)
+    setLengthTimes(times)
+  }
+
   return (
     <div className="space-y-6">
       {/* ---- First-run welcome (vanishes after the first workout or weigh-in) ---- */}
@@ -215,11 +221,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ---- Featured workout: dark card with accent glow + bright Start ---- */}
-      <Link
-        to={`/workout/${featured.id}`}
-        className="group relative block overflow-hidden rounded-3xl border border-accent/30 bg-gradient-to-br from-card to-surface p-6 transition active:scale-[0.99]"
-      >
+      {/* ---- Featured workout: dark card with accent glow, length presets and Start ---- */}
+      <section className="relative overflow-hidden rounded-3xl border border-accent/30 bg-gradient-to-br from-card to-surface p-6">
         <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-accent/20 blur-3xl" />
         <div className="relative">
           <div className="text-xs font-bold uppercase tracking-widest text-accent">
@@ -227,13 +230,35 @@ export default function Dashboard() {
           </div>
           <div className="mt-1 text-2xl font-extrabold text-slate-100">{featured.name}</div>
           <div className="mt-0.5 text-sm text-slate-400">
-            {outline.length} exercises · ~{estimateMinutes(featured)} min
+            {outline.length} exercises{lengthTimes > 1 ? ` × ${lengthTimes}` : ''} · ~{preset.minutes} min
           </div>
-          <span className="mt-4 inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-base font-bold text-slate-900 shadow-lg shadow-accent/20 transition group-hover:brightness-110">
-            <IconPlay className="h-4 w-4" /> Start
-          </span>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Link
+              to={workoutHref}
+              className="inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-base font-bold text-slate-900 shadow-lg shadow-accent/20 transition hover:brightness-110 active:scale-[0.98]"
+            >
+              <IconPlay className="h-4 w-4" /> Start
+            </Link>
+            <div role="radiogroup" aria-label="Workout length" className="flex rounded-full border border-edge bg-surface/60 p-1 text-sm font-semibold">
+              {presets.map((p) => (
+                <button
+                  key={p.times}
+                  type="button"
+                  role="radio"
+                  aria-checked={lengthTimes === p.times}
+                  aria-label={`${p.minutes} minutes`}
+                  onClick={() => chooseLength(p.times)}
+                  className={`min-h-9 rounded-full px-3.5 tabular-nums transition ${
+                    lengthTimes === p.times ? 'bg-card text-slate-100 shadow-sm' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {p.minutes} min
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-      </Link>
+      </section>
 
       {/* ---- Stat chips ---- */}
       <section className="grid grid-cols-3 gap-3">
@@ -288,10 +313,10 @@ export default function Dashboard() {
           ))}
         </ul>
         <Link
-          to={`/workout/${featured.id}`}
+          to={workoutHref}
           className="flex items-center justify-center gap-2 rounded-2xl border border-edge bg-card py-3 text-center text-sm font-semibold text-accent transition active:scale-[0.99] hover:bg-card-hover"
         >
-          <IconPlay className="h-4 w-4" /> Start {featured.name}
+          <IconPlay className="h-4 w-4" /> Start {featured.name}{lengthTimes > 1 ? ` · ${preset.minutes} min` : ''}
         </Link>
       </section>
 
