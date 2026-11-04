@@ -33,3 +33,7 @@ dist-ssr
 # Cloudflare Workers local state and dev secrets
 .wrangler
 .dev.vars*
+
+# Playwright
+playwright-report
+test-results

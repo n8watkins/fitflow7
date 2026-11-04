@@ -48,3 +48,46 @@ jobs:
         run: |
           npm ci
           npm run typecheck
+
+  # End-to-end persistence tests (test/e2e, playwright.config.ts): the built
+  # app and API in `wrangler dev` against a real libSQL server, signed in with
+  # seeded test sessions, never real accounts.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      libsql:
+        image: ghcr.io/tursodatabase/libsql-server:v0.24.32
+        ports:
+          - 8080:8080
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build
+        run: npm run build
+
+      - name: End-to-end tests
+        env:
+          E2E_DB_URL: http://127.0.0.1:8080
+        run: npx playwright test
+
+      - name: Upload the report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
