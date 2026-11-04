@@ -26,6 +26,7 @@ const Insights = lazy(() => import('./pages/Insights'))
 const Community = lazy(() => import('./pages/Community'))
 const Settings = lazy(() => import('./pages/Settings'))
 import { bootstrapAuth, startSyncListeners } from './lib/sync'
+import { unlockSpeechOnFirstGesture } from './lib/coach'
 import { getThemePref } from './lib/storage'
 import { applyTheme } from './lib/theme'
 import AccountMenu from './components/AccountMenu'
@@ -231,6 +232,7 @@ function NotFound() {
 export default function App() {
   useEffect(() => {
     startSyncListeners()
+    unlockSpeechOnFirstGesture()
     void bootstrapAuth()
     // Keep the DOM theme in sync with the stored preference, and re-resolve when
     // the OS preference changes (only affects the 'system' setting). The inline

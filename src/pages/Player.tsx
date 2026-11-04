@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useTimerStore } from '../store/timerStore'
-import { getRoutine, getSettings, markChallengeDay } from '../lib/storage'
+import { getCoachTone, getRoutine, getSettings, markChallengeDay } from '../lib/storage'
+import { coachLine, speak, stopSpeaking, type CoachMoment } from '../lib/coach'
 import { EXERCISE_MAP } from '../data/exercises'
 import { CLASSIC_7 } from '../data/routines'
 import ExerciseVisual from '../components/ExerciseVisual'
@@ -119,6 +120,7 @@ export default function Player() {
     phase,
     currentIndex,
     secondsLeft,
+    totalSeconds,
     isPaused,
     isMuted,
     exercisesCompleted,
@@ -224,13 +226,15 @@ export default function Player() {
   // ---------------------------------------------------------------------------
   // Audio cue subscription
   // ---------------------------------------------------------------------------
+  // Beeps follow Settings → Audio cues, read once per workout.
+  const [beepsOn] = useState(() => getSettings().audioCuesEnabled)
   const lastCueSeqRef = useRef<number>(-1)
   useEffect(() => {
     if (!cueEvent) return
     if (cueEvent.seq === lastCueSeqRef.current) return
     lastCueSeqRef.current = cueEvent.seq
 
-    if (isMuted) return
+    if (isMuted || !beepsOn) return
 
     switch (cueEvent.type) {
       case 'start':
@@ -249,7 +253,51 @@ export default function Player() {
         void cueComplete()
         break
     }
-  }, [cueEvent, isMuted])
+  }, [cueEvent, isMuted, beepsOn])
+
+  // ---------------------------------------------------------------------------
+  // Voice coach: speaks the move, halfway, ten seconds left, what's next and
+  // the finish (lib/coach.ts). Device-local tone, read once per workout; Mute
+  // silences it with the beeps, and pausing cuts it off.
+  // ---------------------------------------------------------------------------
+  const [coachTone] = useState(() => getCoachTone())
+  const coachMoment = useCallback(
+    (seconds: number): CoachMoment => ({
+      phase,
+      secondsLeft: seconds,
+      phaseSeconds: totalSeconds,
+      exercise: exercises[currentIndex] ?? null,
+      nextExercise: exercises[currentIndex + 1] ?? null,
+      isLast: currentIndex >= exercises.length - 1,
+    }),
+    [phase, totalSeconds, exercises, currentIndex],
+  )
+  const spokenKeyRef = useRef('')
+  useEffect(() => {
+    if (coachTone === 'off' || phase === 'idle') return
+    if (isPaused || isMuted) {
+      stopSpeaking()
+      return
+    }
+    const key = `${phase}:${currentIndex}:${secondsLeft}`
+    if (key === spokenKeyRef.current) return
+    spokenKeyRef.current = key
+    const line = coachLine(coachMoment(secondsLeft), coachTone)
+    if (line) speak(line, coachTone)
+  }, [coachTone, phase, currentIndex, secondsLeft, isPaused, isMuted, coachMoment])
+  useEffect(() => () => stopSpeaking(), [])
+
+  // The caption shows the coach's latest line in this phase, so it reads the
+  // same with the sound off and screen readers hear it (aria-live).
+  const coachCaption = useMemo(() => {
+    if (coachTone === 'off' || phase === 'idle') return null
+    if (phase === 'complete') return coachLine(coachMoment(0), coachTone)
+    for (let s = secondsLeft; s <= totalSeconds; s++) {
+      const line = coachLine(coachMoment(s), coachTone)
+      if (line) return line
+    }
+    return null
+  }, [coachTone, phase, secondsLeft, totalSeconds, coachMoment])
 
   // ---------------------------------------------------------------------------
   // Keyboard shortcuts
@@ -563,10 +611,19 @@ export default function Player() {
           `}
         >
           {secondsLeft}
-          {isPaused && (
-            <span className="absolute -right-2 -top-2 rounded-full bg-slate-700 px-2 py-0.5 text-xs font-bold tracking-wider text-slate-300">
+        </div>
+        {/* Paused badge sits under the number (it used to overlap the digits),
+            and the coach caption below it: fixed height, so neither shifts the
+            layout when it appears. */}
+        <div className="mt-3 flex min-h-10 items-center justify-center">
+          {isPaused ? (
+            <span className="rounded-full bg-slate-700 px-3 py-0.5 text-xs font-bold tracking-wider text-slate-300">
               PAUSED
             </span>
+          ) : (
+            <p aria-live="polite" className="max-w-sm text-center text-sm text-slate-400">
+              {coachCaption ?? ''}
+            </p>
           )}
         </div>
       </div>

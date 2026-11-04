@@ -1,3 +1,4 @@
+import type { CoachTone } from './coach'
 import {
   DEFAULT_SETTINGS,
   type BodyProfile,
@@ -25,6 +26,7 @@ const KEY = {
   weightLog: 'fitflow.weightLog',
   challengeProgress: 'fitflow.challengeProgress',
   theme: 'fitflow.theme',
+  voiceCoach: 'fitflow.voiceCoach',
 } as const
 
 // ---------------------------------------------------------------------------
@@ -269,6 +271,17 @@ export function getThemePref(): ThemePref {
 
 export function setThemePref(pref: ThemePref): void {
   writeJSON(KEY.theme, pref)
+}
+
+// Voice coach tone is device-local too: a phone in the gym and a laptop at home
+// can want different things, and the server has no column for it.
+export function getCoachTone(): CoachTone {
+  const t = readJSON<CoachTone>(KEY.voiceCoach, 'energetic')
+  return t === 'off' || t === 'calm' || t === 'energetic' ? t : 'energetic'
+}
+
+export function setCoachTone(tone: CoachTone): void {
+  writeJSON(KEY.voiceCoach, tone)
 }
 
 type SettingsMeta = { updatedAt: string; dirty: boolean }
