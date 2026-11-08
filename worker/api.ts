@@ -2,6 +2,7 @@ import { API_SECURITY_HEADERS, ApiContext, InvalidJsonError, type ApiEnv, type R
 import { errorSummary, logError } from './lib/log.ts'
 import { allow } from './lib/rateLimit.ts'
 import me from './routes/me.ts'
+import config from './routes/config.ts'
 import sync from './routes/sync.ts'
 import token from './routes/token.ts'
 import login from './routes/auth/login.ts'
@@ -15,6 +16,7 @@ import reportRoutine from './routes/routines/report.ts'
 // the route's own 405.
 const ROUTES: Record<string, Route> = {
   '/api/me': me,
+  '/api/config': config,
   '/api/sync': sync,
   '/api/token': token,
   '/api/auth/login': login,
