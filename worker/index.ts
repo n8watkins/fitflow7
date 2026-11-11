@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/cloudflare'
 import { handleApi } from './api.ts'
+import { healthCheck } from './health.ts'
 import { serveApp } from './lib/pages.ts'
 import { sentryOptions } from './lib/sentry.ts'
 
@@ -12,6 +13,8 @@ export { RateLimiter } from './rateLimiter.ts'
 // 404 for browsers, crawlers and link checkers. Files go to the static assets.
 const handler = {
   async fetch(request, env): Promise<Response> {
+    const health = healthCheck(request)
+    if (health) return health
     const url = new URL(request.url)
     if (url.pathname.startsWith('/api/')) return handleApi(request, env)
     return serveApp(request, env, url)
